@@ -205,6 +205,57 @@ LOGO = r"""
 
 LOGO_TAGLINE = "TST-TOOL  ·  AI COMMAND SYSTEM  ·  V3"
 
+def _vn_now_str() -> str:
+    """Giờ Việt Nam realtime."""
+    try:
+        return datetime.now(tz).strftime("%H:%M:%S  %d/%m/%Y")
+    except Exception:
+        return datetime.now().strftime("%H:%M:%S  %d/%m/%Y")
+
+
+def _key_countdown_str() -> str:
+    """Đếm ngược hạn key từng giây (hoặc Vĩnh viễn)."""
+    global _key_expires_at, _key_expiry_info
+    if _key_expires_at is None:
+        info = (_key_expiry_info or "").strip()
+        if info and info not in ("—",):
+            return info
+        return "Vĩnh viễn"
+    try:
+        exp = _key_expires_at
+        if getattr(exp, "tzinfo", None) is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        now = datetime.now(timezone.utc)
+        secs = int((exp - now).total_seconds())
+        if secs <= 0:
+            return "Đã hết hạn"
+        d, rem = divmod(secs, 86400)
+        h, rem = divmod(rem, 3600)
+        m, s = divmod(rem, 60)
+        if d > 0:
+            return f"{d}n {h:02d}:{m:02d}:{s:02d}"
+        if h > 0:
+            return f"{h:02d}:{m:02d}:{s:02d}"
+        return f"{m:02d}:{s:02d}"
+    except Exception:
+        return (_key_expiry_info or "—")
+
+
+def build_live_brand(game_code: str = "LIVE"):
+    """Logo TST-TOOL + giờ VN + hạn key trên bảng trực tiếp."""
+    t = Text()
+    t.append("TST", style=f"bold {TST_COLORS['gold']}")
+    t.append("-", style="bold white")
+    t.append("TOOL", style=f"bold {TST_COLORS['sapphire']}")
+    t.append(f"  ·  {game_code}  ·  ", style=TST_COLORS["muted"])
+    t.append(_vn_now_str(), style=f"bold {TST_COLORS['sky']}")
+    t.append("  ·  HẠN ", style=TST_COLORS["muted"])
+    t.append(_key_countdown_str(), style=f"bold {TST_COLORS['gold']}")
+    t.append(f"  ·  {str(_key_type or 'free').upper()}", style=TST_COLORS["platinum"])
+    return Align.center(t)
+
+
+
 
 def print_tst_logo():
     """In logo block chữ — căn đều, không lệch hàng."""
@@ -297,6 +348,8 @@ _ws_status = "⏳ Đang kết nối..."
 _is_authenticated = False
 _user_key = None
 _key_type = "free"
+_key_expiry_info = ""  # "Còn X ngày..." hoặc "Vĩnh viễn"
+_key_expires_at = None  # datetime hoặc None
 _heartbeat_running = False
 _heartbeat_thread = None
 _in_menu = False
@@ -1614,25 +1667,38 @@ def show_auth_screen():
         key_type = data.get("key_type", "free")
         max_ai = data.get("max_ai", 10)
         
-        expiry_info = ""
+        global _key_type, _key_expiry_info, _key_expires_at
+        expiry_info = "Vĩnh viễn"
         expires_at = data.get('expires_at')
-        if expires_at and expires_at != 'forever':
+        _key_expires_at = None
+        if expires_at and str(expires_at).lower() not in ('forever', 'none', ''):
             try:
                 expiry_dt = parse_datetime_safe(expires_at)
                 if expiry_dt:
+                    if expiry_dt.tzinfo is None:
+                        expiry_dt = expiry_dt.replace(tzinfo=timezone.utc)
+                    _key_expires_at = expiry_dt
                     now_utc = datetime.now(timezone.utc)
                     time_left = expiry_dt - now_utc
-                    days = time_left.days
-                    hours = time_left.seconds // 3600
-                    minutes = (time_left.seconds % 3600) // 60
-                    if days > 0:
-                        expiry_info = f"Còn {days} ngày {hours} giờ"
-                    elif hours > 0:
-                        expiry_info = f"Còn {hours} giờ {minutes} phút"
+                    if time_left.total_seconds() <= 0:
+                        expiry_info = "Đã hết hạn"
                     else:
-                        expiry_info = f"Còn {minutes} phút"
-            except:
-                expiry_info = expires_at
+                        days = time_left.days
+                        hours = time_left.seconds // 3600
+                        minutes = (time_left.seconds % 3600) // 60
+                        # ngày hết hạn local
+                        local_exp = expiry_dt.astimezone()
+                        date_s = local_exp.strftime("%d/%m/%Y %H:%M")
+                        if days > 0:
+                            expiry_info = f"Còn {days} ngày {hours} giờ (đến {date_s})"
+                        elif hours > 0:
+                            expiry_info = f"Còn {hours} giờ {minutes} phút (đến {date_s})"
+                        else:
+                            expiry_info = f"Còn {minutes} phút (đến {date_s})"
+            except Exception:
+                expiry_info = str(expires_at)
+        _key_expiry_info = expiry_info
+        _key_type = key_type
         
         key_icon = "👑" if key_type == "vip" else "🔑"
         key_color = "bold gold" if key_type == "vip" else "bold white"
@@ -1652,7 +1718,7 @@ def show_auth_screen():
         right_info = Text()
         right_info.append("◈ TRẠNG THÁI\n", style=f"bold {TST_COLORS['muted']}")
         right_info.append("● ACTIVE\n\n", style=f"bold {TST_COLORS['emerald']}")
-        right_info.append("◈ HẠN SỬ DỤNG\n", style=f"bold {TST_COLORS['muted']}")
+        right_info.append("◈ THỜI HẠN KEY\n", style=f"bold {TST_COLORS['muted']}")
         right_info.append(f"{expiry_info}\n\n", style=f"bold {TST_COLORS['gold']}")
 
         auth_grid.add_row(
@@ -4688,37 +4754,92 @@ ENHANCED_LOGIC_MAP = {
 
 
 def choose_rooms_multi(mode: str, n: int = 1) -> Tuple[List[int], str]:
-    """Chọn n phòng — AI + lọc risk thấp (giảm thua)."""
+    """
+    Chọn n phòng (1–4) theo setting num_rooms.
+    ENSEMBLE/TỔNG HỢP: xếp hạng vote multi-AI → lấy top n phòng (không chỉ 1).
+    """
     global _key_type
     n = max(1, min(4, int(n or 1)))
     mode = (mode or "ENSEMBLE").upper()
     if not is_ai_available(mode, _key_type):
         mode = "RANDOM"
+
+    scores = {r: 0.0 for r in ROOM_ORDER}
+
+    # Điểm nền unified
     try:
-        scores = _vth_unified_scores(noise=0.02)
+        for r, sc in (_vth_unified_scores(noise=0.02) or {}).items():
+            scores[r] = scores.get(r, 0.0) + float(sc) * 1.1
     except Exception:
-        scores = {r: random.random() for r in ROOM_ORDER}
-    # tăng trọng risk thấp
+        for r in ROOM_ORDER:
+            scores[r] += random.random() * 0.3
+
+    # Ưu tiên risk thấp (P thua thấp)
     try:
         for row in compute_vth_room_risk() or []:
             rid = int(row.get("id") or 0)
             if rid in scores:
-                scores[rid] += 0.40 * (1.0 - float(row.get("risk_pct", 50) or 50) / 100.0)
+                scores[rid] += 0.35 * (1.0 - float(row.get("risk_pct", 50) or 50) / 100.0)
     except Exception:
         pass
-    try:
-        if mode != "SAFE_RISK":
+
+    if mode in ("ENSEMBLE", "TỔNG HỢP"):
+        # Vote từng AI con → cộng điểm (để top-n, không chỉ max 1 phòng)
+        ai_weights = {
+            "choose_safe_risk": 1.45,
+            "choose_smart_safe_enhanced": 1.15,
+            "choose_probability": 0.9,
+            "choose_markov_chain": 1.05,
+            "choose_bayesian": 1.0,
+            "choose_killer_personality_enhanced": 0.7,
+            "choose_deep_learning_enhanced": 0.7,
+            "choose_hide_seek_master": 0.5,
+            "choose_neural": 0.65,
+            "choose_cycle_analysis": 0.6,
+            "choose_trend_analysis": 0.55,
+            "choose_transformer": 0.55,
+        }
+        for ai_name, weight in ai_weights.items():
+            try:
+                func = globals().get(ai_name)
+                if not func:
+                    continue
+                room = func()
+                if room in scores:
+                    w = float(weight)
+                    perf = AI_PERFORMANCE.get(ai_name, {}) or {}
+                    total_p = int(perf.get("total", 0) or 0)
+                    if total_p >= 4:
+                        wr = float(perf.get("wins", 0)) / total_p
+                        w *= 0.5 + 1.0 * wr
+                    scores[room] += w
+            except Exception:
+                continue
+    else:
+        # AI đơn: boost phòng primary, vẫn lấy top-n theo score
+        try:
             primary, _ = choose_room_tn(mode)
             if primary in scores:
-                scores[primary] += 0.25
-    except Exception:
-        pass
+                scores[primary] += 0.55
+        except Exception:
+            pass
+
     ranked = sorted(scores.keys(), key=lambda r: scores[r], reverse=True)
-    # lọc conservative
-    filtered = _vth_conservative_pick(ranked, n)
-    if not filtered:
-        return [], mode
-    return filtered, mode
+    # Đảm bảo đủ n phòng khác nhau
+    chosen = []
+    for r in ranked:
+        if r not in chosen:
+            chosen.append(r)
+        if len(chosen) >= n:
+            break
+    while len(chosen) < n:
+        for r in ROOM_ORDER:
+            if r not in chosen:
+                chosen.append(r)
+            if len(chosen) >= n:
+                break
+        break
+    return chosen[:n], mode
 
 
 def choose_room_tn(mode: str) -> Tuple[int, str]:
@@ -6120,7 +6241,7 @@ def cdtd_game_loop():
     cdtd_bet_history.clear()
     cdtd_stats = {'win': 0, 'lose': 0, 'asset_0': user_asset_cdtd().get(cdtd_coin, 0)}
     
-    with Live(cdtd_generate_layout(), refresh_per_second=3, console=console, screen=True) as live:
+    with Live(cdtd_generate_layout(), refresh_per_second=4, console=console, screen=True) as live:
         while not cdtd_stop_flag:
             try:
                 data_top10 = top_10_cdtd()
@@ -6134,53 +6255,87 @@ def cdtd_game_loop():
                     has_prediction = (cdtd_predicted_nv is not None) or (cdtd_predicted_nvs)
                     if cdtd_previous_issue is not None and has_prediction and not cdtd_checked_result:
                         try:
-                            winner = int(data_top10[1][0]) if data_top10 and len(data_top10) > 1 and data_top10[1] else None
-                            if winner is not None:
-                                cdtd_last_winner = winner
-                                balance_before = user_asset_cdtd().get(cdtd_coin, 0)
-                                result_type = 'win'
-                                
-                                # Cập nhật từng lệnh cược (multi: mỗi NV một dòng)
-                                pending_bets = [b for b in cdtd_bet_history if b.get('result') == 'pending']
-                                round_lost = True if pending_bets else False
-                                for b in pending_bets:
-                                    b['winner'] = winner
-                                    if b.get('chosen') == winner:
-                                        b['result'] = 'win'
-                                        round_lost = False
-                                    else:
-                                        b['result'] = 'lose'
-                                
-                                # Streak / martingale tính theo VÁN (không theo từng NV)
-                                if pending_bets:
-                                    if round_lost:
-                                        cdtd_lose_streak += 1
-                                        cdtd_win_streak = 0
-                                        cdtd_max_lose_streak = max(cdtd_max_lose_streak, cdtd_lose_streak)
-                                        cdtd_current_bet *= cdtd_multiplier
-                                        cdtd_stats['lose'] += 1
-                                        try:
-                                            _algo = str((cdtd_settings or {}).get('algo', 'SMART'))
-                                            AI_PERFORMANCE[f'CDTD_{_algo}']['losses'] += 1
-                                            AI_PERFORMANCE[f'CDTD_{_algo}']['total'] += 1
-                                        except Exception:
-                                            pass
-                                        result_type = 'lose'
-                                        if cdtd_pause_rounds > 0:
-                                            cdtd_pause_remaining = cdtd_pause_rounds
-                                    else:
-                                        cdtd_win_streak += 1
-                                        cdtd_lose_streak = 0
-                                        cdtd_max_win_streak = max(cdtd_max_win_streak, cdtd_win_streak)
-                                        cdtd_current_bet = cdtd_base_bet
-                                        cdtd_stats['win'] += 1
-                                        result_type = 'win'
-                                        try:
-                                            _algo = str((cdtd_settings or {}).get('algo', 'SMART'))
-                                            AI_PERFORMANCE[f'CDTD_{_algo}']['wins'] += 1
-                                            AI_PERFORMANCE[f'CDTD_{_algo}']['total'] += 1
-                                        except Exception:
-                                            pass
+                            # Map kỳ → NV thắng (tỷ lệ thật theo từng issue)
+                            issue_to_winner = {}
+                            try:
+                                issues_l = list(data_top10[0]) if data_top10 and data_top10[0] else []
+                                results_l = list(data_top10[1]) if data_top10 and len(data_top10) > 1 and data_top10[1] else []
+                                for iss, res in zip(issues_l, results_l):
+                                    try:
+                                        issue_to_winner[int(iss)] = int(res)
+                                    except Exception:
+                                        pass
+                            except Exception:
+                                issue_to_winner = {}
+                            # fallback: kết quả mới nhất
+                            fallback_winner = None
+                            try:
+                                if data_top10 and len(data_top10) > 1 and data_top10[1]:
+                                    fallback_winner = int(data_top10[1][-1])
+                            except Exception:
+                                fallback_winner = None
+
+                            pending_bets = [b for b in cdtd_bet_history if str(b.get('result', '')).lower() in ('pending', 'đang', 'dang', 'chờ', 'cho')]
+                            balance_before = user_asset_cdtd().get(cdtd_coin, 0)
+                            result_type = 'win'
+                            round_lost = True if pending_bets else False
+                            last_w = fallback_winner
+
+                            for b in pending_bets:
+                                try:
+                                    b_iss = int(b.get('issue'))
+                                except Exception:
+                                    b_iss = b.get('issue')
+                                winner = issue_to_winner.get(b_iss, fallback_winner)
+                                if winner is None:
+                                    continue
+                                last_w = winner
+                                b['winner'] = winner
+                                try:
+                                    chosen = int(b.get('chosen'))
+                                except Exception:
+                                    chosen = b.get('chosen')
+                                # API bet_group=not_winner: THẮNG khi NV chọn KHÔNG về nhất
+                                if chosen != winner:
+                                    b['result'] = 'win'
+                                    round_lost = False
+                                else:
+                                    b['result'] = 'lose'
+
+                            if last_w is not None:
+                                cdtd_last_winner = last_w
+                            winner = last_w
+
+                            # Streak / martingale theo VÁN
+                            if pending_bets:
+                                if round_lost:
+                                    cdtd_lose_streak += 1
+                                    cdtd_win_streak = 0
+                                    cdtd_max_lose_streak = max(cdtd_max_lose_streak, cdtd_lose_streak)
+                                    cdtd_current_bet *= cdtd_multiplier
+                                    cdtd_stats['lose'] += 1
+                                    try:
+                                        _algo = str((cdtd_settings or {}).get('algo', 'SMART'))
+                                        AI_PERFORMANCE[f'CDTD_{_algo}']['losses'] += 1
+                                        AI_PERFORMANCE[f'CDTD_{_algo}']['total'] += 1
+                                    except Exception:
+                                        pass
+                                    result_type = 'lose'
+                                    if cdtd_pause_rounds > 0:
+                                        cdtd_pause_remaining = cdtd_pause_rounds
+                                else:
+                                    cdtd_win_streak += 1
+                                    cdtd_lose_streak = 0
+                                    cdtd_max_win_streak = max(cdtd_max_win_streak, cdtd_win_streak)
+                                    cdtd_current_bet = cdtd_base_bet
+                                    cdtd_stats['win'] += 1
+                                    result_type = 'win'
+                                    try:
+                                        _algo = str((cdtd_settings or {}).get('algo', 'SMART'))
+                                        AI_PERFORMANCE[f'CDTD_{_algo}']['wins'] += 1
+                                        AI_PERFORMANCE[f'CDTD_{_algo}']['total'] += 1
+                                    except Exception:
+                                        pass
                                 
                                 time.sleep(1)
                                 balance_after = user_asset_cdtd().get(cdtd_coin, 0)
@@ -6377,7 +6532,8 @@ def build_cdtd_header():
         ("SỐ DƯ", f"{asset:,.4f} {cdtd_coin}", TST_COLORS["gold"]),
         ("P&L", f"{pnl:+,.4f}", pnl_color),
         ("CHUỖI", f"{cdtd_win_streak}T / {cdtd_lose_streak}B", TST_COLORS["neon_pink"]),
-        ("KEY", str(_key_type).upper(), TST_COLORS["sky"]),
+        ("HẠN KEY", _key_countdown_str(), TST_COLORS["gold"]),
+        ("GIỜ VN", (_vn_now_str().split("  ")[0] if "  " in _vn_now_str() else _vn_now_str()[:8]), TST_COLORS["sky"]),
         ("KỲ", str(cdtd_active_issue() or "—"), TST_COLORS["muted"]),
     ]
     g = Table.grid(expand=True, padding=(0, 1))
@@ -6388,6 +6544,7 @@ def build_cdtd_header():
         for label, value, c in cells
     ])
     return Group(
+        build_live_brand("CDTD"),
         Align.center(title),
         Rule(style=TST_COLORS["sapphire"]),
         Panel(g, border_style=TST_COLORS["onyx"], box=box.SIMPLE, padding=(0,1)),
@@ -6893,7 +7050,7 @@ def prompt_settings() -> bool:
     base_bet = FloatPrompt.ask(f"  [{TST_COLORS['muted']}]Cược gốc (BUILD)[/{TST_COLORS['muted']}]", default=float(base_bet or 1.0))
     multiplier = FloatPrompt.ask(f"  [{TST_COLORS['muted']}]Hệ số nhân[/{TST_COLORS['muted']}]", default=float(multiplier or 2.0))
     num_rooms = int(IntPrompt.ask(
-        f"  [{TST_COLORS['muted']}]Số phòng mỗi ván [1-4][/{TST_COLORS['muted']}]",
+        f"  [{TST_COLORS['muted']}]Số phòng mỗi ván [1-4] (TỔNG HỢP cũng cược đủ số này)[/{TST_COLORS['muted']}]",
         choices=["1", "2", "3", "4"],
         default=str(num_rooms or 1),
     ))
@@ -6990,7 +7147,8 @@ def build_vth_header():
         ("SỐ DƯ", f"{asset_build:,.4f} BUILD", TST_COLORS["gold"]),
         ("P&L", f"{pnl:+,.4f}", pnl_color),
         ("CHUỖI", f"{win_streak}T / {lose_streak}B", TST_COLORS["neon_pink"]),
-        ("KEY", str(_key_type).upper(), TST_COLORS["sky"]),
+        ("HẠN KEY", _key_countdown_str(), TST_COLORS["gold"]),
+        ("GIỜ VN", (_vn_now_str().split("  ")[0] if "  " in _vn_now_str() else _vn_now_str()[:8]), TST_COLORS["sky"]),
         ("KỲ", str(_vth_active_issue() or "—"), TST_COLORS["muted"]),
     ]
     g = Table.grid(expand=True, padding=(0, 1))
@@ -7001,6 +7159,7 @@ def build_vth_header():
         for label, value, c in cells
     ])
     return Group(
+        build_live_brand("VTH"),
         Align.center(title),
         Rule(style=TST_COLORS["emerald"]),
         Panel(g, border_style=TST_COLORS["onyx"], box=box.SIMPLE, padding=(0, 1)),
@@ -7395,7 +7554,7 @@ def start_game_flow():
     mon_thread.start()
 
     try:
-        with Live(vth_generate_layout(), refresh_per_second=3, console=console, screen=True) as live:
+        with Live(vth_generate_layout(), refresh_per_second=4, console=console, screen=True) as live:
             while not stop_flag:
                 live.update(vth_generate_layout())
                 time.sleep(0.5)
@@ -8164,9 +8323,14 @@ def build_main_menu():
     status.append(f"QUYỀN ", style=TST_COLORS["muted"])
     status.append(f"{str(_key_type).upper()} ", style=f"bold {key_color}")
     status.append("  │  ", style=TST_COLORS["accent_line"])
+    status.append("HẠN ", style=TST_COLORS["muted"])
+    exp = _key_expiry_info or "—"
+    # rút gọn nếu quá dài cho status
+    exp_short = exp if len(exp) <= 42 else (exp[:40] + "…")
+    status.append(f"{exp_short} ", style=f"bold {TST_COLORS['gold']}")
+    status.append("  │  ", style=TST_COLORS["accent_line"])
     status.append(f"WS ", style=TST_COLORS["muted"])
     status.append(f"{_ws_status} ", style=TST_COLORS["diamond"])
-    status.append("  │  ", style=TST_COLORS["accent_line"])
     status.append("  │  ", style=TST_COLORS["accent_line"])
     status.append(f"IP ", style=TST_COLORS["muted"])
     status.append(f"{_ip_info.get('public_ip','N/A')}  ", style=TST_COLORS["sky"])
@@ -8368,6 +8532,8 @@ def main_vth():
     info_strip.append(f"{_key_type.upper()}  ", style=f"bold {key_col}")
     info_strip.append("│  KEY ", style=TST_COLORS["accent_line"])
     info_strip.append(f"{_user_key}  ", style=TST_COLORS["muted"])
+    info_strip.append("│  HẠN ", style=TST_COLORS["accent_line"])
+    info_strip.append(f"{_key_expiry_info or '—'}  ", style=f"bold {TST_COLORS['gold']}")
     if _key_type == "free":
         info_strip.append("│  FREE: 10 AI · Lotto 5 AI", style=TST_COLORS["muted"])
     info_strip.append("│  @tst-tool88", style=TST_COLORS["accent_line"])
