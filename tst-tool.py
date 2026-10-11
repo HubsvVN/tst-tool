@@ -241,6 +241,63 @@ def _key_countdown_str() -> str:
         return (_key_expiry_info or "—")
 
 
+def is_key_expired() -> bool:
+    """True nếu key có hạn và đã quá hạn."""
+    global _key_expires_at
+    if _key_expires_at is None:
+        return False
+    try:
+        exp = _key_expires_at
+        if getattr(exp, "tzinfo", None) is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        return datetime.now(timezone.utc) >= exp
+    except Exception:
+        return False
+
+
+def stop_tool_key_expired(reason: str = "") -> None:
+    """Dừng toàn bộ tool khi key hết hạn."""
+    global stop_flag, cdtd_stop_flag, _key_expiry_info, ui_state
+    stop_flag = True
+    try:
+        cdtd_stop_flag = True
+    except Exception:
+        pass
+    _key_expiry_info = "Đã hết hạn"
+    msg = "🔑 KEY ĐÃ HẾT HẠN — tự dừng tool."
+    if reason:
+        msg += f" ({reason})"
+    try:
+        safe_console_print(f"[bold red]{msg}[/]")
+    except Exception:
+        try:
+            console.print(f"[bold red]{msg}[/]")
+        except Exception:
+            pass
+    try:
+        ui_state = "STOPPED"
+    except Exception:
+        pass
+    # đóng WS nếu có
+    try:
+        wsobj = _ws.get("ws") if isinstance(_ws, dict) else None
+        if wsobj:
+            wsobj.close()
+    except Exception:
+        pass
+
+
+def check_key_expiry_and_stop(context: str = "") -> bool:
+    """
+    Kiểm tra hạn key. Nếu hết hạn → dừng tool, return True.
+    Gọi định kỳ trong live loop / trước khi cược.
+    """
+    if is_key_expired():
+        stop_tool_key_expired(context or "hết hạn")
+        return True
+    return False
+
+
 def build_live_brand(game_code: str = "LIVE"):
     """Logo TST-TOOL + giờ VN + hạn key trên bảng trực tiếp."""
     t = Text()
@@ -1461,13 +1518,12 @@ def stop_heartbeat():
 def show_auth_choice_menu():
     while True:
         console.clear()
-        # Logo header
         print_tst_logo()
         console.print()
 
-        # Access tier cards
         tiers = Table.grid(expand=True, padding=(0, 1))
-        tiers.add_column(ratio=1); tiers.add_column(ratio=1); tiers.add_column(ratio=1)
+        tiers.add_column(ratio=1)
+        tiers.add_column(ratio=1)
 
         free_body = Text()
         free_body.append("★ FREE\n", style=f"bold {TST_COLORS['gold']}")
@@ -1477,14 +1533,9 @@ def show_auth_choice_menu():
         vip_body.append("♛ VIP\n", style=f"bold {TST_COLORS['neon_pink']}")
         vip_body.append("42 AI engines\nAll modules\nPriority access", style=TST_COLORS["platinum"])
 
-        admin_body = Text()
-        admin_body.append("◈ ADMIN\n", style=f"bold {TST_COLORS['ruby']}")
-        admin_body.append("Enter secret code\nFull system access\nUser management", style=TST_COLORS["muted"])
-
         tiers.add_row(
-            Panel(Align.center(free_body),  border_style=TST_COLORS["gold"],     box=box.HEAVY_HEAD, padding=(1,2)),
-            Panel(Align.center(vip_body),   border_style=TST_COLORS["neon_pink"],box=box.HEAVY_HEAD, padding=(1,2)),
-            Panel(Align.center(admin_body), border_style=TST_COLORS["ruby"],     box=box.HEAVY_HEAD, padding=(1,2)),
+            Panel(Align.center(free_body), border_style=TST_COLORS["gold"], box=box.HEAVY_HEAD, padding=(1, 2)),
+            Panel(Align.center(vip_body), border_style=TST_COLORS["neon_pink"], box=box.HEAVY_HEAD, padding=(1, 2)),
         )
         console.print(Panel(
             tiers,
@@ -1493,45 +1544,33 @@ def show_auth_choice_menu():
             box=box.HEAVY_HEAD,
             padding=(0, 1),
         ))
-        raw = _ui_prompt("KEY / ADMIN CODE").strip()
-        if raw == ADMIN_SECRET_CODE or raw == "9826665":
-            try: admin_menu()
-            except NameError: console.print("[red]Admin menu chưa sẵn sàng.[/red]")
-            continue
+        # Chỉ nhập KEY — đã bỏ ADMIN và tạo user
         return show_auth_screen()
 
 
+
 def coin_exchange_before_auth() -> None:
-    """Menu đổi key bằng xu: tạo user, nhận xu, đổi key."""
+    """Menu nhận xu / đổi key FREE (không tạo user)."""
     while True:
         console.clear()
         console.print(Panel(
-            Align.center("🎁 ĐỔI KEY BẰNG XU 🎁"),
+            Align.center("🎁 NHẬN XU / ĐỔI KEY FREE 🎁"),
             border_style=TST_COLORS["gold"],
             box=box.ROUNDED
         ))
         console.print()
-        console.print("[1] 👤 Tạo user mới")
-        console.print("[2] 🎁 Nhận xu / Đổi KEY FREE 13 GIỜ")
+        console.print("[1] 🎁 Nhận xu / Đổi KEY FREE 13 GIỜ")
         console.print("[q] 🔙 Quay lại")
         console.print()
 
         sub = Prompt.ask(
             f"[bold {TST_COLORS['gold']}]>> Chọn[/bold {TST_COLORS['gold']}]",
-            choices=["1", "2", "q"],
-            default="2"
+            choices=["1", "q"],
+            default="1"
         )
-
         if sub == "q":
             return
 
-        if sub == "1":
-            prompt_create_user()
-            input("\n[dim]Nhấn Enter để tiếp tục...[/dim]")
-            continue
-
-        # sub == "2": dùng xu / đổi key
-        # Gợi ý user đúng theo IP để giảm nhập bừa
         ip_now = _current_client_ip()
         bound = find_user_by_ip(ip_now)
         if bound:
@@ -1545,45 +1584,27 @@ def coin_exchange_before_auth() -> None:
             console.print("[red]❌ ID tài khoản không hợp lệ![/red]")
             time.sleep(1.5)
             continue
-
         user_id = int(user_id_text)
 
-        # Nếu user chưa tồn tại → hỏi tạo luôn (vẫn check IP 1 user)
         data = load_user_data_secure()
         if str(user_id) not in data:
-            console.print(f"[yellow]⚠️ User {user_id} chưa tồn tại.[/yellow]")
-            create_now = Prompt.ask(
-                "[bold cyan]Tạo user này ngay? (y/n)[/bold cyan]",
-                choices=["y", "n"],
-                default="y"
-            )
-            if create_now == "y":
-                ok, msg = create_user_secure(user_id)
-                console.print(f"[green]✅ {msg}[/green]" if ok else f"[red]❌ {msg}[/red]")
-                if not ok:
-                    time.sleep(1.5)
-                    continue
-            else:
-                time.sleep(1)
-                continue
-        else:
-            # Chống nhập bừa ID người khác — có key thì thu hồi ngay
-            ok_access, access_msg = verify_user_id_access(user_id)
-            if not ok_access:
-                console.print(Panel(
-                    Text(access_msg, style="bold red"),
-                    title="[bold red]CHỐNG NHẬP BỪA ID[/bold red]",
-                    border_style=TST_COLORS["ruby"],
-                    box=box.ROUNDED,
-                ))
-                time.sleep(2.5)
-                continue
+            console.print(f"[red]❌ User {user_id} chưa tồn tại. Liên hệ hỗ trợ @tst-tool88.[/red]")
+            time.sleep(2)
+            continue
+
+        ok_access, access_msg = verify_user_id_access(user_id)
+        if not ok_access:
+            console.print(Panel(
+                Text(access_msg, style="bold red"),
+                title="[bold red]CHỐNG NHẬP BỪA ID[/bold red]",
+                border_style=TST_COLORS["ruby"],
+                box=box.ROUNDED,
+            ))
+            time.sleep(2.5)
+            continue
 
         success, msg = claim_daily_coins_secure(user_id)
-        console.print(
-            f"[green]✅ {msg}[/green]" if success else f"[yellow]ℹ️ {msg}[/yellow]"
-        )
-
+        console.print(f"[green]✅ {msg}[/green]" if success else f"[yellow]ℹ️ {msg}[/yellow]")
         balance = get_user_balance_secure(user_id)
         console.print(f"\n[bold green]💰 Số dư: {balance.get('coins', 0):.2f} xu[/bold green]")
         console.print("[dim]🔑 5 xu = KEY FREE 13 GIỜ[/dim]\n")
@@ -1604,7 +1625,6 @@ def coin_exchange_before_auth() -> None:
                             ("KEY: ", "bold white"), (f"{result}\n", f"bold {TST_COLORS['gold']}"),
                             ("Loại: FREE\n", "bold cyan"),
                             ("Thời hạn: 13 GIỜ\n", "bold green"),
-                            ("🌐 Supabase: ", "white"), ("Đã tạo & kích hoạt\n", "bold green"),
                             ("💡 Dùng key này ở menu NHẬP KEY để đăng nhập.", "dim"),
                         ),
                         border_style=TST_COLORS["emerald"],
@@ -1614,8 +1634,8 @@ def coin_exchange_before_auth() -> None:
                     console.print(f"[red]❌ {result}[/red]")
         else:
             console.print("[yellow]⚠️ Chưa đủ 5 xu để đổi key.[/yellow]")
-
         input("\n[dim]Nhấn Enter để quay lại...[/dim]")
+
 
 
 def show_auth_screen():
@@ -1674,35 +1694,14 @@ def show_auth_screen():
     ))
     console.print()
 
-    opt_table = Table.grid(expand=True, padding=(0, 2))
-    opt_table.add_column(ratio=1); opt_table.add_column(ratio=1)
-    opt_table.add_row(
-        Panel(Text.assemble(("◈ 1  ", f"bold {TST_COLORS['gold']}"), ("Nhập Key xác thực", TST_COLORS["platinum"])),
-              border_style=TST_COLORS["gold"], box=box.SIMPLE, padding=(0,1)),
-        Panel(Text.assemble(("◉ 2  ", f"bold {TST_COLORS['sapphire']}"), ("Tạo User mới (xu/key)", TST_COLORS["platinum"])),
-              border_style=TST_COLORS["sapphire"], box=box.SIMPLE, padding=(0,1)),
-    )
-    console.print(opt_table)
-    auth_sub = Prompt.ask(
-        f"[bold {TST_COLORS['gold']}] ♛  CHỌN[/bold {TST_COLORS['gold']}]"
-        f"[{TST_COLORS['accent_line']}] ─────────────── [/{TST_COLORS['accent_line']}]"
-        f"[bold {TST_COLORS['emerald']}]▶[/bold {TST_COLORS['emerald']}]",
-        choices=["1", "2"],
-        default="1"
-    )
-    if auth_sub == "2":
-        prompt_create_user()
-        input("\n[dim]Nhấn Enter để quay lại nhập key...[/dim]")
-        console.clear()
-        for i, line in enumerate(logo_lines):
-            if line.strip():
-                col = TST_COLORS["sapphire"] if i % 2 == 0 else TST_COLORS["gold"]
-                console.print(Align.center(Text(line, style=f"bold {col}")))
-        console.print(Align.center(Text(LOGO_TAGLINE, style=TST_COLORS["muted"])))
-        console.print()
-        console.print(Rule(f"[bold {TST_COLORS['gold']}]  ♛  XÁC THỰC KEY  [/]", style=TST_COLORS["sapphire"]))
-        console.print()
-    
+    console.print(Panel(
+        Text.assemble(("◈  ", f"bold {TST_COLORS['gold']}"), ("Nhập Key xác thực để tiếp tục", TST_COLORS["platinum"])),
+        border_style=TST_COLORS["gold"],
+        box=box.SIMPLE,
+        padding=(0, 1),
+    ))
+    console.print()
+
     console.print(Panel(
         Text.assemble(
             ("◈ KEY FORMAT  ", f"bold {TST_COLORS['muted']}"),
@@ -2860,13 +2859,12 @@ def daily_coin_exchange_menu():
         console.print(f"[1] 🎁 Nhận {DAILY_COIN_REWARD} xu hôm nay "
                       f"{'[ĐÃ NHẬN]' if claimed else ''}")
         console.print("[2] 🔑 Đổi 5 xu lấy KEY FREE 13 GIỜ")
-        console.print("[3] 👤 Tạo user mới")
         console.print("[q] 🔙 Quay lại")
         console.print()
 
         choice = Prompt.ask(
             f"[bold {TST_COLORS['gold']}]>> Chọn[/bold {TST_COLORS['gold']}]",
-            choices=['1', '2', '3', 'q'],
+            choices=['1', '2', 'q'],
             default='q'
         )
 
@@ -2899,10 +2897,6 @@ def daily_coin_exchange_menu():
                 else:
                     safe_console_print(f"[red]❌ {msg}[/red]")
                 time.sleep(2)
-
-        elif choice == '3':
-            prompt_create_user()
-            input("\n[dim]Nhấn Enter để tiếp tục...[/dim]")
 
         elif choice == 'q':
             break
@@ -3850,6 +3844,8 @@ def lock_prediction_if_needed(force: bool = False):
     global prediction_locked, predicted_room, predicted_rooms, ui_state, current_bet, _rounds_placed_since_skip, skip_next_round_flag, _skip_rounds_remaining, stop_flag, num_rooms, round_warning
     
     if stop_flag:
+        return
+    if check_key_expiry_and_stop("VTH trước cược"):
         return
     if issue_id is None:
         return
@@ -5418,6 +5414,8 @@ class BalancePoller(threading.Thread):
 def monitor_loop():
     global last_balance_fetch_ts, last_msg_ts, stop_flag
     while not stop_flag:
+        if check_key_expiry_and_stop("monitor VTH"):
+            break
         now = time.time()
         if now - last_balance_fetch_ts >= BALANCE_POLL_INTERVAL:
             last_balance_fetch_ts = now
@@ -5580,46 +5578,176 @@ cdtd_previous_issue = None
 cdtd_bet_placed_this_round = False
 cdtd_checked_result = False
 
-def load_data_cdtd():
-    if os.path.exists('data-xw-cdtd.txt'):
-        try:
-            with open('data-xw-cdtd.txt', 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                if data.get('user-id') and data.get('user-secret-key'):
-                    return data
-        except:
-            pass
-    
-    console.print(Rule(f"[bold {TST_COLORS['gold']}]📋 NHẬP THÔNG TIN CDTD[/]", style=TST_COLORS["gold"]))
-    console.print("1. Truy cập xworld.io\n2. Đăng nhập\n3. Vào Chạy đua tốc độ\n4. Copy link\n")
-    link = Prompt.ask(f'[bold {TST_COLORS["gold"]}]📋 Nhập link[/]')
-    
+def parse_xworld_credentials(link_or_text: str):
+    """Parse userId + secretKey từ link xworld / query / text thô."""
+    if not link_or_text:
+        return None
+    text = str(link_or_text).strip()
+    uid, skey = None, None
     try:
-        user_id = link.split('&')[0].split('?userId=')[1]
-        user_secretkey = link.split('&')[1].split('secretKey=')[1]
-    except:
-        user_id = Prompt.ask(f'[bold {TST_COLORS["gold"]}]👤 User ID[/]')
-        user_secretkey = Prompt.ask(f'[bold {TST_COLORS["gold"]}]🔑 Secret Key[/]')
-    
-    json_data = {'user-id': user_id, 'user-secret-key': user_secretkey}
-    with open('data-xw-cdtd.txt', 'w+', encoding='utf-8') as f:
-        json.dump(json_data, f, indent=4, ensure_ascii=False)
+        parsed = urlparse(text)
+        qs = parse_qs(parsed.query)
+        for k in ("userId", "userid", "user_id"):
+            if qs.get(k):
+                uid = qs[k][0]
+                break
+        for k in ("secretKey", "secretkey", "user_secret_key", "secret_key"):
+            if qs.get(k):
+                skey = qs[k][0]
+                break
+        if (not uid or not skey) and parsed.fragment:
+            qs2 = parse_qs(parsed.fragment.lstrip("?"))
+            if not uid:
+                for k in ("userId", "userid", "user_id"):
+                    if qs2.get(k):
+                        uid = qs2[k][0]
+                        break
+            if not skey:
+                for k in ("secretKey", "secretkey", "user_secret_key", "secret_key"):
+                    if qs2.get(k):
+                        skey = qs2[k][0]
+                        break
+    except Exception:
+        pass
+    if not uid or not skey:
+        m_uid = re.search(r"(?:userId|userid|user_id)[=:]\s*([0-9]+)", text, re.I)
+        m_key = re.search(r"(?:secretKey|secretkey|user_secret_key|secret_key)[=:]\s*([A-Za-z0-9_\-]+)", text, re.I)
+        if m_uid:
+            uid = m_uid.group(1)
+        if m_key:
+            skey = m_key.group(1)
+    if uid and skey:
+        return str(uid).strip(), str(skey).strip()
+    return None
+
+
+def _save_cdtd_cred(user_id, user_secretkey) -> dict:
+    json_data = {"user-id": str(user_id), "user-secret-key": str(user_secretkey)}
+    try:
+        with open("data-xw-cdtd.txt", "w", encoding="utf-8") as f:
+            json.dump(json_data, f, indent=4, ensure_ascii=False)
+    except Exception:
+        pass
     return json_data
 
+
+def load_data_cdtd(force_new: bool = False):
+    """
+    Lấy tài khoản CDTD:
+      1) USER_ID/SECRET_KEY đã chọn
+      2) accounts.json
+      3) data-xw-cdtd.txt
+      4) Nhập link / tay
+    """
+    global USER_ID, SECRET_KEY
+
+    if not force_new and USER_ID and SECRET_KEY:
+        data = _save_cdtd_cred(USER_ID, SECRET_KEY)
+        console.print(f"[green]✅ CDTD dùng tài khoản đã chọn: {USER_ID}[/green]")
+        return data
+
+    if not force_new:
+        try:
+            accounts = load_accounts()
+        except Exception:
+            accounts = []
+        if accounts:
+            if len(accounts) == 1:
+                uid = accounts[0].get("userId")
+                skey = accounts[0].get("secretKey")
+                if uid and skey:
+                    USER_ID = int(uid) if str(uid).isdigit() else uid
+                    SECRET_KEY = str(skey)
+                    data = _save_cdtd_cred(USER_ID, SECRET_KEY)
+                    console.print(f"[green]✅ CDTD dùng account: {USER_ID}[/green]")
+                    return data
+            console.print(Rule(f"[bold {TST_COLORS['gold']}]📋 CHỌN TÀI KHOẢN CDTD[/]", style=TST_COLORS["gold"]))
+            for i, acc in enumerate(accounts, 1):
+                console.print(f"  [{i}] userId={acc.get('userId')}")
+            console.print("  [0] Nhập link / ID mới")
+            try:
+                ci = int(Prompt.ask(">> Chọn", default="1"))
+            except Exception:
+                ci = 1
+            if 1 <= ci <= len(accounts):
+                acc = accounts[ci - 1]
+                uid, skey = acc.get("userId"), acc.get("secretKey")
+                if uid and skey:
+                    USER_ID = int(uid) if str(uid).isdigit() else uid
+                    SECRET_KEY = str(skey)
+                    data = _save_cdtd_cred(USER_ID, SECRET_KEY)
+                    console.print(f"[green]✅ Đã chọn CDTD: {USER_ID}[/green]")
+                    return data
+
+    if not force_new and os.path.exists("data-xw-cdtd.txt"):
+        try:
+            with open("data-xw-cdtd.txt", "r", encoding="utf-8") as f:
+                data = json.load(f)
+            uid = data.get("user-id") or data.get("userId")
+            skey = data.get("user-secret-key") or data.get("secretKey")
+            if uid and skey:
+                USER_ID = int(uid) if str(uid).isdigit() else uid
+                SECRET_KEY = str(skey)
+                console.print(f"[green]✅ CDTD load file: {USER_ID}[/green]")
+                return {"user-id": str(uid), "user-secret-key": str(skey)}
+        except Exception:
+            pass
+
+    console.print(Rule(f"[bold {TST_COLORS['gold']}]📋 NHẬP THÔNG TIN CDTD[/]", style=TST_COLORS["gold"]))
+    console.print("1. Vào xworld.info / xworld.io → đăng nhập → Chạy đua tốc độ")
+    console.print("2. Copy link có userId & secretKey")
+    console.print("   vd: https://xworld.info/?userId=123&secretKey=abc\n")
+    link = Prompt.ask(f'[bold {TST_COLORS["gold"]}]📋 Dán link (Enter = nhập tay)[/]', default="")
+
+    user_id, user_secretkey = None, None
+    if link.strip():
+        parsed = parse_xworld_credentials(link)
+        if parsed:
+            user_id, user_secretkey = parsed
+        else:
+            console.print("[yellow]⚠️ Không parse được link — nhập tay.[/yellow]")
+
+    if not user_id or not user_secretkey:
+        user_id = Prompt.ask(f'[bold {TST_COLORS["gold"]}]👤 User ID[/]')
+        user_secretkey = Prompt.ask(f'[bold {TST_COLORS["gold"]}]🔑 Secret Key[/]')
+
+    if not user_id or not user_secretkey:
+        console.print("[red]❌ Thiếu User ID hoặc Secret Key![/red]")
+        return {"user-id": "", "user-secret-key": ""}
+
+    try:
+        USER_ID = int(user_id) if str(user_id).isdigit() else user_id
+    except Exception:
+        USER_ID = user_id
+    SECRET_KEY = str(user_secretkey)
+    data = _save_cdtd_cred(USER_ID, SECRET_KEY)
+    console.print(f"[green]✅ Đã lưu CDTD account: {USER_ID}[/green]")
+    return data
+
+
 def setup_cdtd_headers(data: dict):
-    global cdtd_headers
-    cdtd_headers = {
-        'accept': '*/*',
-        'accept-language': 'vi,en;q=0.9',
-        'country-code': 'vn',
-        'origin': 'https://xworld.info',
-        'referer': 'https://xworld.info/',
-        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'user-id': data['user-id'],
-        'user-login': 'login_v2',
-        'user-secret-key': data['user-secret-key'],
-        'xb-language': 'vi-VN'
-    }
+    global cdtd_headers, USER_ID, SECRET_KEY
+    uid = data.get("user-id") or data.get("userId") or USER_ID or ""
+    skey = data.get("user-secret-key") or data.get("secretKey") or SECRET_KEY or ""
+    uid = str(uid).strip()
+    skey = str(skey).strip()
+    if uid:
+        try:
+            USER_ID = int(uid) if uid.isdigit() else uid
+        except Exception:
+            USER_ID = uid
+    if skey:
+        SECRET_KEY = skey
+    # Headers chuẩn giống VTH (wallet nhận số dư)
+    base = balance_headers_for(uid if str(uid).isdigit() else None, skey or None)
+    if uid:
+        base["user-id"] = str(uid)
+    if skey:
+        base["user-secret-key"] = str(skey)
+    base["content-type"] = "application/json"
+    cdtd_headers = base
+
+
 
 def top_100_cdtd():
     try:
@@ -5655,26 +5783,87 @@ def top_10_cdtd():
         safe_console_print(f"[yellow]⚠️ Lỗi top_10: {e}[/yellow]")
     return [0], [1]
 
-def user_asset_cdtd():
+def user_asset_cdtd(retries: int = 3) -> dict:
+    """
+    Lấy số dư CDTD — dùng cùng headers/API với VTH (wallet.3games.io).
+    Không phụ thuộc cdtd_headers lỗi; fallback USER_ID/SECRET_KEY.
+    """
+    uid = cdtd_headers.get("user-id") if isinstance(cdtd_headers, dict) else None
+    secret = cdtd_headers.get("user-secret-key") if isinstance(cdtd_headers, dict) else None
+    uid = uid or USER_ID
+    secret = secret or SECRET_KEY
+    empty = {"USDT": 0.0, "WORLD": 0.0, "BUILD": 0.0}
+    if not uid or not secret:
+        safe_console_print("[yellow]⚠️ user_asset: thiếu user-id hoặc secret-key[/yellow]")
+        return empty
+
     try:
-        response = cdtd_session.post(
-            'https://wallet.3games.io/api/wallet/user_asset',
-            headers=cdtd_headers,
-            json={'user_id': int(cdtd_headers.get('user-id', 0)), 'source': 'home'},
-            timeout=10
-        )
-        if response.status_code == 200:
-            data = response.json()
-            if data.get('code') == 0 and 'data' in data:
-                user_asset = data['data'].get('user_asset', {})
-                return {
-                    'USDT': float(user_asset.get('USDT', 0)),
-                    'WORLD': float(user_asset.get('WORLD', 0)),
-                    'BUILD': float(user_asset.get('BUILD', 0))
+        uid_int = int(str(uid).strip())
+    except Exception:
+        safe_console_print(f"[yellow]⚠️ user_asset: user-id không hợp lệ: {uid}[/yellow]")
+        return empty
+
+    headers = balance_headers_for(uid_int, str(secret))
+    # bổ sung content-type JSON
+    headers["content-type"] = "application/json"
+    payload = {"user_id": uid_int, "source": "home"}
+    last_err = ""
+
+    for attempt in range(1, max(1, retries) + 1):
+        try:
+            r = cdtd_session.post(
+                "https://wallet.3games.io/api/wallet/user_asset",
+                headers=headers,
+                json=payload,
+                timeout=12,
+            )
+            if r.status_code != 200:
+                last_err = f"HTTP {r.status_code}"
+                time.sleep(0.4 * attempt)
+                continue
+            data = r.json() if r.content else {}
+            code = data.get("code")
+            if code == 0 and isinstance(data.get("data"), dict):
+                ua = data["data"].get("user_asset") or {}
+                out = {
+                    "USDT": float(_parse_number(ua.get("USDT")) or 0),
+                    "WORLD": float(_parse_number(ua.get("WORLD")) or 0),
+                    "BUILD": float(_parse_number(ua.get("BUILD")) or 0),
                 }
+                return out
+            # code != 0
+            last_err = str(data.get("msg") or data.get("message") or f"code={code}")
+            # thử lại 1 lần với session sạch
+            if attempt == 1:
+                try:
+                    b, w, u = fetch_balances_3games(retries=1, timeout=8, uid=uid_int, secret=str(secret))
+                    return {
+                        "USDT": float(u or 0),
+                        "WORLD": float(w or 0),
+                        "BUILD": float(b or 0),
+                    }
+                except Exception as e2:
+                    last_err = f"{last_err} | fallback: {e2}"
+            time.sleep(0.4 * attempt)
+        except Exception as e:
+            last_err = str(e)
+            time.sleep(0.4 * attempt)
+
+    # Fallback cuối: fetch_balances_3games
+    try:
+        b, w, u = fetch_balances_3games(retries=2, timeout=10, uid=uid_int, secret=str(secret))
+        if b is not None or w is not None or u is not None:
+            return {
+                "USDT": float(u or 0),
+                "WORLD": float(w or 0),
+                "BUILD": float(b or 0),
+            }
     except Exception as e:
-        safe_console_print(f"[yellow]⚠️ Lỗi user_asset: {e}[/yellow]")
-    return {'USDT': 0, 'WORLD': 0, 'BUILD': 0}
+        last_err = f"{last_err} | {e}"
+
+    safe_console_print(f"[yellow]⚠️ Không lấy được số dư CDTD: {last_err}[/yellow]")
+    safe_console_print(f"[dim]user-id={uid_int} · secret={'có' if secret else 'không'}[/dim]")
+    return empty
 
 def bet_cdtd(issue_id, nv_id, amount):
     try:
@@ -6289,6 +6478,8 @@ def cdtd_game_loop():
     
     with Live(cdtd_generate_layout(), refresh_per_second=4, console=console, screen=True) as live:
         while not cdtd_stop_flag:
+            if check_key_expiry_and_stop("CDTD live"):
+                break
             try:
                 data_top10 = top_10_cdtd()
                 if not data_top10 or len(data_top10) < 1:
@@ -6460,6 +6651,8 @@ def cdtd_game_loop():
                             should_bet = False
                             safe_console_print(f"[yellow]🎲 CDTD bỏ ngẫu nhiên ván ({_rsp:.0f}%).[/]")
                         
+                        if check_key_expiry_and_stop("CDTD trước cược"):
+                            break
                         if should_bet and cdtd_issue_id is not None and chosen_list:
                             next_issue = cdtd_issue_id + 1
                             bet_amount = cdtd_current_bet if cdtd_current_bet else cdtd_base_bet
@@ -6988,21 +7181,49 @@ def main_cdtd_v3():
     
     data = load_data_cdtd()
     setup_cdtd_headers(data)
-    
+
+    if not (data.get("user-id") and data.get("user-secret-key")):
+        console.print("[bold red]❌ CDTD chưa nhận tài khoản (thiếu user-id / secret).[/]")
+        console.print("[dim]Menu Thêm tài khoản hoặc dán link userId & secretKey.[/dim]")
+        Prompt.ask("Nhấn Enter để quay lại", default="")
+        return
+
+    if Prompt.ask("Dùng account này? (y=tiếp / n=nhập lại)", choices=["y", "n"], default="y") == "n":
+        data = load_data_cdtd(force_new=True)
+        setup_cdtd_headers(data)
+        if not (data.get("user-id") and data.get("user-secret-key")):
+            console.print("[red]❌ Vẫn thiếu tài khoản CDTD.[/red]")
+            Prompt.ask("Nhấn Enter", default="")
+            return
+
     if not cdtd_prompt_settings():
         return
-    
+
     console.clear()
-    console.print(f"[bold {TST_COLORS['neon_orange']}]🏎️ KHỞI ĐỘNG VỚI 42 AI...[/]")
-    
-    with console.status(f"[bold {TST_COLORS['gold']}]🔍 Đang kiểm tra...[/]", spinner="dots"):
+    console.print(f"[bold {TST_COLORS['neon_orange']}]🏎️ KHỞI ĐỘNG CDTD · user {data.get('user-id')}...[/]")
+
+    with console.status(f"[bold {TST_COLORS['gold']}]🔍 Đang kiểm tra số dư...[/]", spinner="dots"):
         asset = user_asset_cdtd()
-        time.sleep(1)
-    
-    if asset.get(cdtd_coin, 0) <= 0:
-        console.print(f'[red]❌ Số dư {cdtd_coin} = 0![/]')
-        time.sleep(2)
-        return
+        time.sleep(0.8)
+
+    console.print(
+        f"[dim]USDT={asset.get('USDT', 0):.4f} · BUILD={asset.get('BUILD', 0):.4f} · WORLD={asset.get('WORLD', 0):.4f}[/dim]"
+    )
+    if sum(float(v or 0) for v in asset.values()) <= 0:
+        console.print("[yellow]⚠️ Số dư toàn 0 — thử sync headers + API lại...[/yellow]")
+        if USER_ID and SECRET_KEY:
+            setup_cdtd_headers({"user-id": str(USER_ID), "user-secret-key": str(SECRET_KEY)})
+            asset = user_asset_cdtd(retries=3)
+            console.print(
+                f"[dim]Retry: USDT={asset.get('USDT', 0):.4f} · BUILD={asset.get('BUILD', 0):.4f} · WORLD={asset.get('WORLD', 0):.4f}[/dim]"
+            )
+        # Cho phép tiếp tục nếu coin cược > 0; nếu vẫn 0 thì hỏi
+        if asset.get(cdtd_coin, 0) <= 0:
+            console.print(f"[red]❌ Số dư {cdtd_coin} = 0 — không thể cược coin này.[/red]")
+            console.print(f"[dim]user-id={cdtd_headers.get('user-id')} · kiểm tra secretKey đúng chưa[/dim]")
+            if Prompt.ask("Vẫn vào (xem live, không cược được)?", choices=["y", "n"], default="n") != "y":
+                time.sleep(1)
+                return
     
     console.print(f'[green]✅ Số dư: {asset[cdtd_coin]:.4f} {cdtd_coin}[/]')
     if TELEGRAM_ENABLED:
@@ -7638,6 +7859,10 @@ def start_game_flow():
     lose_streak = 0
     for r in ROOM_ORDER:
         room_state[r] = {"players": 0, "bet": 0}
+    if check_key_expiry_and_stop("bắt đầu VTH"):
+        console.print("[bold red]Key đã hết hạn. Gia hạn key rồi chạy lại.[/]")
+        Prompt.ask("Nhấn Enter để quay lại", default="")
+        return
     if not USER_ID or not SECRET_KEY:
         console.print("[bold red]⚠ Chưa chọn tài khoản game (USER_ID / SECRET_KEY). Vào menu Thêm/Chọn tài khoản trước.[/]")
         Prompt.ask("Nhấn Enter để quay lại", default="")
@@ -7726,22 +7951,15 @@ def _risk_level(pct: float) -> tuple:
 
 def compute_vth_room_risk() -> List[Dict[str, Any]]:
     """
-    Rủi ro VTH v3 — P(thua) khi cược phòng (phòng bị sát thủ chọn).
+    Rủi ro VTH v4 — Bayesian + realtime + volatility.
 
-    Công thức:
-      P_base   = kills / samples (hoặc tần suất trong kill-log)
-      P_ewma   = mật độ kill gần đây (EWMA 16 ván)
-      P_markov = P(next=room | last kill)
-      crowd    = đông người (sát thủ hay nhắm)
-      money    = nhiều tiền cược
-      gap      = lâu chưa bị kill → mean-revert nhẹ
-      streak   = bị kill liên tiếp gần đây
+    P_base   = Dirichlet-smoothed kill rate (ổn định khi ít mẫu)
+    P_ewma   = EWMA kill gần (20 ván, decay 0.86)
+    P_markov = Markov 1 + 2 bậc
+    crowd/money/gap/streak như v3
+    vol      = độ biến thiên kill gần → tăng risk (không ổn định)
 
-      P_lose = w1*P_base + w2*P_ewma + w3*P_markov + w4*crowd + w5*money + w6*gap + w7*streak
-      risk%  = P_lose * 100
-      P(thắng cược) = 1 - P_lose
-
-    Trọng số tự điều chỉnh theo số mẫu (ít mẫu → tin realtime/log hơn).
+    conf cao → tin base; conf thấp → tin realtime.
     """
     rows = []
     n_rooms = max(1, len(ROOM_ORDER))
@@ -7750,11 +7968,11 @@ def compute_vth_room_risk() -> List[Dict[str, Any]]:
     log = list(game_kill_log) if game_kill_log else []
     n_log = len(log)
 
-    # EWMA kill density (cửa sổ 16)
+    # EWMA 20
     ewma = {r: 0.0 for r in ROOM_ORDER}
     if log:
-        window = log[-16:]
-        decay = 0.84
+        window = log[-20:]
+        decay = 0.86
         w = 1.0
         wsum = 0.0
         for k in reversed(window):
@@ -7766,7 +7984,7 @@ def compute_vth_room_risk() -> List[Dict[str, Any]]:
             for r in ewma:
                 ewma[r] /= wsum
 
-    # Markov bậc 1 + bậc 2 nhẹ
+    # Markov 1 + 2
     markov = {r: 1.0 / n_rooms for r in ROOM_ORDER}
     if len(log) >= 2:
         last = log[-1]
@@ -7776,7 +7994,7 @@ def compute_vth_room_risk() -> List[Dict[str, Any]]:
             if a == last:
                 cnt[b] += 1.0
                 tot += 1.0
-        alpha = 0.75
+        alpha = 0.85
         for r in ROOM_ORDER:
             markov[r] = (cnt.get(r, 0.0) + alpha) / (tot + alpha * n_rooms)
     if len(log) >= 3:
@@ -7788,14 +8006,23 @@ def compute_vth_room_risk() -> List[Dict[str, Any]]:
                 cnt2[log[i + 2]] += 1.0
                 tot2 += 1.0
         if tot2 > 0:
-            alpha2 = 0.5
+            alpha2 = 0.55
             for r in ROOM_ORDER:
                 p2 = (cnt2.get(r, 0.0) + alpha2) / (tot2 + alpha2 * n_rooms)
-                markov[r] = 0.65 * markov[r] + 0.35 * p2
+                markov[r] = 0.60 * markov[r] + 0.40 * p2
 
-    # streak: số lần bị kill trong 5 ván gần
-    recent5 = log[-5:] if log else []
-    streak_map = {r: recent5.count(r) for r in ROOM_ORDER}
+    recent8 = log[-8:] if log else []
+    streak_map = {r: recent8.count(r) for r in ROOM_ORDER}
+
+    # volatility: biến thiên tần suất kill theo nửa log
+    vol_map = {r: 0.0 for r in ROOM_ORDER}
+    if n_log >= 8:
+        half = n_log // 2
+        first, second = log[:half], log[half:]
+        for r in ROOM_ORDER:
+            f1 = first.count(r) / float(len(first) or 1)
+            f2 = second.count(r) / float(len(second) or 1)
+            vol_map[r] = abs(f2 - f1)
 
     for r in ROOM_ORDER:
         kills = int(room_stats[r].get("kills", 0) or 0)
@@ -7803,16 +8030,16 @@ def compute_vth_room_risk() -> List[Dict[str, Any]]:
         samples = kills + survives
         k_log = log.count(r) if log else 0
 
-        # P_base empirical
-        if samples >= 3:
-            p_base = kills / float(samples)
-            conf = min(1.0, samples / 20.0)
-        elif n_log >= 3:
-            p_base = k_log / float(n_log)
-            conf = min(1.0, n_log / 16.0) * 0.7
+        # Dirichlet prior alpha=1 (đều)
+        if samples >= 2:
+            p_base = (kills + 1.0) / (samples + float(n_rooms))
+            conf = min(1.0, samples / 24.0)
+        elif n_log >= 4:
+            p_base = (k_log + 1.0) / (n_log + float(n_rooms))
+            conf = min(1.0, n_log / 20.0) * 0.75
         else:
             p_base = 1.0 / n_rooms
-            conf = 0.15
+            conf = 0.12
 
         p_ewma = float(ewma.get(r, 0.0))
         p_mk = float(markov.get(r, 1.0 / n_rooms))
@@ -7827,29 +8054,28 @@ def compute_vth_room_risk() -> List[Dict[str, Any]]:
                 if log[i] == r:
                     gap = float(len(log) - 1 - i)
                     break
-        # gap dài → mean revert (risk tăng nhẹ về mức trung bình)
         gap_factor = min(1.0, gap / 12.0)
-        streak = float(streak_map.get(r, 0))
-        streak_n = min(1.0, streak / 3.0)
+        streak_n = min(1.0, float(streak_map.get(r, 0)) / 3.0)
+        vol = float(vol_map.get(r, 0.0))
 
-        # Trọng số theo độ tin cậy mẫu
-        # conf cao → tin base hơn; conf thấp → tin ewma/markov/realtime
-        w_base = 0.22 + 0.28 * conf
-        w_ewma = 0.20 + 0.08 * (1.0 - conf)
+        w_base = 0.24 + 0.26 * conf
+        w_ewma = 0.18 + 0.10 * (1.0 - conf)
         w_mk = 0.14 + 0.06 * (1.0 - conf)
-        w_crowd = 0.10
-        w_money = 0.08
-        w_gap = 0.10
+        w_crowd = 0.09
+        w_money = 0.07
+        w_gap = 0.09
         w_streak = 0.08
-        wsum = w_base + w_ewma + w_mk + w_crowd + w_money + w_gap + w_streak
+        w_vol = 0.05
+        wsum = w_base + w_ewma + w_mk + w_crowd + w_money + w_gap + w_streak + w_vol
         p_lose = (
             w_base * p_base
             + w_ewma * p_ewma
             + w_mk * p_mk
             + w_crowd * crowd
             + w_money * money
-            + w_gap * gap_factor * (1.0 / n_rooms) * 2.5  # scale gap về mức ~base
-            + w_streak * streak_n * 0.45
+            + w_gap * gap_factor * (1.0 / n_rooms) * 2.2
+            + w_streak * streak_n * 0.48
+            + w_vol * min(1.0, vol * 4.0) * 0.35
         ) / max(wsum, 1e-6)
         p_lose = max(0.02, min(0.95, p_lose))
         p_win = 1.0 - p_lose
@@ -7869,19 +8095,19 @@ def compute_vth_room_risk() -> List[Dict[str, Any]]:
             "ewma": p_ewma,
             "markov": p_mk,
             "gap": gap,
-            "streak": streak,
+            "streak": streak_map.get(r, 0),
+            "volatility": vol,
             "confidence": conf,
             "last_kill_round": room_stats[r].get("last_kill_round"),
         })
 
-    # Chuẩn hóa nhẹ relative (25%) để tách hạng trên UI, giữ 75% tuyệt đối
     if rows:
         mx = max(x["risk_pct"] for x in rows) or 1.0
         mn = min(x["risk_pct"] for x in rows)
         span = max(1e-6, mx - mn)
         for x in rows:
             rel = (x["risk_pct"] - mn) / span * 100.0
-            x["risk_pct"] = 0.75 * x["risk_pct"] + 0.25 * rel
+            x["risk_pct"] = 0.78 * x["risk_pct"] + 0.22 * rel
             x["risk_pct"] = max(1.0, min(99.0, x["risk_pct"]))
             x["lose_prob"] = x["risk_pct"]
             x["win_prob"] = 100.0 - x["risk_pct"]
@@ -7890,6 +8116,156 @@ def compute_vth_room_risk() -> List[Dict[str, Any]]:
             x["win_prob_rel"] = float(x["win_prob"]) / s * 100.0
     rows.sort(key=lambda x: x["risk_pct"], reverse=True)
     return rows
+
+
+def compute_cdtd_nv_risk(data_top10=None, data_top100=None) -> List[Dict[str, Any]]:
+    """
+    Rủi ro CDTD v4 — not_winner + Bayesian form + streak + volatility.
+
+    risk% = P(NV về nhất) * 100  (cược not_winner thua khi NV thắng đua)
+    P_race blend: form100, form10, EWMA, Markov, streak, cold mean-revert, volatility.
+    """
+    if data_top10 is None:
+        data_top10 = top_10_cdtd()
+    if data_top100 is None:
+        data_top100 = top_100_cdtd()
+
+    win100 = [0] * 6
+    if data_top100 and len(data_top100) > 1 and data_top100[1]:
+        try:
+            win100 = [int(x or 0) for x in data_top100[1][:6]]
+            while len(win100) < 6:
+                win100.append(0)
+        except Exception:
+            win100 = [0] * 6
+    total100 = sum(win100) or 1
+
+    recent = []
+    if data_top10 and len(data_top10) > 1 and data_top10[1]:
+        try:
+            recent = [int(x) for x in data_top10[1] if x is not None]
+        except Exception:
+            recent = list(data_top10[1])
+    n_recent = len(recent)
+
+    ewma = {i: 0.0 for i in range(1, 7)}
+    if recent:
+        decay = 0.82
+        w = 1.0
+        wsum = 0.0
+        for nv in reversed(recent[-16:]):
+            try:
+                nv = int(nv)
+            except Exception:
+                continue
+            if nv in ewma:
+                ewma[nv] += w
+            wsum += w
+            w *= decay
+        if wsum > 0:
+            for i in ewma:
+                ewma[i] /= wsum
+
+    markov = {i: 1.0 / 6 for i in range(1, 7)}
+    if len(recent) >= 2:
+        last = recent[-1]
+        cnt = defaultdict(float)
+        tot = 0.0
+        for a, b in zip(recent, recent[1:]):
+            if a == last:
+                cnt[b] += 1.0
+                tot += 1.0
+        alpha = 0.6
+        for i in range(1, 7):
+            markov[i] = (cnt.get(i, 0.0) + alpha) / (tot + alpha * 6)
+
+    # volatility half-split
+    vol = {i: 0.0 for i in range(1, 7)}
+    if n_recent >= 8:
+        half = n_recent // 2
+        f, s = recent[:half], recent[half:]
+        for i in range(1, 7):
+            vol[i] = abs(s.count(i) / float(len(s) or 1) - f.count(i) / float(len(f) or 1))
+
+    last_winner = recent[-1] if recent else None
+    rows = []
+    for i in range(1, 7):
+        w100 = win100[i - 1]
+        # Dirichlet smooth
+        p100 = (w100 + 0.9) / (total100 + 0.9 * 6)
+        wins10 = sum(1 for x in recent if x == i)
+        p10 = (wins10 + 0.5) / (n_recent + 0.5 * 6) if n_recent > 0 else p100
+        p_ew = float(ewma.get(i, 0.0))
+        p_mk = float(markov.get(i, 1.0 / 6))
+
+        streak = 0
+        for x in reversed(recent):
+            if x == i:
+                streak += 1
+            else:
+                break
+        streak_n = min(1.0, streak / 3.0)
+        cold_gap = max(0.0, (1.0 / 6) - p_ew)
+        conf = min(1.0, n_recent / 14.0) if n_recent else 0.18
+
+        w100_ = 0.30
+        w10_ = 0.12 + 0.10 * conf
+        wew = 0.16 + 0.08 * conf
+        wmk = 0.12 + 0.05 * (1.0 - conf)
+        wst = 0.14
+        wmr = 0.08
+        wvo = 0.05
+        wsum = w100_ + w10_ + wew + wmk + wst + wmr + wvo
+        p_race = (
+            w100_ * p100
+            + w10_ * p10
+            + wew * p_ew
+            + wmk * p_mk
+            + wst * streak_n * 0.58
+            + wmr * (p100 + cold_gap * 0.45)
+            + wvo * min(1.0, vol.get(i, 0) * 5.0) * 0.30
+        ) / max(wsum, 1e-6)
+        p_race = max(0.02, min(0.72, p_race))
+        p_bet_win = 1.0 - p_race
+        p_bet_lose = p_race
+
+        rows.append({
+            "id": i,
+            "name": NV.get(i, f"NV{i}"),
+            "icon": NV_ICONS.get(i, "◆"),
+            "wins_100": w100,
+            "rate_100": p100,
+            "wins_10": wins10,
+            "rate_10": p10,
+            "form10": p_ew,
+            "markov": p_mk,
+            "streak": streak,
+            "volatility": vol.get(i, 0),
+            "p_win": p_bet_win,
+            "win_prob": p_bet_win * 100.0,
+            "lose_prob": p_bet_lose * 100.0,
+            "risk_pct": p_bet_lose * 100.0,
+            "race_win_prob": p_race * 100.0,
+            "confidence": conf,
+            "last_winner": last_winner == i,
+        })
+
+    if rows:
+        mx = max(x["risk_pct"] for x in rows) or 1.0
+        mn = min(x["risk_pct"] for x in rows)
+        span = max(1e-6, mx - mn)
+        for x in rows:
+            rel = (x["risk_pct"] - mn) / span * 100.0
+            x["risk_pct"] = 0.82 * x["risk_pct"] + 0.18 * rel
+            x["risk_pct"] = max(1.0, min(99.0, x["risk_pct"]))
+            x["lose_prob"] = x["risk_pct"]
+            x["win_prob"] = 100.0 - x["risk_pct"]
+        s = sum(float(x["win_prob"]) for x in rows) or 1.0
+        for x in rows:
+            x["win_prob_rel"] = float(x["win_prob"]) / s * 100.0
+    rows.sort(key=lambda x: x["risk_pct"], reverse=True)
+    return rows
+
 
 
 def compute_cdtd_nv_risk(data_top10=None, data_top100=None) -> List[Dict[str, Any]]:
@@ -8305,7 +8681,10 @@ def admin_create_key_interactive(key_type: str = "free") -> None:
 
 
 def admin_menu() -> None:
-    """Menu admin ẩn — quản lý key qua Supabase."""
+    """Đã tắt — không còn menu admin."""
+    console.print("[yellow]Menu admin đã bị vô hiệu hóa.[/yellow]")
+    time.sleep(1.2)
+    return
     while True:
         console.clear()
         console.print(Panel(
